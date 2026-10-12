@@ -1,0 +1,28 @@
+{
+  "_about": "Screen geometry. Both windows are borderless and fill their monitor's work area - the monitor minus its taskbar (main: the primary, panel: the other one). `interface` and `panelDesign` are the CSS px sizes each layout was designed at; each scales uniformly by min(window.w / design.w, window.h / design.h) and any leftover of a different aspect goes to the layout, so it fills the screen without stretching.",
+  "interface": {
+    "width": 2400,
+    "height": 1350
+  },
+  "panelDesign": {
+    "width": 1360,
+    "height": 2432
+  },
+  "kamae": {
+    "_about": "Kamae at her (hud/src/tracking/kamaeFeatures.ts, trained by core/scripts/kamae_train.py). The pose model scouts on every scoutEveryNthFrame-th camera frame and runs on every poseEveryNthFrame-th for a few seconds once something kamae-like shows; the watcher fires only on a steady 1.5 s hold of both hands out in front, with hysteresis on the way out. enabled is set by kamae_train.py: ON only once the desk confusers (keiko_confusers, ctrl+alt+shift+7) were held out and never fired - off, the pose model is never loaded outside keiko captures.",
+    "enabled": false,
+    "poseEveryNthFrame": 3,
+    "scoutEveryNthFrame": 15
+  },
+  "panel": {
+    "_about": "Her panel's centre cycles system -> weather -> news -> markets -> research (her own content first when there is any). Each card holds the centre for its dwellMs - the visual ones longest; touch (mouse, hand, voice) or her content holds it.",
+    "dwellMs": {
+      "system": 6000,
+      "weather": 6000,
+      "timers": 4000,
+      "news": 3000,
+      "markets": 3000,
+      "research": 3000
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{"why": "missing closing quote (live, 2026-10-04)", "raw": "<speak>Sure thing, sir.</speak>\n<tool_call>{\"name\": \"screens_off()}</tool_call>", "name": "screens_off", "args": {}}
+{"why": "parentheses in the name", "raw": "<tool_call>{\"name\": \"screens_off()\"}</tool_call>", "name": "screens_off", "args": {}}
+{"why": "parentheses with a space", "raw": "<tool_call>{\"name\": \"set_timer( )\", \"arguments\": {\"minutes\": 5}}</tool_call>", "name": "set_timer", "args": {"minutes": 5}}
+{"why": "trailing space in the name", "raw": "<tool_call>{\"name\": \"screens_off \" }</tool_call>", "name": "screens_off", "args": {}}
+{"why": "unquoted name", "raw": "<tool_call>{\"name\": screens_off}</tool_call>", "name": "screens_off", "args": {}}
+{"why": "unclosed object", "raw": "<tool_call>{\"name\": \"set_timer\", \"arguments\": {\"minutes\": 5}</tool_call>", "name": "set_timer", "args": {"minutes": 5}}
+{"why": "no closing tag", "raw": "<tool_call>{\"name\": \"set_timer\", \"arguments\": {\"minutes\": 5}}", "name": "set_timer", "args": {"minutes": 5}}
+{"why": "extra closing brace", "raw": "<tool_call>{\"name\": \"set_timer\", \"arguments\": {\"minutes\": 5}}}</tool_call>", "name": "set_timer", "args": {"minutes": 5}}
+{"why": "missing <", "raw": "tool_call>{\"name\": \"media_next()\"}</tool_call>", "name": "media_next", "args": {}}
+{"why": "fenced json", "raw": "```json\n{\"name\": \"screens_off\"}\n```", "name": "screens_off", "args": {}}
+{"why": "flat arguments", "raw": "<tool_call>{\"name\": \"open_url\", \"url\": \"bbc.com\"}</tool_call>", "name": "open_url", "args": {"url": "bbc.com"}}
+{"why": "after speech, cut off mid-name", "raw": "<speak>On it.</speak>\n<tool_call>{\"name\": \"screens_o", "name": "screens_o", "args": {}}

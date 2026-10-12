@@ -1,0 +1,860 @@
+{
+  "_about": "The illustration board's templates, as the model sees them (core/irene/board.py builds its catalogue from this; one line each) and as the tests draw them (every example is rendered and checked by hud/tests/board.verify.mjs). Each template is one module in hud/src/board/templates/<name>.ts, found automatically; a new template is that module plus one entry here. 'required' lists the arguments core checks are present before the drawing is sent; the HUD then checks everything exactly and draws nothing if it can't. 'hint' is how a drawing request names the template (brain adds it to the prompt's Now section, the way act-outs are named). 'retired' templates are no longer offered to the model (Round 8: she composes explanations herself, core/irene/drawing.py) but still draw if sent.",
+  "templates": [
+    {
+      "name": "chessboard",
+      "family": "chess",
+      "args": "moves (SAN list or PGN text, played one by one - an opening is ALWAYS its moves), fen?, title?, highlight? [squares], arrows? [[from,to]], flip?",
+      "when": "a position, a move, any opening (write out its moves) or a game",
+      "required": [],
+      "example": {
+        "template": "chessboard",
+        "title": "Ruy Lopez",
+        "moves": [
+          "e4",
+          "e5",
+          "Nf3",
+          "Nc6",
+          "Bb5"
+        ],
+        "arrows": [
+          [
+            "b5",
+            "c6"
+          ]
+        ]
+      },
+      "hint": "[rnbqkpRNBQKP1-8]{1,8}(/[rnbqkpRNBQKP1-8]{1,8}){7}|chess|opening|gambit|defen[cs]e|sicilian|ruy lopez|najdorf|london system|italian game|indian|caro-?kann|slav|nimzo|grunfeld|catalan|scotch|vienna|petrov|english opening|dutch defen[cs]e|fen|checkmate|scholar'?s mate|fool'?s mate|\\b1\\.\\s*[a-h][1-8]|\\be4\\b|\\bd4\\b",
+      "retired": "Round 8: not offered to the model (her spec's chess helper); still drawn if sent"
+    },
+    {
+      "name": "terms",
+      "family": "research",
+      "internal": true,
+      "args": "title?, terms [{text, at}]",
+      "when": "core only, never the model: the key terms of a research answer as she says them",
+      "required": [
+        "terms"
+      ],
+      "example": {
+        "template": "terms",
+        "title": "kendo dan grades",
+        "terms": [
+          {
+            "text": "Shodan",
+            "at": 0
+          },
+          {
+            "text": "8 dan",
+            "at": 900
+          }
+        ]
+      }
+    },
+    {
+      "name": "flow",
+      "family": "research",
+      "internal": true,
+      "args": "title?, steps [{text, at}]",
+      "when": "core only, never the model: a process explained step by step, each step as she says it",
+      "required": [],
+      "example": {
+        "template": "flow",
+        "title": "photosynthesis",
+        "steps": [
+          {
+            "text": "Sunlight",
+            "at": 0
+          },
+          {
+            "text": "Chlorophyll",
+            "at": 900
+          },
+          {
+            "text": "Glucose",
+            "at": 1800
+          }
+        ]
+      }
+    },
+    {
+      "name": "compare",
+      "family": "research",
+      "internal": true,
+      "args": "left, right, points [{side, text, at}]",
+      "when": "core only, never the model: two options compared, each point under its side as she says it",
+      "required": [
+        "left",
+        "right"
+      ],
+      "example": {
+        "template": "compare",
+        "left": "Python",
+        "right": "Rust",
+        "points": [
+          {
+            "side": "left",
+            "text": "Easy to learn",
+            "at": 0
+          },
+          {
+            "side": "right",
+            "text": "Memory safe",
+            "at": 900
+          }
+        ]
+      }
+    },
+    {
+      "name": "shinai",
+      "family": "kendo",
+      "args": "highlight? (kensen|sakigawa|nakayui|tsuru|tsuba|tsuka|tsukagawa)",
+      "when": "the parts of a shinai",
+      "required": [],
+      "example": {
+        "template": "shinai",
+        "highlight": "nakayui"
+      },
+      "hint": "shinai",
+      "retired": "Round 8: not offered to the model (a topic recipe); still drawn if sent"
+    },
+    {
+      "name": "bogu",
+      "family": "kendo",
+      "args": "highlight? (men|kote|do|tare)",
+      "when": "the parts of the armour",
+      "required": [],
+      "example": {
+        "template": "bogu"
+      },
+      "hint": "bogu|armou?r",
+      "retired": "Round 8: not offered to the model (a topic recipe); still drawn if sent"
+    },
+    {
+      "name": "kendo_targets",
+      "family": "kendo",
+      "args": "highlight? (men|kote|do|tsuki)",
+      "when": "where strikes score (datotsu-bui)",
+      "required": [],
+      "example": {
+        "template": "kendo_targets",
+        "highlight": "kote"
+      },
+      "hint": "target|datotsu|scoring|valid strike|where .* strike",
+      "retired": "Round 8: not offered to the model (a topic recipe); still drawn if sent"
+    },
+    {
+      "name": "footwork",
+      "family": "kendo",
+      "args": "step (okuri_ashi|ayumi_ashi|tsugi_ashi|hiraki_ashi), direction? (forward|back|left|right, okuri only)",
+      "when": "ashi-sabaki, how the feet move",
+      "required": [
+        "step"
+      ],
+      "example": {
+        "template": "footwork",
+        "step": "okuri_ashi",
+        "direction": "forward"
+      },
+      "hint": "footwork|ashi|okuri|ayumi|tsugi|hiraki",
+      "retired": "Round 8: not offered to the model (a topic recipe); still drawn if sent"
+    },
+    {
+      "name": "shiai_court",
+      "family": "kendo",
+      "args": "size? (9-11 m)",
+      "when": "the match court, starting lines",
+      "required": [],
+      "example": {
+        "template": "shiai_court",
+        "size": 11
+      },
+      "hint": "court|shiai|shiaijo|shiai-jo",
+      "retired": "Round 8: not offered to the model (a topic recipe); still drawn if sent"
+    },
+    {
+      "name": "clock",
+      "family": "time",
+      "args": "time? (HH:MM, else live), label?",
+      "when": "showing a time on a clock face",
+      "required": [],
+      "example": {
+        "template": "clock",
+        "time": "14:05"
+      },
+      "hint": "\\bclock\\b|o'?clock|quarter (past|to)|half past"
+    },
+    {
+      "name": "calendar",
+      "family": "time",
+      "args": "month? (YYYY-MM, else this month), highlight? [days]",
+      "when": "a month, dates, a deadline",
+      "required": [],
+      "example": {
+        "template": "calendar",
+        "month": "2026-09",
+        "highlight": [
+          25,
+          30
+        ]
+      },
+      "hint": "calendar"
+    },
+    {
+      "name": "timer",
+      "family": "time",
+      "args": "minutes?, seconds?, label?",
+      "when": "a countdown ring (with set_timer)",
+      "required": [],
+      "example": {
+        "template": "timer",
+        "minutes": 5,
+        "label": "tea"
+      },
+      "hint": "\\btimer\\b|countdown"
+    },
+    {
+      "name": "schedule",
+      "family": "time",
+      "args": "items [{start HH:MM, end HH:MM, label}] (max 5)",
+      "when": "his day, a timetable",
+      "required": [
+        "items"
+      ],
+      "example": {
+        "template": "schedule",
+        "items": [
+          {
+            "start": "09:00",
+            "end": "10:30",
+            "label": "Algorithms"
+          },
+          {
+            "start": "11:00",
+            "end": "12:00",
+            "label": "Lab"
+          },
+          {
+            "start": "18:00",
+            "end": "20:00",
+            "label": "Kendo"
+          }
+        ]
+      },
+      "hint": "schedule|my day|timetable|agenda"
+    },
+    {
+      "name": "bar_chart",
+      "family": "data",
+      "args": "values [n], labels? [text], title?, unit?",
+      "when": "comparing a few numbers",
+      "required": [
+        "values"
+      ],
+      "example": {
+        "template": "bar_chart",
+        "title": "Study hours",
+        "labels": [
+          "Mon",
+          "Tue",
+          "Wed",
+          "Thu",
+          "Fri"
+        ],
+        "values": [
+          2,
+          3.5,
+          1,
+          4,
+          2.5
+        ],
+        "unit": "h"
+      },
+      "hint": "bar chart|chart my|compare",
+      "retired": "Round 8: not offered to the model (her spec's chart helper); still drawn if sent"
+    },
+    {
+      "name": "line_chart",
+      "family": "data",
+      "args": "values [n], labels? [text], title?, unit?",
+      "when": "a trend over time",
+      "required": [
+        "values"
+      ],
+      "example": {
+        "template": "line_chart",
+        "title": "Elo",
+        "labels": [
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun"
+        ],
+        "values": [
+          1180,
+          1210,
+          1195,
+          1260,
+          1302,
+          1288
+        ]
+      },
+      "hint": "line chart|over time|trend|rating over|plot my",
+      "retired": "Round 8: not offered to the model (her spec's chart helper); still drawn if sent"
+    },
+    {
+      "name": "progress",
+      "family": "data",
+      "args": "items [{label, value, max? (100)}], title?",
+      "when": "how far along things are",
+      "required": [
+        "items"
+      ],
+      "example": {
+        "template": "progress",
+        "title": "Semester",
+        "items": [
+          {
+            "label": "Thesis",
+            "value": 60
+          },
+          {
+            "label": "OS lab",
+            "value": 100
+          },
+          {
+            "label": "Reading",
+            "value": 12,
+            "max": 20
+          }
+        ]
+      },
+      "hint": "progress"
+    },
+    {
+      "name": "gauge",
+      "family": "data",
+      "args": "items [{label, value, max? (100), detail?}] (max 4), title?",
+      "when": "one to four levels as dials",
+      "required": [
+        "items"
+      ],
+      "example": {
+        "template": "gauge",
+        "items": [
+          {
+            "label": "Battery",
+            "value": 72
+          },
+          {
+            "label": "Disk",
+            "value": 91,
+            "detail": "465 GB"
+          }
+        ]
+      },
+      "hint": "gauge|dial"
+    },
+    {
+      "name": "system_status",
+      "family": "data",
+      "args": "cpu, gpu, ram, vram (percent, from the system_status tool), ram_gb?, vram_gb?",
+      "when": "his PC's load - only with numbers from system_status",
+      "required": [
+        "cpu",
+        "gpu",
+        "ram",
+        "vram"
+      ],
+      "example": {
+        "template": "system_status",
+        "cpu": 23,
+        "gpu": 61,
+        "ram": 48,
+        "vram": 88,
+        "ram_gb": "15/32",
+        "vram_gb": "14/16"
+      },
+      "hint": "cpu|gpu|vram|\\bram\\b"
+    },
+    {
+      "name": "folder_tree",
+      "family": "files",
+      "args": "paths [text], root?",
+      "when": "what's in a folder (from list_files)",
+      "required": [
+        "paths"
+      ],
+      "example": {
+        "template": "folder_tree",
+        "root": "Downloads",
+        "paths": [
+          "papers/os.pdf",
+          "papers/graphs.pdf",
+          "photos/dojo.jpg",
+          "notes.txt",
+          "setup.exe"
+        ]
+      },
+      "hint": "folder tree|folder structure"
+    },
+    {
+      "name": "organize_plan",
+      "family": "files",
+      "args": "moves [[from, to]], root?",
+      "when": "an organize_files plan, before and after",
+      "required": [
+        "moves"
+      ],
+      "example": {
+        "template": "organize_plan",
+        "root": "Downloads",
+        "moves": [
+          [
+            "os.pdf",
+            "Documents/os.pdf"
+          ],
+          [
+            "dojo.jpg",
+            "Pictures/dojo.jpg"
+          ],
+          [
+            "cat.png",
+            "Pictures/cat.png"
+          ],
+          [
+            "setup.exe",
+            "Installers/setup.exe"
+          ]
+        ]
+      },
+      "hint": "organi[sz]e plan|before and after"
+    },
+    {
+      "name": "array",
+      "family": "cs",
+      "args": "values [v], highlight? [i], pointers? {name: index}, title?",
+      "when": "an array, indices, two pointers",
+      "required": [
+        "values"
+      ],
+      "example": {
+        "template": "array",
+        "values": [
+          3,
+          8,
+          1,
+          9,
+          4,
+          7
+        ],
+        "highlight": [
+          3
+        ],
+        "pointers": {
+          "lo": 0,
+          "hi": 5
+        }
+      },
+      "hint": "\\barray\\b|two pointers|pointers"
+    },
+    {
+      "name": "stack",
+      "family": "cs",
+      "args": "values [v] (bottom to top), push? v, pop? true",
+      "when": "a stack, LIFO, push and pop",
+      "required": [
+        "values"
+      ],
+      "example": {
+        "template": "stack",
+        "values": [
+          "a",
+          "b",
+          "c"
+        ],
+        "push": "d"
+      },
+      "hint": "\\bstack\\b|lifo"
+    },
+    {
+      "name": "queue",
+      "family": "cs",
+      "args": "values [v] (front to back), enqueue? v, dequeue? true",
+      "when": "a queue, FIFO",
+      "required": [
+        "values"
+      ],
+      "example": {
+        "template": "queue",
+        "values": [
+          4,
+          8,
+          15,
+          16
+        ],
+        "enqueue": 23
+      },
+      "hint": "\\bqueue\\b|fifo"
+    },
+    {
+      "name": "linked_list",
+      "family": "cs",
+      "args": "values [v], doubly?, highlight? [i]",
+      "when": "a linked list, nodes and pointers",
+      "required": [
+        "values"
+      ],
+      "example": {
+        "template": "linked_list",
+        "values": [
+          3,
+          7,
+          1,
+          9
+        ],
+        "highlight": [
+          2
+        ]
+      },
+      "hint": "linked list"
+    },
+    {
+      "name": "binary_tree",
+      "family": "cs",
+      "args": "values [v or null, level order], highlight? [v], title?",
+      "when": "a binary tree or BST",
+      "required": [
+        "values"
+      ],
+      "example": {
+        "template": "binary_tree",
+        "values": [
+          8,
+          3,
+          10,
+          1,
+          6,
+          null,
+          14,
+          null,
+          null,
+          4,
+          7
+        ],
+        "highlight": [
+          6
+        ]
+      },
+      "hint": "binary (search )?tree|\\bbst\\b|heap",
+      "retired": "Round 8: not offered to the model (her spec's tree layout); still drawn if sent"
+    },
+    {
+      "name": "graph",
+      "family": "cs",
+      "args": "nodes [name], edges [[a, b, weight?]], directed?, path? [nodes], title?",
+      "when": "a graph, a shortest path, BFS/DFS",
+      "required": [
+        "nodes",
+        "edges"
+      ],
+      "example": {
+        "template": "graph",
+        "nodes": [
+          "A",
+          "B",
+          "C",
+          "D",
+          "E"
+        ],
+        "edges": [
+          [
+            "A",
+            "B",
+            4
+          ],
+          [
+            "A",
+            "C",
+            1
+          ],
+          [
+            "C",
+            "B",
+            2
+          ],
+          [
+            "B",
+            "D",
+            5
+          ],
+          [
+            "C",
+            "D",
+            8
+          ],
+          [
+            "D",
+            "E",
+            3
+          ]
+        ],
+        "path": [
+          "A",
+          "C",
+          "B",
+          "D",
+          "E"
+        ]
+      },
+      "hint": "\\bgraph\\b|nodes|edges|dijkstra|bfs|dfs",
+      "retired": "Round 8: not offered to the model (her spec's graph/layers layouts); still drawn if sent"
+    },
+    {
+      "name": "sort",
+      "family": "cs",
+      "args": "algorithm (bubble|insertion|selection|merge|quick), values [n] (max 16)",
+      "when": "showing how a sorting algorithm works, step by step",
+      "required": [
+        "algorithm",
+        "values"
+      ],
+      "example": {
+        "template": "sort",
+        "algorithm": "bubble",
+        "values": [
+          5,
+          1,
+          4,
+          2,
+          8,
+          3
+        ]
+      },
+      "hint": "sort(ing)?\\b|bubble|quicksort|merge ?sort|insertion|selection sort"
+    },
+    {
+      "name": "flowchart",
+      "family": "cs",
+      "args": "nodes [{id, text, kind (start|process|decision|io|end)}], links [[from, to, label?]]",
+      "when": "an algorithm or process as boxes and arrows",
+      "required": [
+        "nodes",
+        "links"
+      ],
+      "example": {
+        "template": "flowchart",
+        "nodes": [
+          {
+            "id": "s",
+            "text": "Start",
+            "kind": "start"
+          },
+          {
+            "id": "r",
+            "text": "Read n",
+            "kind": "io"
+          },
+          {
+            "id": "d",
+            "text": "n even?",
+            "kind": "decision"
+          },
+          {
+            "id": "e",
+            "text": "Even",
+            "kind": "process"
+          },
+          {
+            "id": "o",
+            "text": "Odd",
+            "kind": "process"
+          },
+          {
+            "id": "x",
+            "text": "End",
+            "kind": "end"
+          }
+        ],
+        "links": [
+          [
+            "s",
+            "r"
+          ],
+          [
+            "r",
+            "d"
+          ],
+          [
+            "d",
+            "e",
+            "yes"
+          ],
+          [
+            "d",
+            "o",
+            "no"
+          ],
+          [
+            "e",
+            "x"
+          ],
+          [
+            "o",
+            "x"
+          ]
+        ]
+      },
+      "hint": "flow ?chart",
+      "retired": "Round 8: not offered to the model (her spec's flow layout); still drawn if sent"
+    },
+    {
+      "name": "number_line",
+      "family": "cs",
+      "args": "from, to, points? [n], intervals? [{from, to, closed? [bool, bool]}], title?",
+      "when": "a number line, an inequality, an interval",
+      "required": [
+        "from",
+        "to"
+      ],
+      "example": {
+        "template": "number_line",
+        "from": -5,
+        "to": 5,
+        "points": [
+          2
+        ],
+        "intervals": [
+          {
+            "from": -2,
+            "to": 3,
+            "closed": [
+              true,
+              false
+            ]
+          }
+        ]
+      },
+      "hint": "number line|inequality|interval"
+    },
+    {
+      "name": "coordinate_grid",
+      "family": "cs",
+      "args": "x? [min, max], y? [min, max], points? [[x, y, label?]], segments? [[x1, y1, x2, y2]]",
+      "when": "points and lines on axes",
+      "required": [],
+      "example": {
+        "template": "coordinate_grid",
+        "x": [
+          -2,
+          6
+        ],
+        "y": [
+          -2,
+          5
+        ],
+        "points": [
+          [
+            1,
+            1,
+            "A"
+          ],
+          [
+            4,
+            3,
+            "B"
+          ]
+        ],
+        "segments": [
+          [
+            1,
+            1,
+            4,
+            3
+          ]
+        ]
+      },
+      "hint": "coordinate|plot the points|points? \\(|axes"
+    },
+    {
+      "name": "icon",
+      "family": "misc",
+      "args": "names [sun|cloud|partly_cloudy|rain|snow|storm|music|lightbulb|warning|check|cross|heart|star|clock|question] (max 3), captions? [text]",
+      "when": "a quick picture: weather, an idea, a warning, done",
+      "required": [
+        "names"
+      ],
+      "example": {
+        "template": "icon",
+        "names": [
+          "partly_cloudy",
+          "rain",
+          "sun"
+        ],
+        "captions": [
+          "FRI",
+          "SAT",
+          "SUN"
+        ]
+      },
+      "hint": "weather|rain|sunny|icon|lightbulb"
+    },
+    {
+      "name": "equalizer",
+      "family": "misc",
+      "args": "title? (what's playing), bars?",
+      "when": "music is playing",
+      "required": [],
+      "example": {
+        "template": "equalizer",
+        "title": "Lo-fi beats"
+      },
+      "hint": "equali[sz]er"
+    }
+  ],
+  "shapes_example": {
+    "shapes": [
+      {
+        "type": "circle",
+        "x": 30,
+        "y": 40,
+        "r": 12,
+        "fill": true,
+        "color": "amber"
+      },
+      {
+        "type": "arrow",
+        "x1": 46,
+        "y1": 40,
+        "x2": 70,
+        "y2": 40
+      },
+      {
+        "type": "rect",
+        "x": 74,
+        "y": 30,
+        "w": 22,
+        "h": 20,
+        "color": "cyan"
+      },
+      {
+        "type": "label",
+        "x": 30,
+        "y": 58,
+        "text": "SUN",
+        "align": "center"
+      },
+      {
+        "type": "label",
+        "x": 85,
+        "y": 58,
+        "text": "EARTH",
+        "align": "center"
+      }
+    ],
+    "title": "Sketch"
+  },
+  "request": "\\b(draw|sketch|show|plot|chart|diagram|visuali[sz]e|visually|illustrate|animate|label|picture|what does .* look like)\\b"
+}

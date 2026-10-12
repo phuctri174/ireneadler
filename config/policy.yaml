@@ -1,0 +1,21 @@
+# Where Irene's file tools may look and act. Enforced in code (tools/policy.py):
+# the model only ever names a root below and a path inside it - never a raw path.
+
+roots:
+  desktop: ~/Desktop
+  downloads: ~/Downloads
+
+# inside a root, but off-limits to every tool (listing, reading, moving)
+deny:
+  - ~/Desktop/irene        # Irene's own source
+
+# where move_to_quarantine puts things - outside the roots, restorable, never deleted
+quarantine: ~/Irene Quarantine
+
+limits:
+  list_entries: 200
+  search_results: 50
+  search_depth: 4
+  read_chars: 12000
+  read_bytes: 25000000
+  organize_files: 500

@@ -1,0 +1,45 @@
+# Irene's own SearXNG: local only (127.0.0.1:8888), JSON out, several engines.
+# Started on demand by tools/research.py (see core/scripts/setup_searxng.ps1).
+# The secret comes from SEARXNG_SECRET, set fresh by whoever launches it.
+use_default_settings: true
+
+general:
+  instance_name: "irene-search"
+  enable_metrics: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  formats:
+    - html
+    - json
+
+server:
+  bind_address: "127.0.0.1"
+  port: 8888
+  limiter: false
+  public_instance: false
+  image_proxy: false
+  method: "GET"
+
+outgoing:
+  request_timeout: 3.0
+  max_request_timeout: 6.0
+
+engines:
+  - name: google
+    disabled: false
+  - name: bing
+    disabled: false
+  - name: duckduckgo
+    disabled: false
+  - name: brave
+    disabled: false
+  - name: startpage
+    disabled: false
+  # qwant answers with a CAPTCHA to a local instance
+  - name: qwant
+    disabled: true
+  - name: wikipedia
+    disabled: false
+    display_type: ["infobox", "list"]

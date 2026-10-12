@@ -1,0 +1,32 @@
+# Chess with Irene (core/irene/chess_game.py). Her moves come from this engine -
+# never from the language model. Set up once: core\scripts\setup_stockfish.ps1.
+
+engine: C:\irene\stockfish\stockfish.exe
+
+# Her strength: Stockfish's Skill Level (0-20). 3-5 is a friendly club player -
+# she can win, she makes human-looking mistakes, she can be beaten.
+skill: 4
+# how long she thinks per move (ms) - also how long he waits
+think_ms: 500
+
+# Commentary reads the position at full strength (it must be true): ms per look
+analyse_ms: 250
+
+# Whisper hotwords while a game is on (stt.context_terms): his moves, said aloud
+hotwords:
+  - knight
+  - bishop
+  - rook
+  - queen
+  - king
+  - pawn
+  - castle kingside
+  - castle queenside
+  - takes
+  - check
+  - checkmate
+  - en passant
+  - promote
+  - take it back
+  - resign
+  - Sicilian

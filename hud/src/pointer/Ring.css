@@ -1,0 +1,87 @@
+html.is-ring,
+html.is-ring body,
+html.is-ring #root {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.ring {
+  --dwell: 0;
+  position: fixed;
+  inset: 12px;
+  border-radius: 50%;
+}
+
+.ring-edge {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid #22e0ff;
+  box-shadow: 0 0 8px rgba(34, 224, 255, 0.7), inset 0 0 6px rgba(34, 224, 255, 0.5);
+  transition: transform 120ms ease-out;
+}
+
+/* the dwell, filling clockwise as a thick band - a full ring is a click */
+.ring-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(#22e0ff calc(var(--dwell) * 360deg), rgba(34, 224, 255, 0.08) 0);
+  mask: radial-gradient(circle, transparent 46%, #000 48%);
+  filter: drop-shadow(0 0 4px #22e0ff);
+}
+
+/* where the click lands */
+.ring-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: #eaffff;
+  box-shadow: 0 0 6px #22e0ff;
+}
+
+.ring.is-rest .ring-edge {
+  opacity: 0.4;
+  border-style: dashed;
+}
+
+/* pinching: the ring closes in */
+.ring.is-pinch .ring-edge {
+  transform: scale(0.7);
+  border-color: #5ef2b8;
+}
+
+/* a click fired: a burst that grows and fades */
+.ring-flash {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(234, 255, 255, 0.95), rgba(94, 242, 184, 0.6) 45%, transparent 70%);
+  animation: ring-flash 380ms ease-out forwards;
+}
+
+@keyframes ring-flash {
+  from {
+    transform: scale(0.6);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+.ring-arrows {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #5ef2b8;
+  font: 700 12px/1 "Cascadia Mono", Consolas, monospace;
+  text-align: center;
+}

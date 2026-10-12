@@ -1,0 +1,99 @@
+# Copy to config/vocabulary.yaml (gitignored) and add your own names first.
+#
+# Words Whisper should expect from you (core/irene/stt.py passes them as hotwords
+# and in the initial prompt). Names first: those are what it gets wrong.
+
+names:
+  - Irene
+  - Irene Adler
+  - Tri
+  - Mister Tri
+
+kendo:
+  - kendo
+  - shinai
+  - men
+  - kote
+  - dou
+  - gyaku-dou
+  - tsuki
+  - kamae
+  - chudan
+  - keiko
+  - sensei
+  - bogu
+  - kiai
+  - dojo
+  - 1st Dan
+  - 2nd Dan
+  - oji waza
+  - uchi tachi
+  - tenouchi
+  - debana
+  - suriage
+  - kaeshi
+  - shiai
+
+# your corpus (config/corpus.yaml, training sentences only - the held-out set is
+# never mined): the names and words Whisper has no reason to expect.
+# Hotwords are cut at 223 tokens from the START: keep this file's order.
+corpus:
+  - Hue
+  - Nha Trang
+  - Phu Quoc
+  - Ha Long
+  - Hoi An
+  - Sapa
+  - Langbiang
+  - Mekong
+  - Vingroup
+  - Switch 2
+  - Pokémon
+  - Charizard
+  - Gengar
+  - Lucario
+  - Splatoon
+  - Baldur's Gate
+  - Elden Ring
+  - Kojima
+  - Yu-Gi-Oh
+  - Najdorf
+  - Carlsen
+  - Kubernetes
+  - TypeScript
+  - Copilot
+  - Anthropic
+  - Claude
+  - Amodei
+  - Nadella
+  - Pichai
+  - Jensen Huang
+  - Hugging Face
+
+chess:
+  - checkmate
+  - en passant
+  - castling
+  - Sicilian Defence
+  - Ruy Lopez
+  - Italian Game
+  - Queen's Gambit
+  - knight
+  - bishop
+  - rook
+  - Lichess
+
+commands:
+  - open my downloads
+  - close the panel
+  - show the sources
+  - save the panel as a PDF
+  - set a timer
+  - what time is it
+  - research
+  - look it up
+  - take a screenshot
+  - quarantine
+  - volume up
+  - mute
+  - pause the music

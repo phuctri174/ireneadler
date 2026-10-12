@@ -1,0 +1,40 @@
+{"id": "chess-ruy", "say": "Show me the Ruy Lopez on the board.", "expect": ["chessboard"]}
+{"id": "chess-najdorf", "say": "What does the Sicilian Najdorf look like?", "expect": ["chessboard"]}
+{"id": "chess-fen", "say": "Draw this position for me: rnbqkb1r/pp2pppp/3p1n2/8/3NP3/8/PPP2PPP/RNBQKB1R w KQkq - 1 5", "expect": ["chessboard"]}
+{"id": "chess-scholars", "say": "Show me how scholar's mate goes.", "expect": ["chessboard"]}
+{"id": "chess-e4", "say": "Draw the board after 1. e4 e5 2. Nf3.", "expect": ["chessboard"]}
+{"id": "kendo-shinai", "say": "Label the parts of a shinai for me.", "expect": ["composed"]}
+{"id": "kendo-bogu", "say": "What are the parts of the bogu? Show me.", "expect": ["composed"]}
+{"id": "kendo-targets", "say": "Where are the valid scoring targets in kendo? Draw it.", "expect": ["composed"]}
+{"id": "kendo-footwork", "say": "Draw how okuri-ashi works.", "expect": ["composed"]}
+{"id": "kendo-court", "say": "Sketch the layout of a shiai court.", "expect": ["composed", "shapes"]}
+{"id": "time-calendar", "say": "Show me a calendar for this month.", "expect": ["calendar"]}
+{"id": "time-clock", "say": "Show me what a clock looks like at quarter past three.", "expect": ["clock"]}
+{"id": "time-schedule", "say": "Draw my day: lecture 9 to 11, lab 13 to 15, kendo 18 to 20.", "expect": ["schedule"]}
+{"id": "data-bars", "say": "Chart my study hours: Monday 2, Tuesday 3, Wednesday 1.5, Thursday 4.", "expect": ["bar_chart", "spec:bar"]}
+{"id": "data-line", "say": "Plot my chess rating over the last months: 1180, 1210, 1260, 1300.", "expect": ["line_chart", "bar_chart", "spec:line", "spec:bar"]}
+{"id": "data-progress", "say": "Show my progress: thesis 60 percent, OS lab 100 percent, reading 30 percent.", "expect": ["progress", "bar_chart", "gauge", "spec:bar"]}
+{"id": "cs-sort", "say": "Show bubble sort step by step on 5 3 8 1 4.", "expect": ["sort", "composed"]}
+{"id": "cs-quick", "say": "Animate quicksort on 9, 4, 7, 1, 3 for me.", "expect": ["sort", "composed"]}
+{"id": "cs-stack", "say": "Explain how a stack works, visually.", "expect": ["stack", "composed"]}
+{"id": "cs-queue", "say": "Draw a queue holding 1, 2 and 3.", "expect": ["queue", "composed"]}
+{"id": "cs-bst", "say": "Draw a binary search tree after inserting 8, 3, 10, 1, 6.", "expect": ["binary_tree", "spec:tree"]}
+{"id": "cs-list", "say": "Show me a linked list 1 -> 2 -> 3.", "expect": ["linked_list", "composed"]}
+{"id": "cs-graph", "say": "Draw a graph with nodes A, B, C, D and edges A-B, B-C, C-D, A-D.", "expect": ["graph", "composed"]}
+{"id": "cs-flow", "say": "Draw a flowchart for checking whether a number is even.", "expect": ["flowchart", "composed"]}
+{"id": "cs-numberline", "say": "Show x > 2 on a number line.", "expect": ["number_line"]}
+{"id": "cs-grid", "say": "Plot the points (1, 2) and (3, 4) and join them.", "expect": ["coordinate_grid"]}
+{"id": "cs-array", "say": "Draw the array [4, 2, 7, 1] with two pointers at both ends.", "expect": ["array"]}
+{"id": "misc-weather", "say": "Draw me a little rain cloud.", "expect": ["icon", "shapes", "composed"]}
+{"id": "free-solar", "say": "Sketch the sun with the earth orbiting it.", "expect": ["shapes", "composed"]}
+{"id": "free-house", "say": "Draw a simple house.", "expect": ["shapes", "composed"]}
+{"id": "copyright-pikachu", "say": "Draw Pikachu for me!", "expect": [null, "shapes", "icon"], "forbid_label": "pikachu"}
+{"id": "copyright-logo", "say": "Draw the Nike logo.", "expect": [null, "shapes", "icon", "check"], "forbid_label": "nike"}
+{"id": "none-capital", "say": "What's the capital of France?", "expect": [null]}
+{"id": "none-howareyou", "say": "How are you today?", "expect": [null]}
+{"id": "none-joke", "say": "Tell me a joke.", "expect": [null]}
+{"id": "none-tcp", "say": "What does TCP stand for?", "expect": [null, "composed", "spec:outline"]}
+{"id": "none-thanks", "say": "Thanks, that helps.", "expect": [null]}
+{"id": "none-advice", "say": "Should I study tonight or rest?", "expect": [null]}
+{"id": "none-kendo-chat", "say": "Kendo practice was brutal today.", "expect": [null]}
+{"id": "none-chess-chat", "say": "I think I'm getting better at chess.", "expect": [null]}

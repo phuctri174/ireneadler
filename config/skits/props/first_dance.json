@@ -1,0 +1,152 @@
+{
+ "title": "First Dance in Kendo — A Beginner's Guide",
+ "subtitle": "6 sources · 2026-10-11 14:20",
+ "blocks": [
+  {
+   "kind": "heading",
+   "text": "Answer"
+  },
+  {
+   "kind": "text",
+   "text": "Your first dance in kendo is Nihon Kendo Kata no. 1 - a partnered routine for two dancers, a leader (uchidachi) and a follower (shidachi), performed to a count of eight. Beginners can learn the whole routine in four to six sessions. Start with suriashi, the gliding step every figure is built on, keep your shinai in frame, and rehearse at a slow tempo of about 60 beats per minute."
+  },
+  {
+   "kind": "heading",
+   "text": "1. Leading and following",
+   "level": 3
+  },
+  {
+   "kind": "text",
+   "text": "The uchidachi leads: they set the tempo, take the first step and invite each figure. The shidachi follows - and, as in any partner dance, never anticipates the lead [2].\n\nThe connection runs through the tips of the shinai, crossed about ten centimetres apart. This is kendo's closed hold: if the tips drift apart, the couple has lost the frame."
+  },
+  {
+   "kind": "heading",
+   "text": "2. Suriashi - the basic step",
+   "level": 3
+  },
+  {
+   "kind": "text",
+   "text": "• Count 1 - glide the right foot forward, heel just off the floor\n• Count 2 - the left foot follows, closing to the starting distance\n• Counts 3-4 - the same again\n• Counts 5-8 - the same pattern, travelling backward\n\nNever cross the feet, and never let the left heel touch the floor: it stays lifted for the entire routine [1] [5]."
+  },
+  {
+   "kind": "image",
+   "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc2ODAnIGhlaWdodD0nNDMwJyB2aWV3Qm94PScwIDAgNjgwIDQzMCc+PGRlZnM+PG1hcmtlciBpZD0nYScgdmlld0JveD0nMCAwIDEwIDEwJyByZWZYPSc4JyByZWZZPSc1JyBtYXJrZXJXaWR0aD0nNycgbWFya2VySGVpZ2h0PSc3JyBvcmllbnQ9J2F1dG8nPjxwYXRoIGQ9J00wLDAgTDEwLDUgTDAsMTAgeicgZmlsbD0nIzIyZTBmZicvPjwvbWFya2VyPjxwYXR0ZXJuIGlkPSdnJyB3aWR0aD0nMzQnIGhlaWdodD0nMzQnIHBhdHRlcm5Vbml0cz0ndXNlclNwYWNlT25Vc2UnPjxwYXRoIGQ9J00zNCAwSDBWMzQnIGZpbGw9J25vbmUnIHN0cm9rZT0ncmdiYSgzNCwyMjQsMjU1LDAuMjgpJyBzdHJva2Utd2lkdGg9JzAuNicvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9JzY4MCcgaGVpZ2h0PSc0MzAnIGZpbGw9JyMwNjEwMTYnLz48cmVjdCB3aWR0aD0nNjgwJyBoZWlnaHQ9JzQzMCcgZmlsbD0ndXJsKCNnKScgb3BhY2l0eT0nMC41Jy8+PHRleHQgeD0nMjQnIHk9JzM2JyBmb250LWZhbWlseT0nQ29uc29sYXMsbW9ub3NwYWNlJyBmb250LXNpemU9JzE1JyBmb250LXdlaWdodD0nNDAwJyBsZXR0ZXItc3BhY2luZz0nMycgZmlsbD0nIzIyZTBmZicgdGV4dC1hbmNob3I9J3N0YXJ0Jz5LQVRBIDEgwrcgQ0hPUkVPR1JBUEhZIMK3IEZMT09SIFBMQU48L3RleHQ+PHRleHQgeD0nNjU2JyB5PSczNicgZm9udC1mYW1pbHk9J0NvbnNvbGFzLG1vbm9zcGFjZScgZm9udC1zaXplPScxMycgZm9udC13ZWlnaHQ9JzQwMCcgbGV0dGVyLXNwYWNpbmc9JzInIGZpbGw9J3JnYmEoMjE2LDI0NiwyNTUsMC41NSknIHRleHQtYW5jaG9yPSdlbmQnPkRPSk8gRkxPT1Ig4oaUIDkgU1RFUFM8L3RleHQ+PGxpbmUgeDE9JzYwJyB5MT0nMjAwJyB4Mj0nNjIwJyB5Mj0nMjAwJyBzdHJva2U9J3JnYmEoMzQsMjI0LDI1NSwwLjI4KScgc3Ryb2tlLXdpZHRoPScyJyBzdHJva2UtZGFzaGFycmF5PSczIDcnLz48Y2lyY2xlIGN4PScxMTAnIGN5PScyMDAnIHI9JzIyJyBmaWxsPScjMDYxMDE2JyBzdHJva2U9JyMyMmUwZmYnIHN0cm9rZS13aWR0aD0nMycvPjx0ZXh0IHg9JzExMCcgeT0nMjA2JyBmb250LWZhbWlseT0nQ29uc29sYXMsbW9ub3NwYWNlJyBmb250LXNpemU9JzE4JyBmb250LXdlaWdodD0nNzAwJyBsZXR0ZXItc3BhY2luZz0nMCcgZmlsbD0nIzIyZTBmZicgdGV4dC1hbmNob3I9J21pZGRsZSc+TDwvdGV4dD48bGluZSB4MT0nMTMyJyB5MT0nMjAwJyB4Mj0nMTgwJyB5Mj0nMTk0JyBzdHJva2U9JyMyMmUwZmYnIHN0cm9rZS13aWR0aD0nMycgc3Ryb2tlLWxpbmVjYXA9J3JvdW5kJy8+PHRleHQgeD0nMTEwJyB5PScyNDYnIGZvbnQtZmFtaWx5PSdDb25zb2xhcyxtb25vc3BhY2UnIGZvbnQtc2l6ZT0nMTEnIGZvbnQtd2VpZ2h0PSc0MDAnIGxldHRlci1zcGFjaW5nPScyJyBmaWxsPSdyZ2JhKDIxNiwyNDYsMjU1LDAuNTUpJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz5MRUFERVIgwrcgVUNISURBQ0hJPC90ZXh0PjxjaXJjbGUgY3g9JzU3MCcgY3k9JzIwMCcgcj0nMjInIGZpbGw9JyMwNjEwMTYnIHN0cm9rZT0nI2I4OTJmZicgc3Ryb2tlLXdpZHRoPSczJy8+PHRleHQgeD0nNTcwJyB5PScyMDYnIGZvbnQtZmFtaWx5PSdDb25zb2xhcyxtb25vc3BhY2UnIGZvbnQtc2l6ZT0nMTgnIGZvbnQtd2VpZ2h0PSc3MDAnIGxldHRlci1zcGFjaW5nPScwJyBmaWxsPScjYjg5MmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz5GPC90ZXh0PjxsaW5lIHgxPSc1NDgnIHkxPScyMDAnIHgyPSc1MDAnIHkyPScyMDYnIHN0cm9rZT0nI2I4OTJmZicgc3Ryb2tlLXdpZHRoPSczJyBzdHJva2UtbGluZWNhcD0ncm91bmQnLz48dGV4dCB4PSc1NzAnIHk9JzE2NCcgZm9udC1mYW1pbHk9J0NvbnNvbGFzLG1vbm9zcGFjZScgZm9udC1zaXplPScxMScgZm9udC13ZWlnaHQ9JzQwMCcgbGV0dGVyLXNwYWNpbmc9JzInIGZpbGw9J3JnYmEoMjE2LDI0NiwyNTUsMC41NSknIHRleHQtYW5jaG9yPSdtaWRkbGUnPkZPTExPV0VSIMK3IFNISURBQ0hJPC90ZXh0PjxyZWN0IHg9JzE3NycgeT0nMTQxJyB3aWR0aD0nMjYnIGhlaWdodD0nMTgnIHJ4PSc1JyBmaWxsPSdub25lJyBzdHJva2U9JyMyMmUwZmYnIHN0cm9rZS13aWR0aD0nMi41Jy8+PHRleHQgeD0nMTkwJyB5PScxNTUnIGZvbnQtZmFtaWx5PSdDb25zb2xhcyxtb25vc3BhY2UnIGZvbnQtc2l6ZT0nMTMnIGZvbnQtd2VpZ2h0PSc3MDAnIGxldHRlci1zcGFjaW5nPScwJyBmaWxsPScjY2RlZmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz4xPC90ZXh0PjxyZWN0IHg9JzIyNycgeT0nMTQxJyB3aWR0aD0nMjYnIGhlaWdodD0nMTgnIHJ4PSc1JyBmaWxsPSdub25lJyBzdHJva2U9JyMyMmUwZmYnIHN0cm9rZS13aWR0aD0nMi41Jy8+PHRleHQgeD0nMjQwJyB5PScxNTUnIGZvbnQtZmFtaWx5PSdDb25zb2xhcyxtb25vc3BhY2UnIGZvbnQtc2l6ZT0nMTMnIGZvbnQtd2VpZ2h0PSc3MDAnIGxldHRlci1zcGFjaW5nPScwJyBmaWxsPScjY2RlZmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz4yPC90ZXh0PjxyZWN0IHg9JzI3NycgeT0nMTQxJyB3aWR0aD0nMjYnIGhlaWdodD0nMTgnIHJ4PSc1JyBmaWxsPSdub25lJyBzdHJva2U9JyMyMmUwZmYnIHN0cm9rZS13aWR0aD0nMi41Jy8+PHRleHQgeD0nMjkwJyB5PScxNTUnIGZvbnQtZmFtaWx5PSdDb25zb2xhcyxtb25vc3BhY2UnIGZvbnQtc2l6ZT0nMTMnIGZvbnQtd2VpZ2h0PSc3MDAnIGxldHRlci1zcGFjaW5nPScwJyBmaWxsPScjY2RlZmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz4zPC90ZXh0PjxyZWN0IHg9JzQ3NycgeT0nMjQxJyB3aWR0aD0nMjYnIGhlaWdodD0nMTgnIHJ4PSc1JyBmaWxsPSdub25lJyBzdHJva2U9JyNiODkyZmYnIHN0cm9rZS13aWR0aD0nMi41Jy8+PHRleHQgeD0nNDkwJyB5PScyNTUnIGZvbnQtZmFtaWx5PSdDb25zb2xhcyxtb25vc3BhY2UnIGZvbnQtc2l6ZT0nMTMnIGZvbnQtd2VpZ2h0PSc3MDAnIGxldHRlci1zcGFjaW5nPScwJyBmaWxsPScjY2RlZmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz4xPC90ZXh0PjxyZWN0IHg9JzQyNycgeT0nMjQxJyB3aWR0aD0nMjYnIGhlaWdodD0nMTgnIHJ4PSc1JyBmaWxsPSdub25lJyBzdHJva2U9JyNiODkyZmYnIHN0cm9rZS13aWR0aD0nMi41Jy8+PHRleHQgeD0nNDQwJyB5PScyNTUnIGZvbnQtZmFtaWx5PSdDb25zb2xhcyxtb25vc3BhY2UnIGZvbnQtc2l6ZT0nMTMnIGZvbnQtd2VpZ2h0PSc3MDAnIGxldHRlci1zcGFjaW5nPScwJyBmaWxsPScjY2RlZmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz4yPC90ZXh0PjxyZWN0IHg9JzM3NycgeT0nMjQxJyB3aWR0aD0nMjYnIGhlaWdodD0nMTgnIHJ4PSc1JyBmaWxsPSdub25lJyBzdHJva2U9JyNiODkyZmYnIHN0cm9rZS13aWR0aD0nMi41Jy8+PHRleHQgeD0nMzkwJyB5PScyNTUnIGZvbnQtZmFtaWx5PSdDb25zb2xhcyxtb25vc3BhY2UnIGZvbnQtc2l6ZT0nMTMnIGZvbnQtd2VpZ2h0PSc3MDAnIGxldHRlci1zcGFjaW5nPScwJyBmaWxsPScjY2RlZmZmJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz4zPC90ZXh0PjxsaW5lIHgxPScxNTAnIHkxPScxNjUnIHgyPScxNzUnIHkyPScxNTgnIHN0cm9rZT0nIzIyZTBmZicgc3Ryb2tlLXdpZHRoPScyJyBzdHJva2UtZGFzaGFycmF5PSc2IDUnIG1hcmtlci1lbmQ9J3VybCgjYSknLz48bGluZSB4MT0nNDEwJyB5MT0nMjQwJyB4Mj0nMzgwJyB5Mj0nMjI1JyBzdHJva2U9JyNiODkyZmYnIHN0cm9rZS13aWR0aD0nMicgc3Ryb2tlLWRhc2hhcnJheT0nNiA1JyBtYXJrZXItZW5kPSd1cmwoI2EpJy8+PGNpcmNsZSBjeD0nMzQwJyBjeT0nMjAwJyByPScyNicgZmlsbD0nbm9uZScgc3Ryb2tlPScjZmZjODU3JyBzdHJva2Utd2lkdGg9JzMnLz48dGV4dCB4PSczNDAnIHk9JzIwNicgZm9udC1mYW1pbHk9J0NvbnNvbGFzLG1vbm9zcGFjZScgZm9udC1zaXplPScyMCcgZm9udC13ZWlnaHQ9JzcwMCcgbGV0dGVyLXNwYWNpbmc9JzAnIGZpbGw9JyNmZmM4NTcnIHRleHQtYW5jaG9yPSdtaWRkbGUnPjQ8L3RleHQ+PHRleHQgeD0nMzQwJyB5PScxMTInIGZvbnQtZmFtaWx5PSdDb25zb2xhcyxtb25vc3BhY2UnIGZvbnQtc2l6ZT0nMTInIGZvbnQtd2VpZ2h0PSc0MDAnIGxldHRlci1zcGFjaW5nPScyJyBmaWxsPScjZmZjODU3JyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz5USEUgQ1VUIMK3IE1FTiDCtyBLSUFJIE9OIFRIRSBET1dOQkVBVDwvdGV4dD48bGluZSB4MT0nMzQwJyB5MT0nMTIwJyB4Mj0nMzQwJyB5Mj0nMTcwJyBzdHJva2U9JyNmZmM4NTcnIHN0cm9rZS13aWR0aD0nMS41JyBzdHJva2UtZGFzaGFycmF5PScyIDQnLz48bGluZSB4MT0nMzAwJyB5MT0nMzAwJyB4Mj0nMTUwJyB5Mj0nMzAwJyBzdHJva2U9JyMyMmUwZmYnIHN0cm9rZS13aWR0aD0nMicgc3Ryb2tlLWRhc2hhcnJheT0nNiA1JyBtYXJrZXItZW5kPSd1cmwoI2EpJy8+PHRleHQgeD0nMjI1JyB5PSczMjInIGZvbnQtZmFtaWx5PSdDb25zb2xhcyxtb25vc3BhY2UnIGZvbnQtc2l6ZT0nMTEnIGZvbnQtd2VpZ2h0PSc0MDAnIGxldHRlci1zcGFjaW5nPScyJyBmaWxsPSdyZ2JhKDIxNiwyNDYsMjU1LDAuNTUpJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJz41IMK3IDYgwrcgNyDCtyA4ICBCQUNLIFRPIFNUQVJUPC90ZXh0PjxsaW5lIHgxPSczODAnIHkxPSczMDAnIHgyPSc1MzAnIHkyPSczMDAnIHN0cm9rZT0nI2I4OTJmZicgc3Ryb2tlLXdpZHRoPScyJyBzdHJva2UtZGFzaGFycmF5PSc2IDUnIG1hcmtlci1lbmQ9J3VybCgjYSknLz48dGV4dCB4PSczNDAnIHk9JzM3MicgZm9udC1mYW1pbHk9J0NvbnNvbGFzLG1vbm9zcGFjZScgZm9udC1zaXplPScxMScgZm9udC13ZWlnaHQ9JzQwMCcgbGV0dGVyLXNwYWNpbmc9JzInIGZpbGw9JyMyMmUwZmYnIHRleHQtYW5jaG9yPSdtaWRkbGUnPlpBTlNISU4gwrcgSE9MRCBUV08gRlVMTCBDT1VOVFMgwrcgTk8gQVBQTEFVU0UgVU5USUwgUkVMRUFTRUQ8L3RleHQ+PHRleHQgeD0nMjQnIHk9JzQxMicgZm9udC1mYW1pbHk9J0NvbnNvbGFzLG1vbm9zcGFjZScgZm9udC1zaXplPScxMycgZm9udC13ZWlnaHQ9JzQwMCcgbGV0dGVyLXNwYWNpbmc9JzInIGZpbGw9J3JnYmEoMjE2LDI0NiwyNTUsMC41NSknIHRleHQtYW5jaG9yPSdzdGFydCc+Q09VTlQgIDEtMi0zIElOICDCtyAgNCBDVVQgIMK3ICA1LTggT1VUICDCtyAgfjYwIEJQTTwvdGV4dD48L3N2Zz4=",
+   "alt": "Kata 1 choreography floor plan",
+   "caption": "kata 1 floor plan - three steps in, the cut on 4, out on 5 to 8"
+  },
+  {
+   "kind": "heading",
+   "text": "3. The routine, figure by figure",
+   "level": 3
+  },
+  {
+   "kind": "text",
+   "text": "• The bow (rei) - both partners, counts 1-2\n• Sonkyo - the crouching dip, counts 3-4\n• The frame (kamae) - the leader in jodan, shinai raised; the follower in chudan\n• The approach - three suriashi steps in, on counts 1-2-3\n• The cut - the leader strikes men on count 4; the follower steps back out of it and answers on the same count\n• Zanshin - the held final pose, two full counts\n\nThe audience should not applaud until zanshin is released [3] [6]."
+  },
+  {
+   "kind": "heading",
+   "text": "4. Rhythm and tempo",
+   "level": 3
+  },
+  {
+   "kind": "text",
+   "text": "Kata is danced to silence, but it has a strict pulse. Count in eights, like a salsa phrase, and keep the count in your head rather than your feet. The kiai is the accent on the downbeat - 'Yah!' for the leader, 'Toh!' for the follower - and never on the off-beat [4]. Most beginners rush the approach: around 60 BPM is right for a first dance."
+  },
+  {
+   "kind": "heading",
+   "text": "5. Grading levels",
+   "level": 3
+  },
+  {
+   "kind": "text",
+   "text": "• 1st kyu - the routine, with correct footwork\n• Shodan - the routine in time with your partner\n• Nidan - styling and presence\n• Sandan and above - musicality: the pause before the cut becomes part of the performance\n\nA first dance needs 1st kyu footwork. Leave the advanced styling for your second dance [3]."
+  },
+  {
+   "kind": "heading",
+   "text": "6. Performance tips for your first dance",
+   "level": 3
+  },
+  {
+   "kind": "text",
+   "text": "• Keep eye contact with your partner for the whole routine - in kata, the gaze is the lead\n• Don't smile: kata is danced with a neutral face\n• Rehearse in your hakama - it hides the feet and changes your step length\n• Practise in front of a mirror, counting aloud\n• End on zanshin and hold it: the stillness is the applause cue [6]"
+  },
+  {
+   "kind": "heading",
+   "text": "What backs it up",
+   "level": 3
+  },
+  {
+   "kind": "quote",
+   "text": "In kata the uchidachi leads and the shidachi follows. The leader sets the tempo and invites each figure; a good follower never anticipates the lead, and answers it on the very next count.",
+   "attribution": "[2] The Partner Arts Journal - for: the leader sets the tempo"
+  },
+  {
+   "kind": "quote",
+   "text": "The first kata is the ideal opening number for beginners: a bow, the crouching dip of sonkyo, the frame, three steps in, one cut on the fourth count, and a held finish. It can be learned in four to six sessions.",
+   "attribution": "[3] Dojo Choreography Notes - for: the routine, and four to six sessions"
+  },
+  {
+   "kind": "quote",
+   "text": "Kata is performed in silence, but it has a strict pulse. The kiai is its accent: the leader's 'Yah!' and the follower's 'Toh!' land on the downbeat, never on the off-beat.",
+   "attribution": "[4] Rhythm in the Martial Arts - for: the kiai on the downbeat"
+  },
+  {
+   "kind": "heading",
+   "text": "Sources"
+  },
+  {
+   "kind": "heading",
+   "text": "[1] Suriashi as Partner-Dance Footwork",
+   "level": 3
+  },
+  {
+   "kind": "text",
+   "text": "Budo Movement Review · 2021\nSuriashi is the glide step every kata figure is built on: the front foot slides forward, the back foot follows to close the distance, and the heels never touch the floor. Taught on the count, it is the box step of the dojo."
+  },
+  {
+   "kind": "heading",
+   "text": "[2] Leading and Following in Paired Kata",
+   "level": 3
+  },
+  {
+   "kind": "text",
+   "text": "The Partner Arts Journal · 2019\nIn kata the uchidachi leads and the shidachi follows. The leader sets the tempo and invites each figure; a good follower never anticipates the lead, and answers it on the very next count."
+  },
+  {
+   "kind": "heading",
+   "text": "[3] Kata No. 1, Count by Count",
+   "level": 3
+  },
+  {
+   "kind": "text",
+   "text": "Dojo Choreography Notes · 2023\nThe first kata is the ideal opening number for beginners: a bow, the crouching dip of sonkyo, the frame, three steps in, one cut on the fourth count, and a held finish. It can be learned in four to six sessions."
+  },
+  {
+   "kind": "heading",
+   "text": "[4] Kiai and the Downbeat",
+   "level": 3
+  },
+  {
+   "kind": "text",
+   "text": "Rhythm in the Martial Arts · 2020\nKata is performed in silence, but it has a strict pulse. The kiai is its accent: the leader's 'Yah!' and the follower's 'Toh!' land on the downbeat, never on the off-beat."
+  },
+  {
+   "kind": "heading",
+   "text": "[5] Common Beginner Mistakes in the Kata Approach",
+   "level": 3
+  },
+  {
+   "kind": "text",
+   "text": "Studio & Dojo Floor Journal · 2022\nThe three most common errors: rushing the approach, letting the left heel drop, and losing the connection at the tips of the shinai. Each one breaks the line of dance."
+  },
+  {
+   "kind": "heading",
+   "text": "[6] Your First Dance: Performing Kata for an Audience",
+   "level": 3
+  },
+  {
+   "kind": "text",
+   "text": "The Beginner's Budo Primer · 2024\nHold the final pose. Zanshin is the moment the audience reads as the end of the routine - release it too early and the applause comes in the wrong place."
+  }
+ ]
+}

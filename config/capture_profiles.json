@@ -1,0 +1,1001 @@
+{
+  "_about": "Guided gesture captures for recalibration (HUD ui/GestureCapture.tsx, core irene/calibration.py). Each step is recorded after a hand is in view and a countdown; a take with a hand in under minHandShare of its frames is redone. hold = keep a pose; motion = one movement per rep. Frames land in core/calibration/<profile>-<session>.jsonl with the raw landmarks, so the gesture engine can be replayed offline. One file per run: a profile never overwrites an earlier run of itself, so captures accumulate. The zoom capture is one profile per distance (zoom_panel = where he actually sits to use the second screen, ctrl+alt+shift+8; zoom_near ~0.7 m, zoom_mid ~1 m, zoom_far ~1.3 m), about three minutes each and run separately; the distance is the profile's, so the step labels inside them are plain. calibration.load_family('zoom') merges whichever have been run, every frame tagged with the session and the distance it came from. Near and mid each carry the whole confuser set between them AND the scroll pose, because a classifier that has never seen the two-finger scroll pose latches zoom on it and kills scrolling - no confuser may live only in a profile that is not run. zoom_far is optional: worth capturing if zooming at arm's length ever matters, but nothing depends on it. The keiko profiles (keiko_near, keiko_mid) record the UPPER BODY instead of a hand - 33 pose landmarks as 'pose': [x, y, z, visibility, ...] - because kamae and the three strikes are where the arms are relative to the shoulders, which a hand landmarker cannot see. 'tracks': 'pose' is what arms the pose model for that run. zoom_panel carries the whole confuser set on its own, plus the two that only happen at the panel (still_open: an open, unspread hand held still; pointer_moving: pointing and sweeping the cursor) - a still hand there latched zoom live. Record it twice: the later session is held out to test the retrain (scripts/zoom_eval.py), and it ships only if it beats the live model on that session. keiko_strikes (ctrl+alt+shift+9) is the strike recogniser's capture (core/scripts/strike_train.py): the three strikes at real speed (pace natural: GO, never SLOWLY) in 4-second takes - on the first keiko capture several strikes landed in the last few frames of a 3-second take - and every strike-shaped movement that is NOT one of them (a raise that stops, seme, a right dou, tsuki, harai, a block, rei, sonkyo) plus everyday ones. Record it twice, on different days: the newer session is held out, and the model ships only if every held-out confuser stays silent.",
+  "minHandShare": 0.6,
+  "countdownSeconds": 3,
+  "profiles": {
+    "summon": {
+      "hotkey": "ctrl+alt+shift+c",
+      "steps": [
+        {
+          "label": "parallel",
+          "kind": "hold",
+          "seconds": 3,
+          "prompt": "HOLD: TWO FINGERS PARALLEL",
+          "spoken": "Hold up two fingers, side by side. Not crossed."
+        },
+        {
+          "label": "crossed",
+          "kind": "hold",
+          "seconds": 3,
+          "prompt": "HOLD: FINGERS CROSSED",
+          "spoken": "Now cross those two fingers, and hold."
+        }
+      ],
+      "done": "Got it. Both poses recorded."
+    },
+    "zoom_panel": {
+      "hotkey": "ctrl+alt+shift+8",
+      "distanceM": 0.5,
+      "steps": [
+        {
+          "label": "spread",
+          "kind": "hold",
+          "seconds": 3,
+          "prompt": "PANEL DISTANCE - HOLD: HAND SPREAD WIDE",
+          "spoken": "Zoom capture, at the panel. Sit exactly where you sit when you use the second screen, and keep your hand where it goes when you reach for it. Spread your hand wide and hold."
+        },
+        {
+          "label": "fist",
+          "kind": "hold",
+          "seconds": 3,
+          "prompt": "PANEL - HOLD: FIST",
+          "spoken": "Now a fist, and hold it."
+        },
+        {
+          "label": "zoom_in",
+          "kind": "motion",
+          "reps": 4,
+          "seconds": 4,
+          "prompt": "PANEL - ZOOM IN: FIST TO SPREAD",
+          "spoken": "Zoom in, normal speed. Fist, then open it smoothly into a wide spread. Four times.",
+          "repSpoken": "Fist again, ready to open."
+        },
+        {
+          "label": "zoom_in_fast",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 2,
+          "prompt": "PANEL - ZOOM IN, FAST",
+          "spoken": "Quick ones. Fist, snap open. Five times.",
+          "repSpoken": "Fist. Quick now."
+        },
+        {
+          "label": "zoom_out",
+          "kind": "motion",
+          "reps": 4,
+          "seconds": 4,
+          "prompt": "PANEL - ZOOM OUT: SPREAD TO FIST",
+          "spoken": "Zoom out, normal speed. Spread wide, then close it smoothly into a fist. Four times.",
+          "repSpoken": "Spread again, ready to close."
+        },
+        {
+          "label": "zoom_out_fast",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 2,
+          "prompt": "PANEL - ZOOM OUT, FAST",
+          "spoken": "Quick ones. Spread, snap shut. Five times.",
+          "repSpoken": "Spread. Quick now."
+        },
+        {
+          "label": "relaxed",
+          "kind": "hold",
+          "seconds": 4,
+          "prompt": "PANEL - CONFUSER: RELAXED HAND, STILL",
+          "spoken": "Now the ones that must never zoom - this is where it went wrong. A relaxed, natural hand, held still, like you're reading the panel."
+        },
+        {
+          "label": "still_open",
+          "kind": "hold",
+          "seconds": 4,
+          "prompt": "PANEL - CONFUSER: OPEN HAND, STILL (NOT SPREAD)",
+          "spoken": "An open hand, fingers loosely together - not spread - held still in front of the panel. Like you're about to reach for it."
+        },
+        {
+          "label": "pointing",
+          "kind": "hold",
+          "seconds": 4,
+          "prompt": "PANEL - CONFUSER: POINT AND HOLD (A DWELL CLICK)",
+          "spoken": "Point at a card on the panel and hold still, the way you'd dwell to click it."
+        },
+        {
+          "label": "pointer_moving",
+          "kind": "motion",
+          "reps": 2,
+          "seconds": 4,
+          "prompt": "PANEL - CONFUSER: POINT AND SWEEP ACROSS THE PANEL",
+          "spoken": "Point, and move the cursor around the panel - card to card, top to bottom. Twice.",
+          "repSpoken": "Point and sweep again."
+        },
+        {
+          "label": "scroll_pose",
+          "kind": "hold",
+          "seconds": 4,
+          "prompt": "PANEL - CONFUSER: TWO-FINGER SCROLL POSE",
+          "spoken": "Two fingers up together - the scroll pose. Hold it."
+        },
+        {
+          "label": "waving",
+          "kind": "motion",
+          "reps": 2,
+          "seconds": 4,
+          "prompt": "PANEL - CONFUSER: WAVING AT ME",
+          "spoken": "Wave at me, like you're saying hello. Twice.",
+          "repSpoken": "Wave again."
+        },
+        {
+          "label": "scratching",
+          "kind": "motion",
+          "reps": 1,
+          "seconds": 4,
+          "prompt": "PANEL - CONFUSER: SCRATCHING YOUR FACE",
+          "spoken": "And scratch your face - cheek, nose, chin.",
+          "repSpoken": "Scratch again, somewhere else."
+        }
+      ],
+      "done": "Panel distance done. Run it once more for a second session - that one gets held out to test the retrain."
+    },
+    "zoom_near": {
+      "hotkey": "ctrl+alt+shift+1",
+      "distanceM": 0.7,
+      "steps": [
+        {
+          "label": "spread",
+          "kind": "hold",
+          "seconds": 3,
+          "prompt": "NEAR (~0.7 m) - HOLD: HAND SPREAD WIDE",
+          "spoken": "Zoom capture, near. Sit about seventy centimetres from the camera, arm comfortably bent. Spread your hand wide, all five fingers apart, and hold."
+        },
+        {
+          "label": "fist",
+          "kind": "hold",
+          "seconds": 3,
+          "prompt": "NEAR - HOLD: FIST",
+          "spoken": "Now make a fist, and hold it."
+        },
+        {
+          "label": "zoom_in",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 4,
+          "prompt": "NEAR - ZOOM IN: FIST TO SPREAD",
+          "spoken": "Zoom in, normal speed. Start from a fist, and on go, open it smoothly into a wide spread. Five times.",
+          "repSpoken": "Fist again, ready to open."
+        },
+        {
+          "label": "zoom_in_fast",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 2,
+          "prompt": "NEAR - ZOOM IN, FAST",
+          "spoken": "Same again, but quick. Fist, then snap it open. Five times.",
+          "repSpoken": "Fist. Quick now."
+        },
+        {
+          "label": "zoom_out",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 4,
+          "prompt": "NEAR - ZOOM OUT: SPREAD TO FIST",
+          "spoken": "Zoom out, normal speed. Start spread wide, and on go, close it smoothly into a fist. Five times.",
+          "repSpoken": "Spread again, ready to close."
+        },
+        {
+          "label": "zoom_out_fast",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 2,
+          "prompt": "NEAR - ZOOM OUT, FAST",
+          "spoken": "Same again, quick. Spread, then snap it shut. Five times.",
+          "repSpoken": "Spread. Quick now."
+        },
+        {
+          "label": "relaxed",
+          "kind": "hold",
+          "seconds": 4,
+          "prompt": "NEAR - CONFUSER: RELAXED HAND",
+          "spoken": "Now three that must never zoom. A relaxed, natural hand - no gesture at all."
+        },
+        {
+          "label": "scroll_pose",
+          "kind": "hold",
+          "seconds": 4,
+          "prompt": "NEAR - CONFUSER: TWO-FINGER SCROLL POSE",
+          "spoken": "Now two fingers up together - the scroll pose. Hold it."
+        },
+        {
+          "label": "waving",
+          "kind": "motion",
+          "reps": 3,
+          "seconds": 4,
+          "prompt": "NEAR - CONFUSER: WAVING AT ME",
+          "spoken": "And wave at me, like you're saying hello. Keep waving until I say stop. Three times.",
+          "repSpoken": "Wave again."
+        }
+      ],
+      "done": "Near done. Run ctrl alt two for the middle distance."
+    },
+    "zoom_mid": {
+      "hotkey": "ctrl+alt+shift+2",
+      "distanceM": 1.0,
+      "steps": [
+        {
+          "label": "spread",
+          "kind": "hold",
+          "seconds": 3,
+          "prompt": "MID (~1 m) - HOLD: HAND SPREAD WIDE",
+          "spoken": "Zoom capture, middle distance. Sit back to about a metre, arm nearly straight. Spread your hand wide and hold."
+        },
+        {
+          "label": "fist",
+          "kind": "hold",
+          "seconds": 3,
+          "prompt": "MID - HOLD: FIST",
+          "spoken": "Now make a fist, and hold it."
+        },
+        {
+          "label": "zoom_in",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 4,
+          "prompt": "MID - ZOOM IN: FIST TO SPREAD",
+          "spoken": "Zoom in, normal speed. Fist, then open it smoothly into a wide spread. Five times.",
+          "repSpoken": "Fist again, ready to open."
+        },
+        {
+          "label": "zoom_in_fast",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 2,
+          "prompt": "MID - ZOOM IN, FAST",
+          "spoken": "Now quick ones. Fist, snap open. Five times.",
+          "repSpoken": "Fist. Quick now."
+        },
+        {
+          "label": "zoom_out",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 4,
+          "prompt": "MID - ZOOM OUT: SPREAD TO FIST",
+          "spoken": "Zoom out, normal speed. Spread wide, then close it smoothly into a fist. Five times.",
+          "repSpoken": "Spread again, ready to close."
+        },
+        {
+          "label": "zoom_out_fast",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 2,
+          "prompt": "MID - ZOOM OUT, FAST",
+          "spoken": "Quick ones. Spread, snap shut. Five times.",
+          "repSpoken": "Spread. Quick now."
+        },
+        {
+          "label": "pointing",
+          "kind": "hold",
+          "seconds": 4,
+          "prompt": "MID - CONFUSER: POINTING",
+          "spoken": "Now three that must never zoom. Point with your index finger, and hold it."
+        },
+        {
+          "label": "scroll_pose",
+          "kind": "hold",
+          "seconds": 4,
+          "prompt": "MID - CONFUSER: TWO-FINGER SCROLL POSE",
+          "spoken": "Now two fingers up together - the scroll pose. Hold it."
+        },
+        {
+          "label": "scratching",
+          "kind": "motion",
+          "reps": 3,
+          "seconds": 4,
+          "prompt": "MID - CONFUSER: SCRATCHING YOUR FACE",
+          "spoken": "And the sneaky one. Scratch your face - cheek, nose, chin, wherever it itches. Three times.",
+          "repSpoken": "Scratch again, somewhere else."
+        }
+      ],
+      "done": "Middle done. That's both distances - the zoom capture is complete."
+    },
+    "zoom_far": {
+      "hotkey": "ctrl+alt+shift+3",
+      "distanceM": 1.3,
+      "steps": [
+        {
+          "label": "spread",
+          "kind": "hold",
+          "seconds": 3,
+          "prompt": "FAR (~1.3 m) - HOLD: HAND SPREAD WIDE",
+          "spoken": "Zoom capture, far. Lean right back, about a metre and a third from the camera. Spread your hand wide and hold."
+        },
+        {
+          "label": "fist",
+          "kind": "hold",
+          "seconds": 3,
+          "prompt": "FAR - HOLD: FIST",
+          "spoken": "Now make a fist, and hold it."
+        },
+        {
+          "label": "zoom_in",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 4,
+          "prompt": "FAR - ZOOM IN: FIST TO SPREAD",
+          "spoken": "Zoom in, normal speed. Fist, then open it smoothly into a wide spread. Five times.",
+          "repSpoken": "Fist again, ready to open."
+        },
+        {
+          "label": "zoom_in_fast",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 2,
+          "prompt": "FAR - ZOOM IN, FAST",
+          "spoken": "Now quick ones. Fist, snap open. Five times.",
+          "repSpoken": "Fist. Quick now."
+        },
+        {
+          "label": "zoom_out",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 4,
+          "prompt": "FAR - ZOOM OUT: SPREAD TO FIST",
+          "spoken": "Zoom out, normal speed. Spread wide, then close it smoothly into a fist. Five times.",
+          "repSpoken": "Spread again, ready to close."
+        },
+        {
+          "label": "zoom_out_fast",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 2,
+          "prompt": "FAR - ZOOM OUT, FAST",
+          "spoken": "Quick ones. Spread, snap shut. Five times.",
+          "repSpoken": "Spread. Quick now."
+        },
+        {
+          "label": "scroll_pose",
+          "kind": "hold",
+          "seconds": 4,
+          "prompt": "FAR - CONFUSER: TWO-FINGER SCROLL POSE",
+          "spoken": "Now the last few that must never zoom. Two fingers up together - the scroll pose."
+        },
+        {
+          "label": "waving",
+          "kind": "motion",
+          "reps": 2,
+          "seconds": 4,
+          "prompt": "FAR - CONFUSER: WAVING AT ME",
+          "spoken": "Wave at me from back there. Twice.",
+          "repSpoken": "Wave again."
+        },
+        {
+          "label": "scratching",
+          "kind": "motion",
+          "reps": 2,
+          "seconds": 4,
+          "prompt": "FAR - CONFUSER: SCRATCHING YOUR FACE",
+          "spoken": "And scratch your face. Twice, and we're done.",
+          "repSpoken": "Scratch again, somewhere else."
+        }
+      ],
+      "done": "That's all three distances. Zoom capture complete."
+    },
+    "keiko_near": {
+      "hotkey": "ctrl+alt+shift+4",
+      "distanceM": 1.0,
+      "tracks": "pose",
+      "steps": [
+        {
+          "label": "kamae",
+          "kind": "hold",
+          "seconds": 4,
+          "prompt": "NEAR (~1 m) - HOLD: CHUDAN NO KAMAE",
+          "spoken": "Keiko capture, near. Stand about a metre from the camera, head and both shoulders in frame, shinai in hand. Take chudan no kamae: both hands together on the tsuka, arms forward at about chest height, shoulders square to me. Hold it."
+        },
+        {
+          "label": "men",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 3,
+          "prompt": "NEAR (~1 m) - STRIKE: MEN",
+          "spoken": "Now men. From kamae, raise and cut straight down to my head. Five times, back to kamae between each.",
+          "repSpoken": "Back to kamae. Men again."
+        },
+        {
+          "label": "kote",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 3,
+          "prompt": "NEAR (~1 m) - STRIKE: KOTE",
+          "spoken": "Kote. Cut down onto my right wrist - shorter, lower than men. Five times.",
+          "repSpoken": "Kamae. Kote again."
+        },
+        {
+          "label": "gyaku_dou",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 3,
+          "prompt": "NEAR (~1 m) - STRIKE: GYAKU-DOU",
+          "spoken": "Gyaku-dou. Cut diagonally down across to my left side. Five times.",
+          "repSpoken": "Kamae. Gyaku-dou again."
+        },
+        {
+          "label": "shizentai",
+          "kind": "hold",
+          "seconds": 4,
+          "prompt": "NEAR (~1 m) - CONFUSER: STANDING NATURALLY",
+          "spoken": "Now the ones that must never be read as kendo. Just stand naturally, arms down, shinai at your side."
+        },
+        {
+          "label": "arms_up",
+          "kind": "hold",
+          "seconds": 4,
+          "prompt": "NEAR (~1 m) - CONFUSER: ARMS RAISED, NO KAMAE",
+          "spoken": "Raise both arms in front of you, but apart - hands nowhere near each other. Hold it."
+        },
+        {
+          "label": "reaching",
+          "kind": "motion",
+          "reps": 3,
+          "seconds": 3,
+          "prompt": "NEAR (~1 m) - CONFUSER: REACHING FOR SOMETHING",
+          "spoken": "Reach out for something and bring it back - a mug, the keyboard, whatever. Three times.",
+          "repSpoken": "Reach again."
+        },
+        {
+          "label": "scratching",
+          "kind": "motion",
+          "reps": 3,
+          "seconds": 3,
+          "prompt": "NEAR (~1 m) - CONFUSER: SCRATCHING YOUR HEAD",
+          "spoken": "And scratch your head - the one that looks most like a men strike on the way up. Three times.",
+          "repSpoken": "Scratch again."
+        },
+        {
+          "label": "stretching",
+          "kind": "motion",
+          "reps": 3,
+          "seconds": 3,
+          "prompt": "NEAR (~1 m) - CONFUSER: STRETCHING",
+          "spoken": "Last one. Stretch your arms up over your head and down again. Three times.",
+          "repSpoken": "Stretch again."
+        }
+      ],
+      "done": "Near done. Run ctrl alt five for the far one."
+    },
+    "keiko_mid": {
+      "hotkey": "ctrl+alt+shift+5",
+      "distanceM": 1.6,
+      "tracks": "pose",
+      "steps": [
+        {
+          "label": "kamae",
+          "kind": "hold",
+          "seconds": 4,
+          "prompt": "MID (~1.6 m) - HOLD: CHUDAN NO KAMAE",
+          "spoken": "Keiko capture, further back. Step to about a metre and a half so I can see you swing, head and shoulders still in frame. Take chudan no kamae: both hands together on the tsuka, arms forward at about chest height, shoulders square to me. Hold it."
+        },
+        {
+          "label": "men",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 3,
+          "prompt": "MID (~1.6 m) - STRIKE: MEN",
+          "spoken": "Now men. From kamae, raise and cut straight down to my head. Five times, back to kamae between each.",
+          "repSpoken": "Back to kamae. Men again."
+        },
+        {
+          "label": "kote",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 3,
+          "prompt": "MID (~1.6 m) - STRIKE: KOTE",
+          "spoken": "Kote. Cut down onto my right wrist - shorter, lower than men. Five times.",
+          "repSpoken": "Kamae. Kote again."
+        },
+        {
+          "label": "gyaku_dou",
+          "kind": "motion",
+          "reps": 5,
+          "seconds": 3,
+          "prompt": "MID (~1.6 m) - STRIKE: GYAKU-DOU",
+          "spoken": "Gyaku-dou. Cut diagonally down across to my left side. Five times.",
+          "repSpoken": "Kamae. Gyaku-dou again."
+        },
+        {
+          "label": "shizentai",
+          "kind": "hold",
+          "seconds": 4,
+          "prompt": "MID (~1.6 m) - CONFUSER: STANDING NATURALLY",
+          "spoken": "Now the ones that must never be read as kendo. Just stand naturally, arms down, shinai at your side."
+        },
+        {
+          "label": "arms_up",
+          "kind": "hold",
+          "seconds": 4,
+          "prompt": "MID (~1.6 m) - CONFUSER: ARMS RAISED, NO KAMAE",
+          "spoken": "Raise both arms in front of you, but apart - hands nowhere near each other. Hold it."
+        },
+        {
+          "label": "reaching",
+          "kind": "motion",
+          "reps": 3,
+          "seconds": 3,
+          "prompt": "MID (~1.6 m) - CONFUSER: REACHING FOR SOMETHING",
+          "spoken": "Reach out for something and bring it back - a mug, the keyboard, whatever. Three times.",
+          "repSpoken": "Reach again."
+        },
+        {
+          "label": "scratching",
+          "kind": "motion",
+          "reps": 3,
+          "seconds": 3,
+          "prompt": "MID (~1.6 m) - CONFUSER: SCRATCHING YOUR HEAD",
+          "spoken": "And scratch your head - the one that looks most like a men strike on the way up. Three times.",
+          "repSpoken": "Scratch again."
+        },
+        {
+          "label": "stretching",
+          "kind": "motion",
+          "reps": 3,
+          "seconds": 3,
+          "prompt": "MID (~1.6 m) - CONFUSER: STRETCHING",
+          "spoken": "Last one. Stretch your arms up over your head and down again. Three times.",
+          "repSpoken": "Stretch again."
+        }
+      ],
+      "done": "That's both distances. Keiko capture complete."
+    },
+    "keiko_kamae": {
+      "hotkey": "ctrl+alt+shift+6",
+      "distanceM": 1.2,
+      "tracks": "pose",
+      "done": "Kamae done. Now ctrl alt shift seven for the everyday movements - that one matters most.",
+      "steps": [
+        {
+          "label": "kamae_near",
+          "kind": "hold",
+          "seconds": 6,
+          "prompt": "KAMAE - ABOUT 1 M - HOLD",
+          "spoken": "Kamae capture. Shinai in both hands. Stand about a metre away, head and shoulders in frame, and take chudan no kamae, tip pointed at me. Hold it steady."
+        },
+        {
+          "label": "kamae_mid",
+          "kind": "hold",
+          "seconds": 6,
+          "prompt": "KAMAE - STEP BACK TO ABOUT 1.5 M - HOLD",
+          "spoken": "Step back half a metre. Same kamae, tip at me. Hold."
+        },
+        {
+          "label": "kamae_turned_left",
+          "kind": "hold",
+          "seconds": 5,
+          "prompt": "KAMAE - BODY TURNED A LITTLE LEFT",
+          "spoken": "Turn your body a little to your left, tip still at me. Hold."
+        },
+        {
+          "label": "kamae_turned_right",
+          "kind": "hold",
+          "seconds": 5,
+          "prompt": "KAMAE - BODY TURNED A LITTLE RIGHT",
+          "spoken": "Now a little to your right, tip still at me. Hold."
+        },
+        {
+          "label": "kamae_high",
+          "kind": "hold",
+          "seconds": 5,
+          "prompt": "KAMAE - TIP A LITTLE HIGHER (AT MY EYES)",
+          "spoken": "Raise the tip a little, to my eyes. Hold."
+        },
+        {
+          "label": "kamae_low",
+          "kind": "hold",
+          "seconds": 5,
+          "prompt": "KAMAE - TIP A LITTLE LOWER (AT MY THROAT)",
+          "spoken": "Lower it a little, to my throat. Hold."
+        },
+        {
+          "label": "into_kamae",
+          "kind": "motion",
+          "reps": 4,
+          "seconds": 4,
+          "prompt": "FROM SHINAI AT YOUR SIDE, RAISE INTO KAMAE",
+          "spoken": "Shinai down at your side. When I say go, raise it into kamae and hold. Four times.",
+          "repSpoken": "Down to your side. And again."
+        },
+        {
+          "label": "kamae_again",
+          "kind": "hold",
+          "seconds": 6,
+          "prompt": "KAMAE - ONE LAST STEADY HOLD",
+          "spoken": "Last one. Kamae, as you really would against an opponent. Hold it."
+        }
+      ]
+    },
+    "keiko_confusers": {
+      "hotkey": "ctrl+alt+shift+7",
+      "distanceM": 0.8,
+      "tracks": "pose",
+      "done": "All done. Record each of these twice, on different days, then run kamae_train.py.",
+      "steps": [
+        {
+          "label": "typing",
+          "kind": "hold",
+          "seconds": 10,
+          "prompt": "AT THE DESK - TYPE NORMALLY",
+          "spoken": "Everyday movements - none of these may ever look like kamae. Sit as you normally do at the desk and type."
+        },
+        {
+          "label": "mouse",
+          "kind": "hold",
+          "seconds": 8,
+          "prompt": "AT THE DESK - USE THE MOUSE",
+          "spoken": "Now use the mouse, as you would."
+        },
+        {
+          "label": "phone_two_hands",
+          "kind": "hold",
+          "seconds": 8,
+          "prompt": "HOLD YOUR PHONE IN BOTH HANDS, IN FRONT OF YOU",
+          "spoken": "Hold your phone in both hands in front of you and scroll. This one looks a lot like kamae, so hold it steady."
+        },
+        {
+          "label": "mug_two_hands",
+          "kind": "hold",
+          "seconds": 6,
+          "prompt": "HOLD A MUG IN BOTH HANDS",
+          "spoken": "Hold a mug or a bottle in both hands in front of your chest."
+        },
+        {
+          "label": "drinking",
+          "kind": "motion",
+          "reps": 4,
+          "seconds": 4,
+          "prompt": "DRINK FROM A MUG",
+          "spoken": "Take a sip, and put it down. Four times.",
+          "repSpoken": "Again."
+        },
+        {
+          "label": "reaching",
+          "kind": "motion",
+          "reps": 4,
+          "seconds": 3,
+          "prompt": "REACH FOR SOMETHING ON THE DESK",
+          "spoken": "Reach for something on the desk and bring it back.",
+          "repSpoken": "Reach again."
+        },
+        {
+          "label": "stretching",
+          "kind": "motion",
+          "reps": 3,
+          "seconds": 4,
+          "prompt": "STRETCH YOUR ARMS",
+          "spoken": "Stretch - arms up, or out in front of you, however you do.",
+          "repSpoken": "Stretch again."
+        },
+        {
+          "label": "scratching",
+          "kind": "motion",
+          "reps": 3,
+          "seconds": 3,
+          "prompt": "SCRATCH YOUR HEAD",
+          "spoken": "Scratch your head.",
+          "repSpoken": "Again."
+        },
+        {
+          "label": "hair",
+          "kind": "motion",
+          "reps": 3,
+          "seconds": 3,
+          "prompt": "ADJUST YOUR HAIR",
+          "spoken": "Push your hair back or fix it, with both hands.",
+          "repSpoken": "Again."
+        },
+        {
+          "label": "waving",
+          "kind": "motion",
+          "reps": 3,
+          "seconds": 3,
+          "prompt": "WAVE AT ME",
+          "spoken": "Wave at me.",
+          "repSpoken": "Wave again."
+        },
+        {
+          "label": "leaning_back",
+          "kind": "hold",
+          "seconds": 6,
+          "prompt": "LEAN BACK, HANDS BEHIND YOUR HEAD",
+          "spoken": "Lean back with your hands behind your head."
+        },
+        {
+          "label": "arms_crossed",
+          "kind": "hold",
+          "seconds": 6,
+          "prompt": "ARMS CROSSED",
+          "spoken": "Cross your arms."
+        },
+        {
+          "label": "chin_on_hands",
+          "kind": "hold",
+          "seconds": 6,
+          "prompt": "ELBOWS ON THE DESK, CHIN ON YOUR HANDS",
+          "spoken": "Elbows on the desk, chin resting on your hands - both hands together, like kamae but not."
+        },
+        {
+          "label": "talking_gestures",
+          "kind": "motion",
+          "reps": 4,
+          "seconds": 5,
+          "prompt": "TALK WITH YOUR HANDS",
+          "spoken": "Tell me about your day, and talk with your hands as you do.",
+          "repSpoken": "Keep talking."
+        },
+        {
+          "label": "clapping",
+          "kind": "motion",
+          "reps": 3,
+          "seconds": 3,
+          "prompt": "CLAP",
+          "spoken": "Clap a few times.",
+          "repSpoken": "Again."
+        },
+        {
+          "label": "shinai_resting",
+          "kind": "hold",
+          "seconds": 6,
+          "prompt": "STANDING, SHINAI AT YOUR SIDE, NOT IN KAMAE",
+          "spoken": "Stand up with the shinai, but not in kamae - resting at your side, or the tip on the floor."
+        },
+        {
+          "label": "shinai_carrying",
+          "kind": "motion",
+          "reps": 3,
+          "seconds": 4,
+          "prompt": "CARRY THE SHINAI IN ONE HAND",
+          "spoken": "Pick it up in one hand and move it, as if carrying it to the dojo.",
+          "repSpoken": "Again."
+        },
+        {
+          "label": "bowing",
+          "kind": "motion",
+          "reps": 3,
+          "seconds": 4,
+          "prompt": "BOW (REI), SHINAI AT YOUR SIDE",
+          "spoken": "Bow, the way you do at the dojo.",
+          "repSpoken": "Again."
+        },
+        {
+          "label": "standing_natural",
+          "kind": "hold",
+          "seconds": 6,
+          "prompt": "STANDING NATURALLY",
+          "spoken": "And just stand naturally."
+        }
+      ]
+    },
+    "keiko_strikes": {
+      "hotkey": "ctrl+alt+shift+9",
+      "distanceM": 1.5,
+      "tracks": "pose",
+      "steps": [
+        {
+          "label": "kamae",
+          "kind": "hold",
+          "seconds": 6,
+          "prompt": "HOLD: CHUDAN KAMAE",
+          "spoken": "Stand in front of me in bogu or with your shinai, about where you'll practise, and hold chudan kamae."
+        },
+        {
+          "label": "men",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 8,
+          "pace": "natural",
+          "prompt": "ONE MEN, THEN BACK TO KAMAE",
+          "spoken": "Men strikes now. On GO, one full men - big swing, kiai if you like - then back to kamae. Eight of them."
+        },
+        {
+          "label": "kote",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 8,
+          "pace": "natural",
+          "prompt": "ONE KOTE, THEN BACK TO KAMAE",
+          "spoken": "Kote now. On GO, one kote, then back to kamae. Eight."
+        },
+        {
+          "label": "gyaku_dou",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 8,
+          "pace": "natural",
+          "prompt": "ONE GYAKU-DOU, THEN BACK TO KAMAE",
+          "spoken": "Gyaku-dou: on GO, one strike to the left do, then back to kamae. Eight."
+        },
+        {
+          "label": "men_small",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 5,
+          "pace": "natural",
+          "prompt": "ONE SMALL MEN (KOMEN)",
+          "spoken": "Small men now - a quick, short men, then back. Five."
+        },
+        {
+          "label": "kote_small",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 5,
+          "pace": "natural",
+          "prompt": "ONE SMALL KOTE",
+          "spoken": "Small, fast kote. Five."
+        },
+        {
+          "label": "gyaku_dou_fast",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 5,
+          "pace": "natural",
+          "prompt": "ONE FAST GYAKU-DOU",
+          "spoken": "Gyaku-dou as fast as you'd really hit it. Five."
+        },
+        {
+          "label": "furikaburi_stop",
+          "kind": "motion",
+          "seconds": 4,
+          "prompt": "RAISE THE SHINAI, DON'T STRIKE",
+          "spoken": "Now the tricky ones. Raise the shinai like a men - and stop. Don't strike. Then back to kamae.",
+          "reps": 5,
+          "pace": "natural"
+        },
+        {
+          "label": "seme",
+          "kind": "motion",
+          "seconds": 4,
+          "prompt": "SEME: PRESSURE, NO STRIKE",
+          "spoken": "Seme: press in with the tip, feint, move it around - but no strike.",
+          "reps": 4,
+          "pace": "natural"
+        },
+        {
+          "label": "dou_right",
+          "kind": "motion",
+          "seconds": 4,
+          "prompt": "A NORMAL DOU (RIGHT SIDE)",
+          "spoken": "A normal dou, to my right side - not gyaku. Four.",
+          "reps": 4,
+          "pace": "natural"
+        },
+        {
+          "label": "tsuki",
+          "kind": "motion",
+          "seconds": 4,
+          "prompt": "TSUKI (THRUST)",
+          "spoken": "Tsuki - a thrust to the throat. Gently! Three.",
+          "reps": 3,
+          "pace": "natural"
+        },
+        {
+          "label": "harai",
+          "kind": "motion",
+          "seconds": 4,
+          "prompt": "HARAI: KNOCK MY SHINAI ASIDE",
+          "spoken": "Harai: sweep an imaginary shinai aside, no strike after. Four.",
+          "reps": 4,
+          "pace": "natural"
+        },
+        {
+          "label": "block",
+          "kind": "motion",
+          "seconds": 4,
+          "prompt": "BLOCK A MEN (UKE)",
+          "spoken": "Now block - raise the shinai to take a men on it. Four.",
+          "reps": 4,
+          "pace": "natural"
+        },
+        {
+          "label": "hiki_waza_step",
+          "kind": "motion",
+          "seconds": 4,
+          "prompt": "STEP BACK OUT OF KAMAE",
+          "spoken": "Step back and lower the shinai, like after the bout. Three.",
+          "reps": 3,
+          "pace": "natural"
+        },
+        {
+          "label": "rei",
+          "kind": "motion",
+          "seconds": 4,
+          "prompt": "BOW (REI)",
+          "spoken": "A standing bow, shinai at your side. Three.",
+          "reps": 3,
+          "pace": "natural"
+        },
+        {
+          "label": "sonkyo",
+          "kind": "motion",
+          "seconds": 4,
+          "prompt": "SONKYO AND RISE",
+          "spoken": "Sonkyo - crouch, then rise into kamae. Three.",
+          "reps": 3,
+          "pace": "natural"
+        },
+        {
+          "label": "adjust_men",
+          "kind": "motion",
+          "seconds": 4,
+          "prompt": "ADJUST YOUR MEN OR KOTE",
+          "spoken": "Adjust your men, your kote, or wipe your face. Three.",
+          "reps": 3,
+          "pace": "natural"
+        },
+        {
+          "label": "shinai_rest",
+          "kind": "hold",
+          "seconds": 6,
+          "prompt": "SHINAI DOWN AT YOUR SIDE",
+          "spoken": "Rest - shinai down at your side, just standing."
+        },
+        {
+          "label": "stretching",
+          "kind": "motion",
+          "seconds": 4,
+          "prompt": "STRETCH YOUR ARMS",
+          "spoken": "Stretch your arms over your head. Three.",
+          "reps": 3,
+          "pace": "natural"
+        },
+        {
+          "label": "reaching",
+          "kind": "motion",
+          "seconds": 4,
+          "prompt": "REACH FOR SOMETHING",
+          "spoken": "Reach for something on the desk. Three.",
+          "reps": 3,
+          "pace": "natural"
+        },
+        {
+          "label": "waving",
+          "kind": "motion",
+          "seconds": 4,
+          "prompt": "WAVE AT ME",
+          "spoken": "Wave at me. Three.",
+          "reps": 3,
+          "pace": "natural"
+        },
+        {
+          "label": "drinking",
+          "kind": "motion",
+          "seconds": 4,
+          "prompt": "TAKE A DRINK",
+          "spoken": "Take a drink of water. Three.",
+          "reps": 3,
+          "pace": "natural"
+        },
+        {
+          "label": "talking",
+          "kind": "motion",
+          "seconds": 5,
+          "prompt": "TALK WITH YOUR HANDS",
+          "spoken": "Talk with your hands for a few seconds.",
+          "reps": 2,
+          "pace": "natural"
+        },
+        {
+          "label": "walk_past",
+          "kind": "motion",
+          "seconds": 5,
+          "prompt": "WALK ACROSS THE ROOM",
+          "spoken": "Walk across in front of me. Two.",
+          "reps": 2,
+          "pace": "natural"
+        },
+        {
+          "label": "kamae_again",
+          "kind": "hold",
+          "seconds": 6,
+          "prompt": "HOLD: KAMAE AGAIN",
+          "spoken": "Last one: kamae again, and hold it."
+        }
+      ],
+      "done": "Keiko strikes done. Record this twice, on different days - the second session is held out to test - then run strike_train.py."
+    }
+  }
+}

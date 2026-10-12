@@ -1,0 +1,35 @@
+# torch comes from the CUDA 12.8 index (sm_120 / RTX 50-series):
+#   .venv\Scripts\python -m pip install torch --index-url https://download.pytorch.org/whl/cu128
+kokoro
+soundfile
+sounddevice
+fastapi
+uvicorn[standard]
+websockets
+httpx
+mss
+pillow
+pycaw
+# his media session (Chrome, Spotify): state, title, play/pause/skip - no keystrokes
+winrt-Windows.Media.Control
+winrt-Windows.Foundation
+winrt-Windows.Foundation.Collections
+yt-dlp
+playwright
+trafilatura
+pyyaml
+pytest
+pypdf
+python-docx
+psutil
+# evals only: FEN/move legality of drawings
+chess
+# her voice: Chatterbox-Turbo, installed without its pins (it pins torch 2.6, which has no
+# sm_120 kernels):  pip install chatterbox-tts --no-deps
+#   then: pip install conformer diffusers librosa omegaconf pyloudnorm resemble-perth s3tokenizer safetensors
+# voice input (irene/stt.py, listen.py): Whisper large-v3-turbo on the GPU (float16 only),
+# Silero VAD on the CPU. Weights once, at setup - never at runtime:
+#   .venv\Scripts\python -c "from huggingface_hub import snapshot_download; snapshot_download('mobiuslabsgmbh/faster-whisper-large-v3-turbo', local_dir='models/whisper-large-v3-turbo')"
+faster-whisper
+silero-vad
+scipy

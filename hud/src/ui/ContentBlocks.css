@@ -1,0 +1,418 @@
+/* The panel's content blocks (ContentBlocks.tsx). Themed by the host: --cyan (the
+   accent), --violet, --rule, --mono, --edge-bright. The second screen sets them green. */
+
+.cb-link,
+.cb-video,
+.cb-sources li {
+  min-width: 0;
+}
+
+/* ---- content blocks ----------------------------------------------------- */
+
+.cb-h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin: 1.5em 0 0.5em;
+  font-family: var(--mono);
+  font-size: 0.66em;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  text-shadow: 0 0 18px rgba(34, 224, 255, 0.4);
+}
+
+.cb-h2:first-child {
+  margin-top: 0;
+}
+
+.cb-h2-rule {
+  flex: 0 0 26px;
+  height: 2px;
+  background: var(--cyan);
+  box-shadow: 0 0 10px var(--cyan);
+}
+
+.cb-h3 {
+  margin: 1.2em 0 0.4em;
+  font-family: var(--mono);
+  font-size: 0.56em;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(216, 246, 255, 0.75);
+}
+
+.cb-text {
+  margin: 0 0 0.85em;
+  text-wrap: pretty;
+}
+
+.cb-quote {
+  position: relative;
+  margin: 1.2em 0;
+  padding: 0.1em 0 0.1em 1em;
+  border-left: 3px solid var(--violet);
+  color: #e6d9ff;
+  font-style: italic;
+}
+
+.cb-quote p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.cb-quote cite {
+  display: block;
+  margin-top: 0.6em;
+  font-size: 0.45em;
+  font-style: normal;
+  color: rgba(216, 246, 255, 0.6);
+}
+
+.cb-figure {
+  margin: 1.4em 0;
+}
+
+.cb-figure-frame {
+  position: relative;
+  padding: 10px;
+  border: 1px solid var(--rule);
+  background: rgba(2, 7, 11, 0.8);
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.6);
+}
+
+.cb-figure-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.cb-caption {
+  margin-top: 0.5em;
+  font-size: 0.42em;
+  letter-spacing: 0.14em;
+}
+
+.cb-sources {
+  margin: 1.6em 0 0;
+  padding: 1em 0 0;
+  border-top: 1px solid var(--rule);
+}
+
+.cb-sources-label {
+  margin-bottom: 0.7em;
+  font-size: 0.42em;
+  color: var(--cyan);
+}
+
+.cb-sources ol {
+  margin: 0;
+  padding: 0 0 0 1.4em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7em;
+  font-size: 0.8em;
+}
+
+.cb-sources li::marker {
+  color: rgba(34, 224, 255, 0.6);
+  font-family: var(--mono);
+}
+
+.cb-source-title {
+  display: block;
+}
+
+.cb-source-meta {
+  display: block;
+  margin-top: 0.2em;
+  font-size: 0.55em;
+}
+
+/* links, screenshots and video cards: clickable while the cursor is over the
+   panel (the overlay captures the mouse only there); they open his Chrome */
+
+.cb-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.8em;
+  margin: 0.2em 0 0.6em;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cyan);
+  font: inherit;
+  font-size: 0.8em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cb-link-text {
+  min-width: 0;
+  text-decoration: underline;
+  text-decoration-color: rgba(34, 224, 255, 0.4);
+  text-underline-offset: 0.2em;
+}
+
+.cb-link:hover .cb-link-text {
+  text-decoration-color: var(--cyan);
+  color: #e8fdff;
+}
+
+.cb-link-note {
+  font-size: 0.55em;
+  color: rgba(216, 246, 255, 0.6);
+}
+
+.cb-shot.is-link {
+  cursor: pointer;
+}
+
+.cb-shot.is-link:hover .cb-figure-frame {
+  border-color: var(--edge-bright);
+}
+
+.cb-video {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  width: 100%;
+  margin: 0 0 0.8em;
+  padding: 8px;
+  border: 1px solid var(--rule);
+  background: rgba(2, 7, 11, 0.6);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cb-video:hover {
+  border-color: var(--edge-bright);
+}
+
+.cb-video-thumb {
+  flex: 0 1 auto;
+  width: 9em;
+  max-width: 38%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: rgba(34, 224, 255, 0.08);
+}
+
+.cb-video-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  min-width: 0;
+}
+
+.cb-video-title {
+  font-size: 0.8em;
+}
+
+.cb-video-sub {
+  font-size: 0.5em;
+}
+
+
+/* ---- the daily briefing: weather, prices, stories (tools/briefing.py) ---------- */
+
+.cb-weather {
+  margin: 0 0 1em;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  background: rgba(2, 7, 11, 0.6);
+}
+
+.cb-weather.is-link {
+  cursor: pointer;
+}
+
+.cb-weather-now {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+}
+
+.cb-weather-temp {
+  font-family: var(--mono);
+  font-size: 2.2em;
+  line-height: 1;
+  color: var(--cyan);
+}
+
+.cb-weather-sky {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  font-size: 0.9em;
+}
+
+.cb-weather-sky .readout,
+.cb-weather-days .readout {
+  font-size: 0.6em;
+  opacity: 0.8;
+}
+
+.cb-weather-days {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(5.5em, 1fr));
+  gap: 6px;
+  margin: 0.8em 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cb-weather-days li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+  padding: 6px;
+  border-top: 1px solid var(--rule);
+  font-size: 0.7em;
+}
+
+.cb-price {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.8em;
+  width: 100%;
+  margin: 0 0 0.5em;
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  background: rgba(2, 7, 11, 0.6);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cb-price:hover,
+.cb-story:hover {
+  border-color: var(--edge-bright);
+}
+
+.cb-price-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  min-width: 0;
+  font-size: 0.8em;
+}
+
+.cb-price-label .readout {
+  font-size: 0.6em;
+  opacity: 0.75;
+}
+
+.cb-spark {
+  width: 100%;
+  height: 2em;
+}
+
+.cb-spark polyline {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+
+.cb-spark circle {
+  fill: var(--cyan);
+}
+
+.cb-price.is-up .cb-spark polyline,
+.cb-price.is-up .cb-spark circle {
+  stroke: var(--up, #5effb1);
+  fill: var(--up, #5effb1);
+}
+
+.cb-price.is-up .cb-spark polyline,
+.cb-price.is-down .cb-spark polyline {
+  fill: none;
+}
+
+.cb-price.is-down .cb-spark polyline,
+.cb-price.is-down .cb-spark circle {
+  stroke: var(--down, #ff5d73);
+}
+
+.cb-price.is-down .cb-spark circle {
+  fill: var(--down, #ff5d73);
+}
+
+.cb-price-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15em;
+  font-family: var(--mono);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.cb-price-change {
+  font-size: 0.75em;
+  opacity: 0.85;
+}
+
+.cb-price.is-up .cb-price-change {
+  color: var(--up, #5effb1);
+  opacity: 1;
+}
+
+.cb-price.is-down .cb-price-change {
+  color: var(--down, #ff5d73);
+  opacity: 1;
+}
+
+.cb-story {
+  display: flex;
+  align-items: flex-start;
+  gap: 1em;
+  width: 100%;
+  margin: 0 0 0.7em;
+  padding: 8px;
+  border: 1px solid var(--rule);
+  background: rgba(2, 7, 11, 0.6);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cb-story-thumb {
+  flex: 0 0 auto;
+  width: 8.5em;
+  max-width: 36%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  background: rgba(34, 224, 255, 0.08);
+}
+
+.cb-story-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  min-width: 0;
+}
+
+.cb-story-title {
+  font-size: 0.8em;
+  text-wrap: pretty;
+}
+
+.cb-story-original {
+  font-size: 0.55em;
+  font-style: italic;
+  opacity: 0.6;
+}
+
+.cb-story-sub {
+  font-size: 0.5em;
+}

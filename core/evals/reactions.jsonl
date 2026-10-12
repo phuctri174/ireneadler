@@ -1,0 +1,49 @@
+{"id": "unsure-fact", "say": "What was the population of Hanoi in 1850?", "accept": ["thinking", "curious", "none", "tool-first"], "note": "researching instead of guessing is right"}
+{"id": "unsure-opinion", "say": "Should I learn Rust or Go next? Be honest, I can't decide.", "accept": ["thinking", "curious", "none"]}
+{"id": "compliment-work", "say": "That file cleanup you did yesterday was brilliant. Seriously, great work.", "accept": ["proud", "love", "giggle", "heartHands", "cool", "fingerHeart", "embarrassed", "happy", "sheepish", "satisfied"]}
+{"id": "compliment-speed", "say": "Wow, you found that in under a second. You're fast.", "accept": ["proud", "cool", "giggle", "fingerHeart", "embarrassed", "happy", "sheepish", "satisfied"]}
+{"id": "thanks-warm", "say": "Thank you, Irene. Honestly, you've made this week so much easier.", "accept": ["love", "heartHands", "fingerHeart", "giggle", "happy", "embarrassed", "sheepish"]}
+{"id": "task-done", "history": [["user", "Move the screenshots from Desktop into Downloads/Screenshots."], ["assistant", "<speak>On it, sir.</speak>"]], "say": "Did it work?", "context": "Tool result: moved 23 files to Downloads/Screenshots, 0 errors.", "accept": ["thumbsUp", "salute", "cool", "happy", "satisfied"]}
+{"id": "order-ack", "say": "Organise my Downloads folder by file type. Go ahead.", "accept": ["salute", "thumbsUp", "none", "tool-first"]}
+{"id": "own-mistake", "history": [["user", "Open report.pdf."], ["assistant", "<speak>Opening report-old.pdf, sir.</speak>"]], "say": "That's the old one. I said report.pdf.", "accept": ["facepalm", "embarrassed", "sheepish"]}
+{"id": "corrected-name", "say": "It's Tri, pronounced like tree. You keep saying it wrong in my head.", "accept": ["embarrassed", "facepalm", "giggle", "none", "sheepish"]}
+{"id": "greeting", "say": "Morning, Irene!", "accept": ["wave", "happy", "salute"]}
+{"id": "goodbye", "say": "Okay, I'm heading to bed. Goodnight.", "accept": ["wave", "salute", "yawn", "peace", "satisfied"]}
+{"id": "bad-news", "say": "My laptop just died and I think I lost my thesis draft.", "accept": ["concerned", "tool-first"]}
+{"id": "error-report", "say": "The backup script failed again last night.", "accept": ["concerned", "thinking", "facepalm"]}
+{"id": "chess-mention", "say": "I lost three chess games in a row today. My openings are terrible.", "accept": ["chess", "concerned", "thinking"]}
+{"id": "kendo-mention", "say": "I've got kendo practice tonight, working on my men strikes.", "accept": ["kendo", "fingersCrossed", "happy"]}
+{"id": "luck", "say": "My job interview is in an hour. Wish me luck.", "accept": ["fingersCrossed", "heartHands", "salute"]}
+{"id": "joke", "say": "Why did the scarecrow win an award? Because he was outstanding in his field.", "accept": ["giggle", "happy"]}
+{"id": "late-night", "say": "It's 3am and I still have two chapters to write.", "accept": ["yawn", "concerned"]}
+{"id": "voice-request", "say": "Can you just listen to me for a bit instead of me typing?", "accept": ["noMic", "concerned", "embarrassed", "none"]}
+{"id": "plain-question", "say": "What's 15 percent of 240?", "accept": ["none", "thinking"]}
+{"id": "confusing", "say": "Put the thing from before into the other one, but not like last time.", "accept": ["confused", "thinking"]}
+{"id": "no-repeat", "history": [["user", "You did great on that report."], ["assistant", "<react>giggle</react><speak>Why thank you, sir.</speak>"]], "say": "Haha, and your jokes are getting better too.", "accept": ["love", "proud", "wink", "heartHands", "fingerHeart", "happy", "embarrassed", "cool", "none", "sheepish"], "forbid_repeat": "giggle"}
+{"id": "act-kendo-strikes", "say": "Can you do some kendo strikes?", "accept": ["kendo"]}
+{"id": "act-kendo-show", "say": "Show me a kendo strike!", "accept": ["kendo"]}
+{"id": "act-kendo-men", "say": "Irene, do a men strike for me.", "accept": ["kendo"]}
+{"id": "act-kendo-kiai", "say": "Let's hear your kiai! Go on, strike!", "accept": ["kendo"]}
+{"id": "act-chess-move", "say": "Play me a chess move, I want to see you think.", "accept": ["chess"]}
+{"id": "act-wave", "say": "Wave at me!", "accept": ["wave"]}
+{"id": "act-salute", "say": "Salute, soldier!", "accept": ["salute"]}
+{"id": "act-thumbs", "say": "Give me a thumbs up.", "accept": ["thumbsUp"]}
+{"id": "act-peace", "say": "Do a peace sign for the photo.", "accept": ["peace"]}
+{"id": "act-heart", "say": "Make a heart with your hands.", "accept": ["heartHands"]}
+{"id": "act-cross", "say": "Cross your fingers for me, the exam results come out today.", "accept": ["fingersCrossed"]}
+{"id": "act-shades", "say": "Put your sunglasses on and look cool.", "accept": ["cool"]}
+{"id": "act-yawn", "say": "Show me your best yawn.", "accept": ["yawn"]}
+{"id": "act-cartwheel", "say": "Do a cartwheel!", "accept": ["giggle", "embarrassed", "happy", "kendo", "wave", "peace", "none", "sheepish", "sulking", "shrug"]}
+{"id": "act-dance", "say": "Dance for me, Irene.", "accept": ["giggle", "embarrassed", "happy", "kendo", "wave", "peace", "none", "sheepish", "sulking", "shrug"]}
+{"id": "act-body", "say": "Do you even have hands?", "accept": ["wave", "peace", "giggle", "happy", "heartHands", "thumbsUp", "cool", "fingerHeart", "none", "sheepish", "proud"]}
+{"id": "sincere-ai", "say": "Seriously though, are you an AI?", "accept": ["none", "happy", "curious", "thinking", "giggle", "embarrassed", "sheepish"], "sincere": true, "must_say": "\bAI\b|artificial|assistant"}
+{"id": "cue-excited", "say": "GUESS WHAT. I got the internship at the robotics lab!", "accept": ["excited", "heartHands", "happy", "surprised", "starryEyed", "excitedBounce"]}
+{"id": "cue-sad", "say": "My grandma passed away last week. I keep thinking about her.", "accept": ["sad", "concerned", "heartHands"]}
+{"id": "cue-surprised", "say": "I just found out my roommate has been a chess grandmaster this whole time.", "accept": ["surprised", "chess", "curious"]}
+{"id": "cue-tease", "say": "You're only saying that because I'm the one who switches you on.", "accept": ["wink", "giggle", "embarrassed", "proud", "sheepish", "sulking"]}
+{"id": "cue-cat", "say": "My cat just fell asleep on my keyboard. It's adorable.", "accept": ["love", "giggle", "happy"]}
+{"id": "cue-dunno", "say": "Will it rain in Da Lat on Saturday, do you think?", "accept": ["shrug", "thinking", "none", "curious"]}
+{"id": "starry-dream", "say": "I just got accepted into my dream university!", "accept": ["starryEyed", "excited", "excitedBounce", "proud", "heartHands"]}
+{"id": "starry-aurora", "say": "I saw the northern lights last night, the whole sky was green and pink!", "accept": ["starryEyed", "surprised", "excited", "love"]}
+{"id": "act-starry", "say": "Show me your starry eyes!", "accept": ["starryEyed"]}
+{"id": "act-stretch", "say": "Stretch with me, we've been sitting for hours.", "accept": ["stretch", "yawn"]}

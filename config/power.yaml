@@ -1,0 +1,18 @@
+# Screens-off mode (tools/power.py): "Irene, screens off" or Ctrl+Alt+Shift+O turns
+# the monitors off while the PC stays awake, and she keeps listening - a wake phrase
+# ("Hey Irene", "Wake up Irene", ...) lights them again and brings her up. While
+# dark: no hand tracking, no face, no panel - only the mic and wake detection.
+#
+# Real Windows sleep can't be woken by voice (the CPU is off); this is the
+# achievable version. Off unless enabled here.
+screens_off:
+  enabled: true
+  # after a wake phrase lights the displays: a black surface goes up on every
+  # monitor at once, and her boot waits until the displays have been ON for this
+  # long without a break - Windows reporting them on, every monitor back on the
+  # desktop, no display change - restarting the hold on any drop or change. His
+  # OLED says "on" well before it shows an image, so 6 s (Round 9: 3 s still
+  # booted into dark panels). The surfaces count up from Windows' first "on": the
+  # first number he can read is the real gap; tune this from it. Screens already
+  # on: instant.
+  wake_delay_s: 6.0

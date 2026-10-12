@@ -1,0 +1,37 @@
+# The second screen (the MSI, portrait): an info dashboard. core/irene/dashboard.py
+# refreshes it, tools/dashboard.py reads the sources. Every item opens in HIS Chrome
+# - clicked, picked by hand, or asked for ("Irene, open the second news item").
+# The numbers are real readings (Yahoo chart data, Open-Meteo, psutil/nvidia-smi),
+# never invented; a source that fails shows its last reading, marked stale.
+
+news:
+  # the day's biggest international stories: every outlet's last 24 h, the same
+  # story grouped across outlets, ranked by how many carry it (tools/dashboard.py)
+  every_s: 900
+  # few stories, each with its picture (og:image from the article itself)
+  items: 4
+  # order = preference: a story shown comes from the first outlet that has it
+  feeds:
+    - {name: BBC, url: "https://feeds.bbci.co.uk/news/world/rss.xml"}
+    - {name: The Guardian, url: "https://www.theguardian.com/world/rss"}
+    - {name: NYT, url: "https://rss.nytimes.com/services/xml/rss/nyt/World.xml"}
+    - {name: Al Jazeera, url: "https://www.aljazeera.com/xml/rss/all.xml"}
+    - {name: France 24, url: "https://www.france24.com/en/rss"}
+    - {name: NPR, url: "https://feeds.npr.org/1004/rss.xml"}
+    - {name: CBC, url: "https://www.cbc.ca/webfeed/rss/rss-world"}
+    - {name: Sky News, url: "https://feeds.skynews.com/feeds/rss/world.xml"}
+
+weather:
+  every_s: 1800
+
+stocks:
+  every_s: 300
+  symbols:
+    - {symbol: NVDA, name: NVIDIA}
+    - {symbol: AMD, name: AMD}
+    - {symbol: MSFT, name: Microsoft}
+    - {symbol: "^GSPC", name: "S&P 500"}
+    - {symbol: BTC-USD, name: Bitcoin}
+
+system:
+  every_s: 3

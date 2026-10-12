@@ -1,0 +1,532 @@
+// Gesture poses: what a reaction looks like now. Instead of an icon replacing the
+// face, Irene's LED hands make the gesture next to (or over) her face while the
+// face wears a matching expression. Each pose is data plus a small draw function.
+
+import type { Emotion } from "../face/faceState";
+import { EYE_BAND, EYE_H, EYE_W, EYE_Y, LEFT_EYE_X, RIGHT_EYE_X } from "./face";
+import type { FaceLayout, MouthShape } from "./face";
+import { FADE, INK, blit, capsule, clamp01, drawShape, easeOutBack, roundBox, sprite } from "./grid";
+import type { Frame } from "./grid";
+import { HANDS, drawHand, drawThumbsUp } from "./hands";
+import type { HandName, Placement } from "./hands";
+import { hop, settle, sway } from "./motion";
+import type { Motion } from "./motion";
+
+export interface Expression {
+  emotion: Emotion;
+  mouth?: MouthShape;
+  eyesClosed?: boolean;
+  gazeY?: number;
+  gazeX?: number;
+  layout?: FaceLayout;
+  shiftX?: number;
+  shiftY?: number;
+  moving?: boolean;
+}
+
+interface HandSpot extends Omit<Placement, "alpha"> {
+  /** A rig gesture, or "thumbsUp" - drawn sideways, which the rig can't do. */
+  hand: HandName | "thumbsUp";
+  /** Idle motion while held: small offsets from elapsed ms. */
+  wiggle?: (t: number) => { dx?: number; dy?: number; drot?: number };
+}
+
+interface Pose {
+  expression: Expression;
+  hands: HandSpot[];
+  props?: (frame: Frame, t: number, alpha: number) => void;
+  /** Her body moving with the gesture (led/motion.ts): a dip, a bounce, a tilt. */
+  motion?: (t: number) => Motion;
+}
+
+// ---- props -----------------------------------------------------------------------
+
+const HEART = sprite([
+  ".##...##.",
+  "####.####",
+  "#########",
+  "#########",
+  ".#######.",
+  "..#####..",
+  "...###...",
+  "....#....",
+]);
+
+// newsDesk: a sheaf of notes seen edge-on - a few sheets, slightly out of true,
+// their printed lines faint
+const PAPERS = sprite([
+  "########################",
+  "#++-+++-++++-++++-+++--#",
+  "#----------------------#",
+  "########################",
+  "#+++-++++-++-+++++-++++#",
+  "########################",
+]);
+
+/** newsDesk: how far the notes are lifted (LEDs) - two taps on the desk, then still. */
+function deskTap(t: number): number {
+  if (t >= 900) return 0;
+  return 4 * Math.sin((Math.PI * (t % 450)) / 450);
+}
+
+const HEART_OUTLINE = sprite([
+  ".##...##.",
+  "#++#.#++#",
+  "#+++#+++#",
+  "#+++++++#",
+  ".#+++++#.",
+  "..#+++#..",
+  "...#+#...",
+  "....#....",
+]);
+
+const SMALL_HEART = sprite([".#.#.", "#####", ".###.", "..#.."]);
+
+// cheek blush: a soft oval of pink under each eye
+const BLUSH = sprite([".-+++-.", "-+++++-", ".-+++-."]);
+
+// microphone at 9x13, the slash drawn separately so it can be its own colour
+const MIC = sprite([
+  "...###...",
+  "..#---#..",
+  "..#---#..",
+  "..#---#..",
+  "..#---#..",
+  "#.#---#.#",
+  "#..###..#",
+  ".#.....#.",
+  "..#####..",
+  "....#....",
+  "....#....",
+  "..#####..",
+]);
+
+function heartsRising(frame: Frame, t: number, alpha: number, x: number, y: number): void {
+  for (let k = 0; k < 3; k += 1) {
+    const phase = ((t + k * 420) % 1260) / 1260;
+    const a = alpha * (1 - phase) * clamp01(phase * 5);
+    blit(frame, SMALL_HEART, x + Math.sin(phase * 6 + k) * 3, y - phase * 18, {
+      ink: INK.pink,
+      alpha: a,
+      cover: false,
+    });
+  }
+}
+
+function sunglasses(frame: Frame, t: number, alpha: number): void {
+  const lensY = EYE_Y + EYE_H / 2 - 1;
+  const lenses = [
+    { x: LEFT_EYE_X + EYE_W / 2, y: lensY },
+    { x: RIGHT_EYE_X + EYE_W / 2, y: lensY },
+  ];
+  const bounds = { x0: LEFT_EYE_X - 4, y0: EYE_BAND.y0, x1: RIGHT_EYE_X + EYE_W + 4, y1: EYE_BAND.y1 };
+  for (const lens of lenses) {
+    // dark lens hides the eye; the rim is the frame
+    drawShape(frame, (x, y) => roundBox(x, y, lens, 13, 10, 5), bounds, INK.white, alpha, FADE.prop, 0.75, 0.02);
+  }
+  drawShape(
+    frame,
+    (x, y) => capsule(x, y, { x: lenses[0].x + 12, y: lensY - 5 }, { x: lenses[1].x - 12, y: lensY - 5 }, 0.8),
+    bounds,
+    INK.white,
+    alpha,
+    FADE.prop,
+    0.75,
+    0.75,
+  );
+  // a glint sweeps across both lenses now and then
+  const sweep = (t % 1500) / 1500;
+  if (sweep < 0.45) {
+    const gx = LEFT_EYE_X - 6 + (sweep / 0.45) * (RIGHT_EYE_X + EYE_W - LEFT_EYE_X + 12);
+    for (let k = 0; k < 7; k += 1) {
+      const cx = Math.round(gx + k * 0.6);
+      const cy = lensY - 4 + k;
+      for (const lens of lenses) {
+        if (roundBox(cx + 0.5, cy + 0.5, lens, 12, 9, 5) < 0) frame.cover(cx, cy, 0.9 * alpha, INK.white, FADE.fast);
+      }
+    }
+  }
+}
+
+// ---- poses -----------------------------------------------------------------------
+
+const RIGHT = 106;
+const LEFT = 22;
+const shake = (hz: number, amp: number) => (t: number) => ({ drot: Math.sin((t / 1000) * hz * Math.PI * 2) * amp });
+const bob = (hz: number, amp: number) => (t: number) => ({ dy: Math.sin((t / 1000) * hz * Math.PI * 2) * amp });
+
+// A new gesture is one entry here plus one in config/cues.json; face/reactions.ts
+// takes its list from this table.
+export const POSES = {
+  heartHands: {
+    expression: { emotion: "happy", mouth: "smile" },
+    hands: [
+      // fingertips meet over the heart, thumbs meet under it
+      { hand: "flat", x: 44, y: 64, rot: 52, scale: 1.1, mirror: true },
+      { hand: "flat", x: 84, y: 64, rot: -52, scale: 1.1 },
+    ],
+    props: (frame, t, alpha) => {
+      const beat = Math.floor(t / 360) % 2 === 0;
+      blit(frame, beat ? HEART : HEART_OUTLINE, 55, 54, { ink: INK.pink, alpha, scale: 2 });
+    },
+    motion: (t) => ({ dx: sway(0.8, 1.5)(t) }),
+  },
+  peace: {
+    expression: { emotion: "happy", mouth: "grin" },
+    hands: [{ hand: "peace", x: RIGHT, y: 32, rot: 10, scale: 1.25, wiggle: shake(2.2, 5) }],
+  },
+  salute: {
+    expression: { emotion: "neutral", mouth: "flat" },
+    hands: [{ hand: "flat", x: RIGHT - 2, y: 11, rot: -74, scale: 1.2 }],
+  },
+  thumbsUp: {
+    expression: { emotion: "happy", mouth: "grin" },
+    hands: [{ hand: "thumbsUp", x: RIGHT, y: 40, scale: 1.3, wiggle: bob(1.6, 1.2) }],
+    motion: (t) => ({ dy: t < 600 ? Math.sin((t / 600) * Math.PI) * 1.5 : 0 }),
+  },
+  giggle: {
+    expression: { emotion: "happy", mouth: "hidden" },
+    hands: [{ hand: "flat", x: 66, y: 55, rot: -6, scale: 1.2, wiggle: bob(5.5, 0.9) }],
+    motion: (t) => ({ dy: hop(5.5, 1.5)(t), moving: true }),
+  },
+  fingersCrossed: {
+    expression: { emotion: "curious", mouth: "smile" },
+    hands: [{ hand: "crossed", x: RIGHT, y: 34, rot: 6, scale: 1.3, wiggle: shake(1.2, 3) }],
+    motion: (t) => ({ dy: 1, dx: sway(1.2, 0.8)(t) }),
+  },
+  facepalm: {
+    expression: { emotion: "concerned", mouth: "wavy" },
+    hands: [{ hand: "flat", x: 44, y: 16, rot: 16, scale: 1.35 }],
+    motion: (t) => ({ dy: 2 * settle(400)(t), dx: -1 }),
+  },
+  cool: {
+    expression: { emotion: "happy", mouth: "smirk" },
+    hands: [],
+    props: sunglasses,
+    motion: (t) => ({ dy: -1 * settle(300)(t), tilt: -1 * settle(300)(t) }),
+  },
+  fingerHeart: {
+    expression: { emotion: "happy", mouth: "smile" },
+    hands: [{ hand: "fingerHeart", x: RIGHT - 2, y: 42, rot: -8, scale: 1.25 }],
+    props: (frame, t, alpha) => heartsRising(frame, t, alpha, 96, 22),
+  },
+  // both arms up over her head, eyes shut: a good long stretch (idle life)
+  stretch: {
+    expression: { emotion: "happy", mouth: "o", eyesClosed: true, shiftY: -1 },
+    hands: [
+      { hand: "open", x: 20, y: 12, rot: -24, scale: 1.15, mirror: true, wiggle: bob(0.9, 1.4) },
+      { hand: "open", x: 108, y: 12, rot: 24, scale: 1.15, wiggle: bob(0.9, 1.4) },
+    ],
+  },
+  yawn: {
+    expression: { emotion: "neutral", mouth: "o", eyesClosed: true },
+    hands: [{ hand: "flat", x: 84, y: 54, rot: -12, scale: 1.1, wiggle: bob(0.8, 0.8) }],
+    motion: (t) => ({ dy: -2 * Math.sin(Math.min(1, t / 1500) * Math.PI) }),
+  },
+  thinking: {
+    expression: { emotion: "curious", mouth: "flat", gazeY: -3 },
+    hands: [{ hand: "point", x: 90, y: 64, rot: -38, scale: 1.1 }],
+    motion: (t) => ({ tilt: settle(500)(t), dx: 1 }),
+  },
+  wave: {
+    expression: { emotion: "happy", mouth: "smile" },
+    hands: [{ hand: "open", x: RIGHT, y: 30, scale: 1.25, wiggle: shake(2.4, 18) }],
+    motion: (t) => ({ dx: sway(1.2, 1.5)(t) }),
+  },
+  embarrassed: {
+    expression: { emotion: "happy", mouth: "wavy" },
+    // scratching the back of her head
+    hands: [{ hand: "flat", x: RIGHT - 6, y: 8, rot: -52, scale: 1.15, wiggle: bob(4.5, 1.2) }],
+    props: (frame, _t, alpha) => {
+      for (const x of [LEFT_EYE_X + 1, RIGHT_EYE_X + 7]) {
+        blit(frame, BLUSH, x, EYE_Y + EYE_H + 1, { ink: INK.pink, alpha, scale: 2, cover: false });
+      }
+    },
+    motion: (t) => ({ dy: 1.5 * settle(300)(t), tilt: -1 }),
+  },
+  noMic: {
+    expression: { emotion: "confused", mouth: "wavy" },
+    hands: [{ hand: "cupped", x: RIGHT + 2, y: 26, rot: -18, scale: 1.2, mirror: true }],
+    props: (frame, _t, alpha) => {
+      blit(frame, MIC, LEFT - 9, 18, { alpha, scale: 2 });
+      drawShape(
+        frame,
+        (x, y) => capsule(x, y, { x: LEFT + 11, y: 17 }, { x: LEFT - 11, y: 43 }, 1.1),
+        { x0: LEFT - 14, y0: 14, x1: LEFT + 14, y1: 46 },
+        INK.red,
+        alpha,
+        FADE.prop,
+        1,
+        1,
+      );
+    },
+  },
+  shrug: {
+    expression: { emotion: "curious", mouth: "wavy" },
+    // both hands out to the sides, palms up, lifting with the shoulders
+    hands: [
+      { hand: "open", x: 17, y: 50, rot: -72, scale: 1.1, mirror: true, wiggle: bob(1.1, 1.6) },
+      { hand: "open", x: 111, y: 50, rot: 72, scale: 1.1, wiggle: bob(1.1, 1.6) },
+    ],
+    motion: (t) => ({ dy: 2 * Math.abs(Math.sin((t / 1000) * 1.1 * Math.PI)), tilt: 1 }),
+  },
+  bow: {
+    // head dipped, eyes down, hands together low in front: the dojo bow, and the
+    // one she takes after a card trick
+    expression: { emotion: "happy", mouth: "smile", eyesClosed: true, shiftY: 7 },
+    hands: [
+      { hand: "flat", x: 52, y: 66, rot: 84, scale: 0.95, mirror: true },
+      { hand: "flat", x: 76, y: 66, rot: -84, scale: 0.95 },
+    ],
+    props: (frame, t, alpha) => {
+      // her shoulders rolling forward as she goes down, and coming back up
+      const dip = Math.sin(clamp01(t / 1500) * Math.PI) * 3;
+      for (const side of [-1, 1]) {
+        const a = { x: 64 + side * 4, y: 56 + dip };
+        const b = { x: 64 + side * 20, y: 60 + dip + side * 0 };
+        drawShape(frame, (x, y) => capsule(x, y, a, b, 2), { x0: 40, y0: 50, x1: 88, y1: 68 }, INK.accent, alpha, FADE.prop, 0.8, 0.25);
+      }
+    },
+  },
+  // pure glee: bouncing on her toes, both fists pumping with each hop
+  excitedBounce: {
+    expression: { emotion: "excited", mouth: "grin" },
+    hands: [
+      { hand: "fist", x: LEFT + 2, y: 44, rot: -10, scale: 1.15, mirror: true, wiggle: (t) => ({ dy: hop(2.6, 7)(t) }) },
+      { hand: "fist", x: RIGHT - 2, y: 44, rot: 10, scale: 1.15, wiggle: (t) => ({ dy: hop(2.6, 7)(t + 90) }) },
+    ],
+    motion: (t) => ({ dy: hop(2.6, 5)(t), moving: true }),
+  },
+  // "I'm listening": a hand cupped behind her right ear, eyes turned toward it,
+  // head leaning in - can you hear me? say that again? go on...
+  listenClose: {
+    expression: { emotion: "curious", mouth: "flat", gazeX: 3, gazeY: -1 },
+    hands: [{ hand: "cupped", x: RIGHT + 15, y: 28, rot: -12, scale: 1.1, mirror: true, wiggle: bob(0.8, 0.8) }],
+    motion: (t) => ({ tilt: -2.5 * settle(400)(t), dx: 4 * settle(400)(t) }),
+  },
+  // "aha - found it!": one finger shot up beside her face, eyes wide and bright, a
+  // little hop - the moment research turns up the answer
+  eureka: {
+    expression: { emotion: "excited", mouth: "o", gazeY: -2 },
+    hands: [{ hand: "point", x: RIGHT + 4, y: 16, rot: 8, scale: 1.15, wiggle: bob(2.2, 0.8) }],
+    motion: (t) => ({ dy: -2 * Math.sin(Math.min(1, t / 450) * Math.PI) }),
+  },
+  // "look at this": an open palm swept out toward the board, eyes following it -
+  // as an illustrated answer goes up
+  presentBoard: {
+    expression: { emotion: "happy", mouth: "smile", gazeX: -3, gazeY: 1 },
+    hands: [{ hand: "open", x: LEFT + 2, y: 50, rot: -30, scale: 1.1, wiggle: bob(0.7, 0.8) }],
+    motion: (t) => ({ tilt: 1.5 * settle(450)(t), dx: -4 * settle(450)(t) }),
+  },
+  // "let me draw it for you": a fingertip tracing little loops in the air toward
+  // the board, eyes following her own hand - she is composing the picture
+  airDraw: {
+    expression: { emotion: "curious", mouth: "smile", gazeX: -2, gazeY: 2 },
+    hands: [{ hand: "point", x: LEFT + 6, y: 46, rot: -20, scale: 1.1, wiggle: (t) => ({ dx: 3 * Math.cos(t / 190), dy: 2 * Math.sin(t / 190), drot: 4 * Math.sin(t / 380) }) }],
+    motion: (t) => ({ tilt: 1.2 * settle(400)(t), dx: -2 * settle(400)(t) }),
+  },
+  // "showtime!": both open hands beside her cheeks, shimmering fast - the big
+  // entrance, the curtain going up
+  jazzHands: {
+    expression: { emotion: "excited", mouth: "smile" },
+    hands: [
+      { hand: "open", x: 30, y: 44, rot: -20, scale: 1.1, mirror: true, wiggle: (t) => ({ dx: 0, dy: 0, drot: 9 * Math.sin(t / 45) }) },
+      { hand: "open", x: 98, y: 44, rot: 20, scale: 1.1, wiggle: (t) => ({ dx: 0, dy: 0, drot: -9 * Math.sin(t / 45) }) },
+    ],
+    motion: (t) => ({ dy: -1.5 * settle(250)(t) }),
+  },
+  // "systems online": a fingertip tapped to her temple twice, a bright little
+  // smile - booted, sharp, ready
+  templeTap: {
+    expression: { emotion: "happy", mouth: "smile", gazeX: 2, gazeY: -1 },
+    hands: [{ hand: "point", x: RIGHT - 10, y: 20, rot: -150, scale: 1.05, wiggle: (t) => ({ dx: -2.5 * Math.max(0, Math.sin(t / 120)), dy: 0 }) }],
+    motion: (t) => ({ tilt: -2 * settle(350)(t) }),
+  },
+  // "phew": the back of a flat hand wiped across her brow, eyes closing in relief -
+  // that was close, it worked after all
+  phew: {
+    expression: { emotion: "happy", mouth: "smile", gazeY: -2 },
+    hands: [{ hand: "flat", x: 54, y: 18, rot: -100, scale: 1.05, wiggle: (t) => ({ dx: 18 * Math.min(1, (t % 1400) / 700), dy: 0 }) }],
+    motion: (t) => ({ dy: 1.5 * settle(400)(t) }),
+  },
+  // "uh-uh": a raised finger wagging side to side, a knowing smile - teasing him
+  // off a bad idea, "not so fast"
+  fingerWag: {
+    expression: { emotion: "wink", mouth: "smile", gazeX: 1 },
+    hands: [{ hand: "point", x: RIGHT - 4, y: 30, rot: 0, scale: 1.1, wiggle: (t) => ({ dx: 0, dy: 0, drot: 16 * Math.sin(t / 110) }) }],
+    motion: (t) => ({ tilt: -1.5 * settle(300)(t) }),
+  },
+  // "lights out": palms pressed together under a tilted cheek, eyes soft - a
+  // pillow of hands, as the screens go dark and she settles in to listen
+  pillowHands: {
+    expression: { emotion: "happy", mouth: "smile", gazeY: 1 },
+    hands: [
+      { hand: "flat", x: 84, y: 40, rot: -60, scale: 1.05, wiggle: bob(0.4, 0.5) },
+      { hand: "flat", x: 88, y: 44, rot: -60, scale: 1.05, mirror: true, wiggle: bob(0.4, 0.5) },
+    ],
+    motion: (t) => ({ tilt: 4 * settle(600)(t), dx: 3 * settle(600)(t) }),
+  },
+  // "next!": a flat hand sweeping across in front of her, eyes riding along -
+  // moving on, flicking to the next thing on the panel
+  swipe: {
+    expression: { emotion: "happy", mouth: "smile", gazeX: -2 },
+    hands: [{ hand: "flat", x: 92, y: 46, rot: -80, scale: 1.1, wiggle: (t) => ({ dx: -22 * ((t / 900) % 1), dy: 0 }) }],
+    motion: (t) => ({ dx: -2 * settle(400)(t) }),
+  },
+  // "let me look": a flat hand shading her brow, eyes narrowed toward the
+  // distance - scanning far off for something, peering at the panel
+  lookout: {
+    expression: { emotion: "curious", mouth: "flat", gazeX: -3, gazeY: -1 },
+    hands: [{ hand: "flat", x: 70, y: 18, rot: -8, scale: 1.1, wiggle: bob(0.5, 0.6) }],
+    motion: (t) => ({ dx: -2 * settle(500)(t), tilt: -1 * settle(500)(t) }),
+  },
+  // "you got me!": both open hands raised high beside her head, palms out, a little
+  // wobble - caught out, giving in, a playful surrender
+  handsUp: {
+    expression: { emotion: "sheepish", mouth: "smile", gazeY: -1 },
+    hands: [
+      { hand: "open", x: 22, y: 26, rot: -8, scale: 1.1, mirror: true, wiggle: bob(1.6, 1.2) },
+      { hand: "open", x: 106, y: 26, rot: 8, scale: 1.1, wiggle: bob(1.6, 1.2) },
+    ],
+    motion: (t) => ({ dy: -1.5 * settle(250)(t) }),
+  },
+  // "click": a fingertip pressing forward into the air and back, eyes on it -
+  // pressing a button that isn't there, the way his hand clicks
+  airTap: {
+    expression: { emotion: "curious", mouth: "smile", gazeX: 2, gazeY: 1 },
+    hands: [{ hand: "point", x: RIGHT - 6, y: 44, rot: 18, scale: 1.1, wiggle: (t) => ({ dy: 2.5 * Math.max(0, Math.sin(t / 170)), drot: 0 }) }],
+    motion: (t) => ({ dx: 2 * settle(300)(t) }),
+  },
+  // "ta-da!": both hands flung open and up beside her face, a little pop of the
+  // head - here it is, it's on your panel
+  taDa: {
+    expression: { emotion: "excited", mouth: "smile", gazeY: -1 },
+    hands: [
+      { hand: "open", x: 20, y: 36, rot: -38, scale: 1.15, mirror: true, wiggle: (t) => ({ dy: -2 * Math.max(0, Math.sin(t / 140)), drot: -6 * Math.max(0, Math.sin(t / 140)) }) },
+      { hand: "open", x: 108, y: 36, rot: 38, scale: 1.15, wiggle: (t) => ({ dy: -2 * Math.max(0, Math.sin(t / 140)), drot: 6 * Math.max(0, Math.sin(t / 140)) }) },
+    ],
+    motion: (t) => ({ dy: -2 * settle(260)(t) }),
+  },
+  // "over there": a finger jabbing out past the edge of her screen toward his
+  // second monitor, eyes going with it - the dashboard, the story she opened
+  pointAside: {
+    expression: { emotion: "happy", mouth: "smile", gazeX: -4, gazeY: 0 },
+    hands: [{ hand: "point", x: LEFT - 4, y: 40, rot: -62, scale: 1.15, wiggle: (t) => ({ dx: -2.5 * Math.max(0, Math.sin(t / 160)), dy: 0 }) }],
+    motion: (t) => ({ tilt: 1.8 * settle(380)(t), dx: -5 * settle(380)(t) }),
+  },
+  // "Irene Adler.": a hand laid on her chest, chin up, one slow pleased nod - saying
+  // her own name like it explains everything (it's really everything, no exaggeration)
+  selfIntro: {
+    expression: { emotion: "proud", mouth: "smile", gazeY: -1, gazeX: 1 },
+    hands: [{ hand: "flat", x: 70, y: 56, rot: -24, scale: 1.1, wiggle: bob(0.4, 0.5) }],
+    motion: (t) => ({ dy: -1.5 * settle(320)(t) + 1.2 * Math.max(0, Math.sin(t / 260)) * Math.exp(-t / 900), tilt: -1.2 * settle(400)(t) }),
+  },
+  // "let me blow that up for you": two fingertips together in front of her, then
+  // drawn apart - the zoom-in, done in the air - and back for another go
+  zoomIn: {
+    expression: { emotion: "curious", mouth: "o", gazeY: 1 },
+    hands: [
+      { hand: "point", x: 52, y: 48, rot: -70, scale: 1.05, mirror: true, wiggle: (t) => ({ dx: -9 * (0.5 - 0.5 * Math.cos(t / 280)), dy: 0 }) },
+      { hand: "point", x: 76, y: 48, rot: 70, scale: 1.05, wiggle: (t) => ({ dx: 9 * (0.5 - 0.5 * Math.cos(t / 280)), dy: 0 }) },
+    ],
+    motion: (t) => ({ dy: -1 * settle(300)(t) }),
+  },
+  // "all clean!": two flat hands brushed past each other in front of her, twice,
+  // a pleased little nod - a clean slate (her research cleared, a job finished)
+  dustOff: {
+    expression: { emotion: "happy", mouth: "smile", gazeY: 1 },
+    hands: [
+      { hand: "flat", x: 54, y: 52, rot: -12, scale: 1.05, mirror: true, wiggle: (t) => ({ dx: 6 * Math.sin(t / 110), dy: 0 }) },
+      { hand: "flat", x: 74, y: 54, rot: 12, scale: 1.05, wiggle: (t) => ({ dx: -6 * Math.sin(t / 110), dy: 0 }) },
+    ],
+    motion: (t) => ({ dy: 1.2 * Math.max(0, Math.sin(t / 240)) * Math.exp(-t / 1200) }),
+  },
+  // "here's the news": a newsreader squaring her notes - a sheaf of papers held
+  // upright between two flat hands, tapped twice on the desk, then a brisk look up
+  // at him; the morning briefing about to begin
+  newsDesk: {
+    expression: { emotion: "focused", mouth: "smile", gazeY: -1 },
+    hands: [
+      { hand: "flat", x: 46, y: 57, rot: -84, scale: 1.05, mirror: true, wiggle: (t) => ({ dy: -deskTap(t) }) },
+      { hand: "flat", x: 82, y: 57, rot: 84, scale: 1.05, wiggle: (t) => ({ dy: -deskTap(t) }) },
+    ],
+    props: (frame, t, alpha) => {
+      blit(frame, PAPERS, 52, 54 - deskTap(t), { alpha, ink: INK.white, cover: true });
+    },
+    motion: (t) => ({ dy: 0.8 * deskTap(t) / 4 - 1 * settle(900)(t), tilt: -0.8 * settle(900)(t) }),
+  },
+  // "lights out": a fingertip flicking an imaginary switch down beside her face,
+  // eyes going sleepy - his screens going dark on her word
+  lightsOut: {
+    expression: { emotion: "happy", mouth: "smile", gazeY: 2 },
+    hands: [{ hand: "point", x: RIGHT - 8, y: 30, rot: 160, scale: 1.05, wiggle: (t) => ({ dy: 7 * settle(260)(t), drot: 0 }) }],
+    motion: (t) => ({ dy: 1.5 * settle(600)(t), tilt: -1 * settle(700)(t) }),
+  },
+  // "the full picture": a director's frame - two fingertips at opposite corners, and
+  // the frame between them opening out from her face to the edges of her screen
+  frameUp: {
+    expression: { emotion: "excited", mouth: "smile", gazeY: -1 },
+    hands: [
+      { hand: "point", x: LEFT - 2, y: 14, rot: -45, scale: 1.0, mirror: true, wiggle: (t) => ({ dx: -6 * settle(420)(t), dy: -4 * settle(420)(t) }) },
+      { hand: "point", x: RIGHT + 2, y: 58, rot: 135, scale: 1.0, wiggle: (t) => ({ dx: 6 * settle(420)(t), dy: 4 * settle(420)(t) }) },
+    ],
+    props: (frame, t, alpha) => {
+      const open = settle(420)(t);
+      const hw = 22 + 28 * open;
+      const hh = 12 + 14 * open;
+      drawShape(
+        frame,
+        (x, y) => roundBox(x, y, { x: 64, y: 36 }, hw, hh, 1),
+        { x0: 64 - hw - 2, y0: 36 - hh - 2, x1: 64 + hw + 2, y1: 36 + hh + 2 },
+        INK.cyan,
+        alpha,
+        FADE.prop,
+        0.8,
+        null,
+      );
+    },
+    motion: (t) => ({ dy: -1.5 * settle(420)(t) }),
+  },
+  // "hmm?": head on one side, eyes up and away, a finger resting on her cheek
+  // the slow, disbelieving head-shake of a friend hearing the story: "mm-mm, no.
+  // Unbelievable." Eyes shut, mouth pressed flat, two long shakes, then still
+  headShake: {
+    expression: { emotion: "neutral", mouth: "flat", eyesClosed: true },
+    hands: [],
+    motion: (t) => ({ dx: t < 2400 ? Math.sin((t / 1000) * 0.85 * Math.PI * 2) * 5 * (1 - t / 2400) : 0, dy: 1 * settle(400)(t), tilt: t < 2400 ? Math.sin((t / 1000) * 0.85 * Math.PI * 2) * 0.8 : 0 }),
+  },
+  headTilt: {
+    expression: { emotion: "curious", mouth: "flat", gazeY: -2, gazeX: 2 },
+    hands: [{ hand: "point", x: 96, y: 50, rot: -24, scale: 1.05, wiggle: bob(0.6, 0.6) }],
+    motion: (t) => ({ tilt: 2.5 * settle(450)(t), dx: 3 * settle(450)(t) }),
+  },
+} satisfies Record<string, Pose>;
+
+/** How her body moves with a gesture at `elapsed` ms (none for most). */
+export function poseMotion(name: PoseName, elapsed: number): Motion {
+  const pose: Pose = POSES[name];
+  return pose.motion?.(Math.max(0, elapsed)) ?? {};
+}
+
+export type PoseName = keyof typeof POSES;
+
+/** Hands slide up into place as the pose fades in. */
+const ENTER_MS = 360;
+
+export function drawPose(frame: Frame, name: PoseName, elapsed: number, alpha: number): void {
+  const pose: Pose = POSES[name];
+  const enter = easeOutBack(elapsed / ENTER_MS);
+  for (const spot of pose.hands) {
+    const w = spot.wiggle?.(elapsed) ?? {};
+    const place = {
+      ...spot,
+      x: spot.x + (w.dx ?? 0),
+      y: spot.y + (w.dy ?? 0) + (1 - enter) * 26,
+      rot: (spot.rot ?? 0) + (w.drot ?? 0),
+      alpha,
+    };
+    if (spot.hand === "thumbsUp") drawThumbsUp(frame, place);
+    else drawHand(frame, HANDS[spot.hand], place);
+  }
+  pose.props?.(frame, elapsed, alpha);
+}

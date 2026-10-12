@@ -1,0 +1,11 @@
+{
+  "_about": "The six lines every voice candidate renders (core/scripts/expressive/). 'text' is the plain line; 'tagged' the same with the nonverbal tags a model that supports them gets ([laugh] style is rewritten per model); 'cue' is the feeling, which Kokoro's quick wins map to speed and a sound effect (config/cues.json); 'exaggeration' is Chatterbox's emotion dial for it.",
+  "lines": [
+    { "id": "1_question", "cue": "curious", "exaggeration": 0.6, "text": "Wait, you finished the whole thesis already? How did you pull that off?", "tagged": "Wait, you finished the whole thesis already? How did you pull that off?" },
+    { "id": "2_excitement", "cue": "excited", "exaggeration": 0.85, "text": "Ooh, you got the internship! That's amazing, I knew you would!", "tagged": "Ooh, you got the internship! That's amazing, I knew you would!" },
+    { "id": "3_joke", "cue": "giggle", "exaggeration": 0.7, "text": "Why did the scarecrow win an award? Because he was outstanding in his field! Ha!", "tagged": "Why did the scarecrow win an award? Because he was outstanding in his field! [laugh]" },
+    { "id": "4_sympathy", "cue": "sad", "exaggeration": 0.45, "text": "Oh... I'm so sorry about your grandma. Take all the time you need.", "tagged": "[sigh] Oh... I'm so sorry about your grandma. Take all the time you need." },
+    { "id": "5_surprise", "cue": "surprised", "exaggeration": 0.8, "text": "Wait, what? Your roommate is a chess grandmaster?", "tagged": "[gasp] Wait, what? Your roommate is a chess grandmaster?" },
+    { "id": "6_calm", "cue": null, "exaggeration": 0.35, "text": "A stack is last in, first out. You push onto the top, and you pop from the top.", "tagged": "A stack is last in, first out. You push onto the top, and you pop from the top." }
+  ]
+}

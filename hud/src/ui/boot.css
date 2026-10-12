@@ -1,0 +1,503 @@
+/* Her boot-up, shared by her interface and the panel (ui/boot.tsx has the
+   timeline). Every delay is from the show itself plus the window's --lag (0 for
+   her, PANEL_LAG_MS for the panel), so the two move as one system. Elements fly
+   past their place and snap back; nothing just fades. */
+
+/* ---- keyframes -------------------------------------------------------------------- */
+
+/* one deliberate flicker as the power comes on */
+@keyframes boot-flicker {
+  0% { opacity: 0; }
+  10% { opacity: 0.8; }
+  16% { opacity: 0.05; }
+  24% { opacity: 0.9; }
+  30% { opacity: 0.35; }
+  45%, 100% { opacity: 1; }
+}
+
+/* the frame opens from its centre line, overshoots a hair, settles */
+@keyframes boot-open {
+  0% { clip-path: inset(49.6% 0 49.6% 0); transform: scaleY(1); }
+  70% { clip-path: inset(0 0 0 0); transform: scaleY(1.012); }
+  100% { clip-path: inset(0 0 0 0); transform: scaleY(1); }
+}
+
+/* a corner bracket flies in from far out, overshoots inward, snaps to its corner */
+@keyframes boot-bracket {
+  0% { opacity: 0; transform: scale(3.4); }
+  55% { opacity: 1; transform: scale(0.82); }
+  78% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+/* far layer: the grid rises out of depth, glows, gives way */
+@keyframes boot-depth {
+  0% { opacity: 0; transform: translateY(40px) scale(1.08); }
+  30% { opacity: 0.6; transform: translateY(-4px) scale(1); }
+  45% { transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(0) scale(1); }
+}
+
+/* mid layer: a card rises past its place and snaps back */
+@keyframes boot-pop {
+  0% { opacity: 0; transform: translateY(34px) scale(0.93); }
+  58% { opacity: 1; transform: translateY(-7px) scale(1.025); }
+  80% { transform: translateY(2px) scale(0.997); }
+  100% { opacity: 1; transform: none; }
+}
+
+/* foreground: flies in from in front of the glass, overshoots, locks */
+@keyframes boot-fly {
+  0% { opacity: 0; transform: translateY(-34px) scale(1.22); filter: blur(5px); }
+  55% { opacity: 1; transform: translateY(5px) scale(0.96); filter: blur(0); }
+  78% { transform: translateY(-2px) scale(1.012); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+
+@keyframes boot-type {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+/* the cursor at the end of a typing label: on while it types, gone after */
+@keyframes boot-caret {
+  0%, 100% { box-shadow: 3px 0 0 -0.5px transparent; }
+  1%, 20%, 40%, 60%, 80% { box-shadow: 3px 0 0 -0.5px currentColor; }
+  10%, 30%, 50%, 70%, 90% { box-shadow: 3px 0 0 -0.5px transparent; }
+}
+
+/* the one line that stutters and recovers */
+@keyframes boot-stutter {
+  0%, 100% { transform: none; opacity: 1; }
+  12% { transform: translateX(14px); opacity: 0.4; }
+  24% { transform: translateX(-9px); opacity: 1; }
+  36% { transform: translateX(5px) skewX(-6deg); opacity: 0.6; }
+  48% { transform: translateX(-2px); opacity: 1; }
+  60% { transform: none; }
+}
+
+@keyframes boot-beam {
+  from { left: 100%; opacity: 1; }
+  90% { opacity: 1; }
+  to { left: -180px; opacity: 0; }
+}
+
+@keyframes boot-glitch {
+  0%, 100% { opacity: 0; transform: translateX(0); }
+  10% { opacity: 1; transform: translateX(-30px); }
+  25% { opacity: 0.2; transform: translateX(40px); }
+  40% { opacity: 1; transform: translateX(-12px); top: 41%; }
+  55% { opacity: 0; }
+}
+
+@keyframes boot-flare {
+  0% { opacity: 0; transform: scale(0.94); }
+  18% { opacity: 1; transform: scale(1.01); }
+  100% { opacity: 0; transform: scale(1.05); }
+}
+
+@keyframes boot-rise {
+  from { opacity: 0; transform: translateY(22px) scale(0.98); }
+}
+
+/* ---- the layers over each window -------------------------------------------------- */
+
+.boot-layers {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.boot-grid {
+  position: absolute;
+  inset: -40px;
+  background:
+    linear-gradient(rgba(34, 224, 255, 0.24) 1px, transparent 1px) 0 0 / 100% 48px,
+    linear-gradient(90deg, rgba(34, 224, 255, 0.24) 1px, transparent 1px) 0 0 / 48px 100%;
+  animation: boot-depth 3000ms cubic-bezier(0.2, 0.8, 0.2, 1) calc(var(--lag, 0ms) + 0ms) both;
+}
+
+/* the beam: a bright vertical blade with a glow trailing to its right */
+.boot-beam {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 180px;
+  background: linear-gradient(90deg, rgba(190, 250, 255, 0.95) 0 2px, rgba(34, 224, 255, 0.35) 3px, rgba(34, 224, 255, 0.08) 60%, transparent);
+  box-shadow: -4px 0 24px rgba(34, 224, 255, 0.8);
+  animation: boot-beam 850ms cubic-bezier(0.45, 0, 0.55, 1) 150ms both;
+}
+
+/* the spectacle: a canvas over her whole interface while she boots (ui/spectacle.ts) */
+.boot-spectacle {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* ---- the panel's layers (Dashboard.css has the acts). All on her clock; nothing
+   changes brightness faster than 200 ms - light travels, wipes and dissolves. ---- */
+
+.boot-layers.is-panel .boot-grid,
+.boot-layers.is-panel .boot-glitch {
+  display: none;
+}
+
+/* COLD START: one line of light swells in the centre of the black, brightens, then
+   the picture opens out from it (the frame's crt-open) and it dissolves into it */
+.pn-coldline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 3px;
+  margin-top: -1.5px;
+  background: linear-gradient(90deg, transparent, #eaffff 18%, #ffffff 50%, #eaffff 82%, transparent);
+  box-shadow: 0 0 18px rgba(94, 240, 255, 0.9), 0 0 60px rgba(34, 224, 255, 0.6);
+  animation: pn-coldline 1300ms cubic-bezier(0.35, 0, 0.25, 1) both;
+}
+
+@keyframes pn-coldline {
+  0% { opacity: 0; transform: scaleX(0.04); }
+  30% { opacity: 0.45; transform: scaleX(0.7); }
+  52% { opacity: 1; transform: scaleX(1); }
+  62% { opacity: 1; transform: scaleX(1) scaleY(2); }
+  100% { opacity: 0; transform: scaleX(1) scaleY(70); }
+}
+
+/* static over the opening picture: drifting, clearing - never stepping */
+.pn-static {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(0deg, rgba(234, 255, 255, 0.12) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(34, 224, 255, 0.06) 0 2px, transparent 2px 7px);
+  mix-blend-mode: screen;
+  animation: pn-static 900ms linear 650ms both;
+}
+
+@keyframes pn-static {
+  0% { opacity: 0; background-position: 0 0, 0 0; }
+  25% { opacity: 0.6; }
+  100% { opacity: 0; background-position: 0 -90px, -40px 0; }
+}
+
+/* BLUEPRINT: the grid draws in with perspective and settles flat */
+.pn-grid {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(34, 224, 255, 0.3) 1px, transparent 1px) 0 0 / 100% 56px,
+    linear-gradient(90deg, rgba(34, 224, 255, 0.3) 1px, transparent 1px) 0 0 / 56px 100%;
+  transform-origin: 50% 100%;
+  animation:
+    pn-grid-in 1300ms cubic-bezier(0.25, 0.7, 0.25, 1) 1200ms both,
+    pn-grid-out 900ms ease-in-out 7300ms forwards;
+}
+
+@keyframes pn-grid-in {
+  0% { opacity: 0; transform: perspective(900px) rotateX(62deg) scale(1.5); clip-path: inset(100% 0 0 0); }
+  45% { opacity: 1; clip-path: inset(0 0 0 0); }
+  100% { opacity: 1; transform: none; clip-path: inset(0 0 0 0); }
+}
+
+@keyframes pn-grid-out {
+  to { opacity: 0.12; }
+}
+
+/* BLUEPRINT: rulers with ticks down both margins, dimension lines, margin notes */
+.pn-ruler {
+  position: absolute;
+  top: 40px;
+  bottom: 40px;
+  width: 14px;
+  background:
+    repeating-linear-gradient(180deg, rgba(160, 245, 255, 0.85) 0 1px, transparent 1px 16px) left / 6px 100% no-repeat,
+    repeating-linear-gradient(180deg, rgba(160, 245, 255, 0.85) 0 1px, transparent 1px 80px) left / 14px 100% no-repeat;
+  animation: pn-draw-down 1100ms cubic-bezier(0.4, 0, 0.2, 1) 1700ms both, pn-fade-out 800ms ease-in-out 9600ms forwards;
+}
+
+.pn-ruler.is-left { left: 2px; }
+.pn-ruler.is-right { right: 2px; transform: scaleX(-1); animation-delay: 1900ms, 9600ms; }
+
+@keyframes pn-draw-down {
+  from { clip-path: inset(0 0 100% 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+.pn-dim {
+  position: absolute;
+  color: rgba(170, 245, 255, 0.9);
+  font: 600 13px "Cascadia Mono", Consolas, monospace;
+  letter-spacing: 0.2em;
+  animation: pn-dim 900ms cubic-bezier(0.3, 0.6, 0.3, 1) both, pn-fade-out 800ms ease-in-out 9600ms forwards;
+}
+
+.pn-dim::before,
+.pn-dim::after {
+  content: "";
+  position: absolute;
+  background: rgba(170, 245, 255, 0.85);
+}
+
+/* across the top: |<-------- 1440 -------->| */
+.pn-dim.is-width {
+  top: 18px;
+  left: 30px;
+  right: 30px;
+  height: 14px;
+  border-left: 1px solid rgba(170, 245, 255, 0.85);
+  border-right: 1px solid rgba(170, 245, 255, 0.85);
+  text-align: center;
+  line-height: 14px;
+  animation-delay: 2200ms, 9600ms;
+}
+
+.pn-dim.is-width::before { left: 0; right: 0; top: 7px; height: 1px; mask-image: linear-gradient(90deg, #000 42%, transparent 42% 58%, #000 58%); }
+
+/* down the right: the height */
+.pn-dim.is-height {
+  top: 60px;
+  bottom: 60px;
+  right: 24px;
+  width: 14px;
+  border-top: 1px solid rgba(170, 245, 255, 0.85);
+  border-bottom: 1px solid rgba(170, 245, 255, 0.85);
+  writing-mode: vertical-rl;
+  text-align: center;
+  line-height: 14px;
+  animation-delay: 2450ms, 9600ms;
+}
+
+.pn-dim.is-height::before { top: 0; bottom: 0; left: 7px; width: 1px; mask-image: linear-gradient(180deg, #000 45%, transparent 45% 55%, #000 55%); }
+
+@keyframes pn-dim {
+  from { clip-path: inset(0 50% 0 50%); opacity: 0.3; }
+  to { clip-path: inset(0 0 0 0); opacity: 1; }
+}
+
+.pn-dim.is-height { animation-name: pn-dim-v, pn-fade-out; }
+
+@keyframes pn-dim-v {
+  from { clip-path: inset(50% 0 50% 0); opacity: 0.3; }
+  to { clip-path: inset(0 0 0 0); opacity: 1; }
+}
+
+/* margin notes write themselves in */
+.pn-note {
+  position: absolute;
+  color: rgba(170, 245, 255, 0.75);
+  font: 600 12px "Cascadia Mono", Consolas, monospace;
+  letter-spacing: 0.18em;
+  white-space: nowrap;
+  animation: boot-type 700ms steps(22) both, pn-fade-out 800ms ease-in-out 9600ms forwards;
+}
+
+.pn-note.n1 { left: 24px; bottom: 26px; animation-delay: 2700ms, 9600ms; }
+.pn-note.n2 { right: 46px; bottom: 26px; animation-delay: 2950ms, 9600ms; }
+.pn-note.n3 { left: 24px; top: 38px; animation-delay: 3150ms, 9600ms; }
+
+/* SELF-TEST: calibration crosshairs sweeping the full area */
+.pn-cross {
+  position: absolute;
+  inset: 0;
+  animation: pn-cross-in 2600ms linear 3500ms both;
+}
+
+.pn-cross::before,
+.pn-cross::after {
+  content: "";
+  position: absolute;
+  background: rgba(170, 245, 255, 0.55);
+  box-shadow: 0 0 10px rgba(34, 224, 255, 0.7);
+}
+
+.pn-cross::before {
+  left: 0;
+  right: 0;
+  height: 1px;
+  animation: pn-cross-y 2600ms cubic-bezier(0.45, 0, 0.55, 1) 3500ms both;
+}
+
+.pn-cross::after {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  animation: pn-cross-x 2600ms cubic-bezier(0.45, 0, 0.55, 1) 3500ms both;
+}
+
+.pn-reticle {
+  position: absolute;
+  width: 46px;
+  height: 46px;
+  margin: -23px 0 0 -23px;
+  border: 1px solid rgba(200, 250, 255, 0.9);
+  border-radius: 50%;
+  box-shadow: 0 0 12px rgba(34, 224, 255, 0.7);
+  animation:
+    pn-reticle 2600ms cubic-bezier(0.45, 0, 0.55, 1) 3500ms both,
+    pn-cross-in 2600ms linear 3500ms both;
+}
+
+@keyframes pn-cross-in {
+  0% { opacity: 0; }
+  10% { opacity: 1; }
+  88% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes pn-cross-y {
+  0% { top: 4%; }
+  30% { top: 38%; }
+  55% { top: 72%; }
+  80% { top: 26%; }
+  100% { top: 96%; }
+}
+
+@keyframes pn-cross-x {
+  0% { left: 6%; }
+  30% { left: 88%; }
+  55% { left: 22%; }
+  80% { left: 70%; }
+  100% { left: 50%; }
+}
+
+@keyframes pn-reticle {
+  0% { top: 4%; left: 6%; }
+  30% { top: 38%; left: 88%; }
+  55% { top: 72%; left: 22%; }
+  80% { top: 26%; left: 70%; }
+  100% { top: 96%; left: 50%; }
+}
+
+/* SIGNAL: the boot log streaming down one side, each line resolving to OK */
+.pn-log {
+  position: absolute;
+  top: 28%;
+  right: 26px;
+  width: 46%;
+  padding: 14px 16px;
+  border-left: 1px solid rgba(170, 245, 255, 0.5);
+  background: linear-gradient(90deg, rgba(2, 8, 12, 0.88), rgba(2, 8, 12, 0.7));
+  font: 500 13px/1.75 "Cascadia Mono", Consolas, monospace;
+  color: rgba(190, 245, 255, 0.85);
+  animation:
+    pn-log-in 300ms ease-out 6000ms both,
+    pn-log-out 500ms cubic-bezier(0.5, 0, 0.6, 1) 7450ms forwards;
+}
+
+@keyframes pn-log-in {
+  from { opacity: 0; clip-path: inset(0 0 100% 0); }
+  to { opacity: 1; clip-path: inset(0 0 0 0); }
+}
+
+/* it wipes away upward as the cards begin to fill */
+@keyframes pn-log-out {
+  to { opacity: 0; clip-path: inset(0 0 100% 0); }
+}
+
+.pn-log-line {
+  display: flex;
+  justify-content: space-between;
+  white-space: nowrap;
+  overflow: hidden;
+  animation: boot-type 220ms steps(24) both;
+  animation-delay: calc(6050ms + var(--i) * 85ms);
+}
+
+.pn-log-line b {
+  margin-left: 12px;
+  color: #5ef2b8;
+  animation: pn-ok 260ms ease-out both;
+  animation-delay: calc(6200ms + var(--i) * 85ms);
+}
+
+@keyframes pn-ok {
+  from { opacity: 0; transform: translateX(-6px); }
+}
+
+/* cross-screen beams: they travel, never strobe. 600: the panel's beam leaves for
+   her screen as its picture opens; 10200: hers crosses the panel and leaves */
+.pn-beam {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 5px;
+  margin-top: -2.5px;
+  background: linear-gradient(90deg, transparent, rgba(34, 224, 255, 0.5) 55%, #eaffff);
+  box-shadow: 0 0 20px rgba(34, 224, 255, 0.8);
+  animation: pn-beam-out 700ms cubic-bezier(0.45, 0, 0.55, 1) 600ms both;
+}
+
+.pn-beam.is-in {
+  background: linear-gradient(270deg, transparent, rgba(34, 224, 255, 0.5) 55%, #eaffff);
+  animation: pn-beam-in 800ms cubic-bezier(0.45, 0, 0.55, 1) 10150ms both;
+}
+
+@keyframes pn-beam-out {
+  0% { opacity: 0; transform: translateX(-100%); }
+  35% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(100%); }
+}
+
+@keyframes pn-beam-in {
+  0% { opacity: 0; transform: translateX(100%); }
+  30% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-100%); }
+}
+
+/* 5450: her second sweep leaves her screen's left edge and crosses this one */
+.boot-layers.is-panel .boot-beam {
+  animation: boot-beam 560ms cubic-bezier(0.45, 0, 0.55, 1) 5450ms both;
+}
+
+/* LOCK: a final slow sweep over everything, top to bottom */
+.pn-final {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 22%;
+  background: linear-gradient(180deg, transparent, rgba(160, 245, 255, 0.16) 70%, rgba(220, 252, 255, 0.45) 98%, transparent);
+  animation: pn-final 1000ms cubic-bezier(0.45, 0, 0.55, 1) 10550ms both;
+}
+
+@keyframes pn-final {
+  0% { opacity: 0; transform: translateY(-100%); }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(460%); }
+}
+
+/* 11600: the shared final flare - the one exception, and it ramps (300 ms) */
+/* the final flare's surface (both windows share the class) */
+.boot-flare {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 120% at 50% 55%, rgba(255, 255, 255, 0.6), rgba(34, 224, 255, 0.5) 40%, transparent 75%);
+  mix-blend-mode: screen;
+  opacity: 0;
+}
+
+.boot-layers.is-panel .boot-flare {
+  animation: pn-flare 1000ms cubic-bezier(0.3, 0, 0.3, 1) 11300ms both;
+}
+
+@keyframes pn-flare {
+  0% { opacity: 0; }
+  30% { opacity: 0.85; }
+  100% { opacity: 0; }
+}
+
+@keyframes pn-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}

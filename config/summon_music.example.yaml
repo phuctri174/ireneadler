@@ -1,0 +1,19 @@
+# Music under a voice summon (core/irene/music.py). When the wake phrase ("Irene",
+# "Irene Adler") brings her up, this track plays under the whole boot-up and her
+# entrance, then fades out as she greets you. Local file only, read from disk and
+# never copied into the repo. Only the wake word starts it - the hotkey and the hand
+# sign summon her with the boot's own sound.
+#
+# Copy to config/summon_music.yaml (gitignored), point `file` at a track you own
+# and set enabled: true.
+enabled: false
+file: ""
+# where in the track to start, and how much of it to load (enough for boot +
+# entrance + greeting)
+start_s: 10.0
+max_s: 40.0
+# its level under her (0..1, before her master stage), and the fades
+level: 0.34
+fade_in_s: 0.5
+# as she greets you: a slow fade, gone by the time she has said hello
+fade_out_s: 4.0

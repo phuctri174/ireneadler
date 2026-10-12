@@ -1,0 +1,1826 @@
+/* Her panel on the second screen (portrait, filling the MSI's work area, borderless).
+   One system with her main interface: the SAME tokens (ui/chrome.css - cyan accent,
+   mint for up, red for down, amber for warm, her shell and edges and glow).
+   Dense technical dashboard: thin rules, small-caps labels, readouts, a ticker,
+   corner brackets, pictures and live graphics. Everything moves in - cards slide,
+   flip, stack or zoom by kind, numbers count, graphs and gauges draw themselves. */
+
+html.is-dashboard,
+html.is-dashboard body,
+html.is-dashboard #root {
+  --bg: var(--shell-solid);
+  --panel: var(--shell);
+  --panel-2: rgba(10, 24, 32, 0.92);
+  --rule-strong: var(--edge);
+  --accent: var(--cyan);
+  --accent-dim: rgba(34, 224, 255, 0.55);
+  --accent-soft: rgba(34, 224, 255, 0.1);
+  --up: var(--mint);
+  --down: var(--red);
+  --warm: var(--amber);
+  --glow: 0 0 14px rgba(34, 224, 255, 0.45);
+  --sans: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+
+  background: #03080c;
+  color: var(--ink);
+  font-family: var(--sans);
+  cursor: default;
+  overflow: hidden;
+}
+
+.dk,
+.dk * {
+  box-sizing: border-box;
+}
+
+/* the whole window (the work area): laid out at --dk-w x --dk-h (its design size, widened or
+   heightened to the screen's aspect) and scaled by --dk-scale to fill it, set from
+   JS - the content scales, it never stretches */
+.dk {
+  position: relative;
+  width: var(--dk-w, 100vw);
+  height: var(--dk-h, 100vh);
+  padding: 10px;
+  transform: scale(var(--dk-scale, 1));
+  transform-origin: 0 0;
+}
+
+:where(.dk) :where(button) {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+
+/* ---- the frame -------------------------------------------------------------------- */
+
+.dk-frame {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 46px 300px minmax(0, 1fr) 420px auto;
+  gap: 16px;
+  height: 100%;
+  padding: 20px 24px 14px;
+  border: 1px solid var(--edge);
+  background:
+    linear-gradient(180deg, rgba(20, 44, 56, 0.55), rgba(4, 10, 15, 0.2)),
+    linear-gradient(var(--rule) 1px, transparent 1px) 0 0 / 100% 64px,
+    var(--shell);
+  box-shadow:
+    inset 0 1px 0 var(--edge-bright),
+    inset 0 0 120px rgba(34, 224, 255, 0.05);
+  animation: dk-rise 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes dk-rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.985);
+  }
+}
+
+.dk-br {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border: 0 solid var(--accent);
+  pointer-events: none;
+  filter: drop-shadow(0 0 4px var(--accent));
+}
+
+.dk-br-tl { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+.dk-br-tr { top: -1px; right: -1px; border-top-width: 2px; border-right-width: 2px; }
+.dk-br-bl { bottom: -1px; left: -1px; border-bottom-width: 2px; border-left-width: 2px; }
+.dk-br-br { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+
+.dk-label {
+  font-family: var(--sans);
+  font-size: 19px;
+  font-variant: all-small-caps;
+  letter-spacing: 0.14em;
+  color: var(--ink-dim);
+}
+
+.dk-dim {
+  color: var(--ink-dim);
+}
+
+.dk-num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.dk-empty {
+  padding: 24px 4px;
+  font-size: 24px;
+  color: var(--ink-faint);
+}
+
+/* ---- header: clock, her badge, load ------------------------------------------------ */
+
+.dk-top {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.dk-top-side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dk-top-side.is-right {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.dk-clockface {
+  font-family: var(--mono);
+  font-size: 56px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* her name: the main interface's cut-corner badge, in green */
+.dk-badge {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.dk-badge-plate {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 40px 12px;
+  clip-path: polygon(20px 0, calc(100% - 20px) 0, 100% 50%, calc(100% - 20px) 100%, 20px 100%, 0 50%);
+  background: linear-gradient(180deg, rgba(34, 224, 255, 0.16), rgba(34, 224, 255, 0.03));
+}
+
+.dk-badge-plate::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  clip-path: polygon(
+    20px 0, calc(100% - 20px) 0, 100% 50%, calc(100% - 20px) 100%, 20px 100%, 0 50%, 20px 0,
+    21px 2px, 2.5px 50%, 21px calc(100% - 2px), calc(100% - 21px) calc(100% - 2px), calc(100% - 2.5px) 50%, calc(100% - 21px) 2px, 21px 2px
+  );
+}
+
+.dk-badge-gem {
+  width: 9px;
+  height: 9px;
+  transform: rotate(45deg);
+  background: var(--accent);
+  animation: dk-blink 2.4s ease-in-out infinite;
+}
+
+.dk-badge-name {
+  font-family: var(--mono);
+  font-size: 38px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.3em;
+  margin-right: -0.3em;
+  white-space: nowrap;
+  color: #eaffff;
+  text-shadow: 0 0 2px #fff, 0 0 22px var(--accent), 0 0 56px var(--accent);
+}
+
+.dk-badge-wing {
+  position: absolute;
+  top: 30px;
+  right: calc(100% + 8px);
+  width: 90px;
+  height: 1px;
+  background: linear-gradient(270deg, var(--accent), transparent);
+}
+
+.dk-badge-wing.is-right {
+  right: auto;
+  left: calc(100% + 8px);
+  transform: scaleX(-1);
+}
+
+.dk-badge-sub {
+  margin-top: 8px;
+  font-size: 16px;
+  font-variant: all-small-caps;
+  letter-spacing: 0.3em;
+  color: var(--ink-faint);
+}
+
+@keyframes dk-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ---- the live ticker --------------------------------------------------------------- */
+
+.dk-ticker {
+  position: relative;
+  overflow: hidden;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+}
+
+.dk-ticker-track {
+  display: flex;
+  gap: 56px;
+  width: max-content;
+  height: 100%;
+  align-items: center;
+  animation: dk-tick linear infinite;
+}
+
+@keyframes dk-tick {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.dk-tick {
+  font-family: var(--mono);
+  font-size: 22px;
+  white-space: nowrap;
+  color: var(--ink-dim);
+}
+
+.dk-tick b {
+  color: var(--ink);
+}
+
+.is-up {
+  color: var(--up);
+}
+
+.is-down {
+  color: var(--down);
+}
+
+/* ---- rails: the context cards ------------------------------------------------------ */
+
+.dk-rail {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  min-height: 0;
+}
+
+.dk-rail.is-two {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.dk-mini {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--rule);
+  background: var(--panel-2);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 300ms ease-out, background 300ms ease-out, transform 300ms ease-out;
+  animation: dk-card-in 600ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.dk-mini:nth-child(2) { animation-delay: 80ms; }
+.dk-mini:nth-child(3) { animation-delay: 160ms; }
+
+.dk-mini .dk-br {
+  width: 12px;
+  height: 12px;
+  opacity: 0.6;
+}
+
+.dk-mini.is-centre {
+  border-color: var(--rule-strong);
+  background: rgba(34, 224, 255, 0.06);
+}
+
+.dk-mini:hover,
+.dk-mini.is-hand-hover {
+  border-color: var(--accent);
+}
+
+.dk-mini-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.dk-mini-body {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dk-live {
+  font-size: 15px;
+  font-variant: all-small-caps;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+}
+
+.dk-stale {
+  font-size: 15px;
+  font-variant: all-small-caps;
+  letter-spacing: 0.2em;
+  color: var(--warm);
+}
+
+.dk-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: dk-blink 1.8s ease-in-out infinite;
+}
+
+@keyframes dk-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+/* ---- the centre stage -------------------------------------------------------------- */
+
+.dk-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 18px 26px 22px;
+  border: 1px solid var(--rule-strong);
+  background: linear-gradient(180deg, rgba(34, 224, 255, 0.05), transparent 30%), var(--panel);
+  overflow: hidden;
+}
+
+.dk-stage > .dk-br {
+  width: 30px;
+  height: 30px;
+}
+
+.dk-stage-head {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.dk-stage-title {
+  font-size: 40px;
+  font-weight: 700;
+  font-variant: all-small-caps;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  text-shadow: var(--glow);
+}
+
+.dk-stage-dots {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+
+.dk-stage-dots i {
+  width: 26px;
+  height: 4px;
+  background: var(--rule);
+  transition: background 400ms ease-out, width 400ms ease-out;
+}
+
+.dk-stage-dots i.is-on {
+  width: 52px;
+  background: var(--accent);
+}
+
+.dk-hold {
+  font-family: var(--mono);
+  font-size: 17px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.dk-hold.is-held {
+  color: var(--warm);
+}
+
+.dk-progress {
+  height: 2px;
+  margin: 12px 0 16px;
+  background: var(--rule);
+  overflow: hidden;
+}
+
+.dk-progress i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  animation: dk-progress linear both;
+}
+
+.dk-progress i.is-held {
+  animation: none;
+  transform: scaleX(1);
+  background: var(--warm);
+  opacity: 0.6;
+}
+
+@keyframes dk-progress {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+.dk-stage-cards {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.dk-stage-card {
+  position: absolute;
+  inset: 0;
+  will-change: transform, opacity;
+}
+
+/* ---- the deal: every page lands on the stage like a sheet of paper dealt onto a
+        desk. It flies in from off the stage with perspective - tilted back, turned,
+        larger than it will be - its shadow wide and soft beneath it; it overshoots,
+        settles, and its rotation straightens out last, the shadow tightening as it
+        meets the surface. The page it replaces slides away underneath, its own way.
+        Her content is dealt hard ("deal"); the auto-cycle gently ("soft"), so a turn
+        every few seconds never tires. Continuous motion only - no flashing, no blur
+        pulses (the boot's rule). --deal-dir alternates the side it comes from. ---- */
+
+.dk-stage-cards {
+  perspective: 2200px;
+  perspective-origin: 50% 30%;
+  /* the page comes from beyond the stage's edge, not over the rails */
+  overflow: hidden;
+}
+
+.dk-stage-card {
+  --deal-dir: 1;
+  transform-origin: 50% 70%;
+  backface-visibility: hidden;
+  /* a sheet, not a ghost: the page under it never shows through */
+  background: var(--shell-solid, #061016);
+  border: 1px solid var(--rule);
+}
+
+.dk-stage-card.is-in {
+  z-index: 2;
+}
+
+.dk-stage-card.is-out {
+  z-index: 1;
+  pointer-events: none;
+}
+
+.dk-stage-card.is-in.fx-deal {
+  animation: dk-deal-in 1000ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.dk-stage-card.is-out.fx-deal {
+  animation: dk-deal-out 1100ms cubic-bezier(0.45, 0, 0.55, 1) both;
+}
+
+.dk-stage-card.is-in.fx-soft {
+  animation: dk-soft-in 820ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.dk-stage-card.is-out.fx-soft {
+  animation: dk-soft-out 840ms cubic-bezier(0.45, 0, 0.55, 1) both;
+}
+
+@keyframes dk-deal-in {
+  0% {
+    transform: translate3d(calc(var(--deal-dir) * -78%), -62%, 240px) rotateX(34deg) rotateZ(calc(var(--deal-dir) * -13deg)) scale(1.16);
+    box-shadow: 0 140px 120px -30px rgba(0, 0, 0, 0.28);
+  }
+  /* contact: it touches down past its spot, still turned */
+  50% {
+    transform: translate3d(calc(var(--deal-dir) * 1.6%), 1.1%, 0) rotateX(0deg) rotateZ(calc(var(--deal-dir) * 2.2deg)) scale(0.988);
+    box-shadow: 0 7px 16px -2px rgba(0, 0, 0, 0.5);
+  }
+  /* the slide back into place */
+  70% {
+    transform: translate3d(calc(var(--deal-dir) * -0.35%), -0.2%, 0) rotateZ(calc(var(--deal-dir) * -0.9deg)) scale(1.003);
+    box-shadow: 0 3px 9px rgba(0, 0, 0, 0.48);
+  }
+  /* in place; only the rotation still settling */
+  84% {
+    transform: translate3d(0, 0, 0) rotateZ(calc(var(--deal-dir) * 0.35deg)) scale(1);
+  }
+  100% {
+    transform: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+  }
+}
+
+@keyframes dk-deal-out {
+  0%,
+  38% {
+    transform: none;
+    opacity: 1;
+    filter: brightness(1);
+  }
+  /* pushed aside as the new page lands on it, sinking under */
+  100% {
+    transform: translate3d(calc(var(--deal-dir) * 34%), 16%, -160px) rotateZ(calc(var(--deal-dir) * 7deg)) scale(0.92);
+    opacity: 0;
+    filter: brightness(0.45);
+  }
+}
+
+@keyframes dk-soft-in {
+  0% {
+    transform: translate3d(calc(var(--deal-dir) * -26%), -16%, 90px) rotateX(12deg) rotateZ(calc(var(--deal-dir) * -4.5deg)) scale(1.05);
+    box-shadow: 0 60px 60px -20px rgba(0, 0, 0, 0.22);
+  }
+  58% {
+    transform: translate3d(calc(var(--deal-dir) * 0.5%), 0.35%, 0) rotateX(0deg) rotateZ(calc(var(--deal-dir) * 0.8deg)) scale(0.997);
+    box-shadow: 0 5px 12px rgba(0, 0, 0, 0.42);
+  }
+  82% {
+    transform: translate3d(0, 0, 0) rotateZ(calc(var(--deal-dir) * -0.25deg)) scale(1);
+  }
+  100% {
+    transform: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  }
+}
+
+@keyframes dk-soft-out {
+  0%,
+  30% {
+    transform: none;
+    opacity: 1;
+    filter: brightness(1);
+  }
+  100% {
+    transform: translate3d(calc(var(--deal-dir) * 14%), 7%, -80px) rotateZ(calc(var(--deal-dir) * 2.5deg)) scale(0.95);
+    opacity: 0;
+    filter: brightness(0.6);
+  }
+}
+
+.dk-scroll {
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-strong) transparent;
+}
+
+/* a slow scan line drifting down the stage: ambient, never in the way */
+.dk-scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 120px;
+  background: linear-gradient(180deg, transparent, rgba(34, 224, 255, 0.05), transparent);
+  pointer-events: none;
+  animation: dk-scan 9s linear infinite;
+}
+
+@keyframes dk-scan {
+  from {
+    transform: translateY(-120px);
+  }
+  to {
+    transform: translateY(2400px);
+  }
+}
+
+/* rows inside a card come in one after another */
+.dk-stage-card.is-in [style*="--i"] {
+  animation: dk-row-in 600ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(180ms + var(--i) * 60ms);
+}
+
+@keyframes dk-row-in {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+}
+
+/* ---- rows: news, quotes ------------------------------------------------------------ */
+
+.dk-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--rule);
+  transition: background 200ms ease-out, box-shadow 200ms ease-out;
+}
+
+.dk [data-url]:hover,
+.dk [data-url].is-hand-hover {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.dk [data-url].is-picked {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.dk [data-url].is-picked * {
+  color: var(--bg);
+}
+
+.dk-index {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 0.8em;
+  color: var(--accent);
+}
+
+.dk-news {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dk-news.is-big {
+  font-size: 34px;
+}
+
+.dk-news.is-mini {
+  font-size: 20px;
+}
+
+.dk-news-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dk-markets.is-big {
+  font-size: 32px;
+}
+
+.dk-markets.is-mini {
+  font-size: 20px;
+}
+
+.dk-markets.is-mini .dk-row {
+  padding: 6px 4px;
+}
+
+.dk-quote-name {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 25%;
+  min-width: 0;
+}
+
+.dk-markets.is-mini .dk-quote-name {
+  flex-basis: 20%;
+}
+
+.dk-quote-name b {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dk-quote-price {
+  flex: 0 0 auto;
+  min-width: 5.4em;
+  text-align: right;
+  font-weight: 600;
+}
+
+.dk-change {
+  flex: 0 0 auto;
+  min-width: 5em;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 0.8em;
+}
+
+/* ---- graphs that draw themselves ----------------------------------------------------- */
+
+.dk-graph {
+  flex: 1;
+  min-width: 0;
+  height: 1.6em;
+  overflow: visible;
+}
+
+.dk-graph-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  /* in screen px (the stroke doesn't scale): longer than any line drawn */
+  stroke-dasharray: 4000;
+  stroke-dashoffset: 4000;
+  animation: dk-draw 1600ms cubic-bezier(0.3, 0.7, 0.3, 1) 300ms forwards;
+}
+
+.dk-graph.is-down .dk-graph-line {
+  stroke: var(--down);
+}
+
+.dk-graph-area {
+  fill: var(--accent);
+  opacity: 0;
+  animation: dk-fill 1200ms ease-out 1100ms forwards;
+}
+
+.dk-graph.is-down .dk-graph-area {
+  fill: var(--down);
+}
+
+@keyframes dk-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes dk-fill {
+  to {
+    opacity: 0.12;
+  }
+}
+
+/* ---- weather ------------------------------------------------------------------------ */
+
+.dk-weather {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+  padding: 6px;
+}
+
+.dk-weather-now {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.dk-temp {
+  font-family: var(--mono);
+  font-size: 150px;
+  font-weight: 600;
+  line-height: 0.9;
+}
+
+.dk-weather.is-mini .dk-temp {
+  font-size: 72px;
+}
+
+.dk-weather-sky {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dk-weather-sky b {
+  font-size: 44px;
+  font-weight: 600;
+}
+
+.dk-weather.is-mini .dk-weather-sky b {
+  font-size: 26px;
+}
+
+.dk-weather.is-mini .dk-weather-sky .dk-label {
+  font-size: 15px;
+}
+
+.dk-weather-graph {
+  height: 160px;
+  flex: none;
+  width: 100%;
+}
+
+.dk-days {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.dk-day {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 14px;
+  border: 1px solid var(--rule);
+  font-size: 28px;
+}
+
+.dk-rain {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 20px;
+  color: var(--ink-dim);
+}
+
+.dk-rain i {
+  height: 4px;
+  max-width: 60%;
+  background: var(--accent-dim);
+  transform-origin: left;
+  animation: dk-grow 1000ms cubic-bezier(0.2, 0.8, 0.2, 1) 500ms both;
+}
+
+@keyframes dk-grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* ---- system ------------------------------------------------------------------------- */
+
+.dk-system {
+  display: grid;
+  gap: 28px;
+}
+
+.dk-system.is-big {
+  grid-template-columns: 1fr 1fr;
+  gap: 40px 48px;
+  padding-top: 10px;
+}
+
+.dk-system.is-mini {
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+
+.dk-system.is-mini .dk-label {
+  font-size: 16px;
+}
+
+.dk-meter-graph {
+  height: 140px;
+  flex: none;
+  width: 100%;
+}
+
+/* ---- timers / clock ------------------------------------------------------------------- */
+
+.dk-timers,
+.dk-clock {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dk-timer {
+  display: flex;
+  flex-direction: column;
+}
+
+.dk-timer b,
+.dk-clock b {
+  font-family: var(--mono);
+  font-size: 64px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.dk-timers.is-big .dk-timer b,
+.dk-clock.is-big b {
+  font-size: 160px;
+}
+
+.dk-timers.is-mini .dk-timer b {
+  font-size: 44px;
+}
+
+.dk-clock.is-mini b {
+  font-size: 48px;
+  color: var(--ink);
+}
+
+/* ---- her content (what the popup used to show) ---------------------------------------- */
+
+.dk-her {
+  font-size: 30px;
+  line-height: 1.45;
+  padding-right: 12px;
+}
+
+.dk-her-title {
+  font-size: 54px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.dk-her-sub {
+  margin-top: 6px;
+}
+
+.dk-her-body {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--rule);
+}
+
+.dk-her .cb-h2,
+.dk-her .cb-h3,
+.dk-her .cb-sources-label {
+  font-family: var(--sans);
+  font-variant: all-small-caps;
+  text-shadow: none;
+}
+
+.dk-her .cb-h2-rule {
+  box-shadow: none;
+}
+
+.dk-her .cb-link.is-hand-hover,
+.dk-her .cb-video.is-hand-hover {
+  outline: 2px solid var(--accent);
+}
+
+/* ---- foot ---------------------------------------------------------------------------- */
+
+.dk-foot {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+}
+
+.dk-foot .dk-label {
+  font-size: 15px;
+  color: var(--ink-faint);
+}
+
+/* across the room: the small print of her content, readable */
+.dk-her .cb-sources ol {
+  padding-left: 2.2em;
+}
+
+.dk-her .cb-source-meta,
+.dk-her .cb-link-note,
+.dk-her .cb-sources-label,
+.dk-her .cb-caption {
+  font-size: 19px;
+  letter-spacing: 0.12em;
+}
+
+/* the centre's lists fill the stage: rows spread over its height */
+.dk-news.is-big,
+.dk-markets.is-big {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  min-height: 100%;
+}
+
+.dk-markets.is-big .dk-row {
+  flex: 1 1 0;
+  max-height: 260px;
+}
+
+.dk-markets.is-big .dk-graph {
+  height: 3em;
+}
+
+/* ---- news: few stories, each with its picture -------------------------------------------- */
+
+.dk-news.is-big {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: 1fr;
+  gap: 22px;
+  height: 100%;
+  font-size: 30px;
+}
+
+.dk-news.is-big li {
+  display: flex;
+  min-height: 0;
+}
+
+.dk-story {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  min-height: 0;
+  padding: 10px;
+  border: 1px solid var(--rule);
+}
+
+.dk-thumb {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  background: rgba(34, 224, 255, 0.06);
+}
+
+.dk-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /* a slow drift across the picture: alive, never distracting */
+  animation: dk-kenburns 18s ease-in-out infinite alternate;
+}
+
+@keyframes dk-kenburns {
+  from {
+    transform: scale(1.02) translate(0, 0);
+  }
+  to {
+    transform: scale(1.12) translate(-2%, -2%);
+  }
+}
+
+.dk-thumb-none {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-size: 0.8em;
+  color: var(--ink-faint);
+}
+
+.dk-thumb .dk-index {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 6px 12px;
+  background: rgba(3, 8, 12, 0.85);
+  border-right: 1px solid var(--edge);
+  border-bottom: 1px solid var(--edge);
+  color: var(--accent);
+  text-shadow: var(--glow);
+}
+
+.dk-news-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dk-news-text b {
+  font-weight: 600;
+  line-height: 1.22;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.dk-news.is-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 19px;
+}
+
+.dk-news.is-mini .dk-story {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 4px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.dk-news.is-mini .dk-thumb {
+  flex: 0 0 120px;
+  height: 68px;
+}
+
+.dk-news.is-mini .dk-thumb .dk-index {
+  padding: 2px 6px;
+  font-size: 14px;
+}
+
+.dk-news.is-mini .dk-news-text b {
+  font-weight: 500;
+  -webkit-line-clamp: 2;
+}
+
+.dk-news.is-mini .dk-news-text .dk-label {
+  display: none;
+}
+
+/* ---- the sky ----------------------------------------------------------------------------- */
+
+.dk-sky {
+  flex: 0 0 auto;
+  width: 120px;
+  height: 120px;
+  overflow: visible;
+}
+
+.dk-sky.is-big {
+  width: 220px;
+  height: 220px;
+}
+
+.dk-sky.is-day {
+  width: 64px;
+  height: 64px;
+}
+
+.dk-sky-sun circle {
+  fill: var(--amber);
+  filter: drop-shadow(0 0 6px var(--amber));
+}
+
+.dk-sky-rays {
+  stroke: var(--amber);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transform-origin: 50px 50px;
+  animation: dk-spin 24s linear infinite;
+}
+
+@keyframes dk-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.dk-sky-cloud {
+  fill: rgba(216, 246, 255, 0.16);
+  stroke: var(--ink);
+  stroke-width: 2;
+  animation: dk-drift 7s ease-in-out infinite alternate;
+}
+
+@keyframes dk-drift {
+  to {
+    transform: translateX(5px);
+  }
+}
+
+.dk-sky-drop {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  animation: dk-rain 900ms linear infinite;
+}
+
+@keyframes dk-rain {
+  from {
+    transform: translateY(-6px);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  to {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+}
+
+.dk-sky-bolt {
+  fill: var(--amber);
+  animation: dk-flash 3.2s steps(1) infinite;
+}
+
+@keyframes dk-flash {
+  0%,
+  90% {
+    opacity: 0.25;
+  }
+  92%,
+  96% {
+    opacity: 1;
+  }
+}
+
+.dk-sky-fog {
+  stroke: var(--ink-dim);
+  stroke-width: 3;
+  stroke-linecap: round;
+  animation: dk-drift 4s ease-in-out infinite alternate;
+}
+
+.dk-weather.is-big .dk-weather-now {
+  gap: 30px;
+}
+
+/* ---- ring gauges -------------------------------------------------------------------------- */
+
+.dk-gauge {
+  position: relative;
+  aspect-ratio: 1;
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.dk-gauge svg,
+.dk-timer-ring {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  overflow: visible;
+}
+
+.dk-gauge-track {
+  fill: none;
+  stroke: rgba(34, 224, 255, 0.1);
+  stroke-width: 7;
+}
+
+.dk-gauge-ticks {
+  fill: none;
+  stroke: var(--rule-strong);
+  stroke-width: 2;
+  stroke-dasharray: 0.4 2.1;
+}
+
+.dk-gauge-arc {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  filter: drop-shadow(0 0 4px rgba(34, 224, 255, 0.6));
+  transition: stroke-dashoffset 900ms cubic-bezier(0.2, 0.8, 0.2, 1), stroke 400ms;
+  animation: dk-sweep 1400ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes dk-sweep {
+  from {
+    stroke-dashoffset: 100;
+  }
+}
+
+.dk-gauge.is-warm .dk-gauge-arc {
+  stroke: var(--warm);
+}
+
+.dk-gauge.is-hot .dk-gauge-arc {
+  stroke: var(--down);
+}
+
+.dk-gauge-centre,
+.dk-timer-centre {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.dk-gauge-value {
+  font-family: var(--mono);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.dk-gauge-value small {
+  font-size: 0.5em;
+  color: var(--ink-dim);
+}
+
+.dk-system.is-big .dk-gauge-value {
+  font-size: 88px;
+}
+
+.dk-system.is-big .dk-gauge .dk-label {
+  font-size: 26px;
+}
+
+.dk-gauge-detail {
+  font-family: var(--mono);
+  font-size: 20px;
+  color: var(--ink-dim);
+}
+
+.dk-system.is-mini {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.dk-system.is-mini .dk-label {
+  font-size: 14px;
+}
+
+.dk-system.is-big .dk-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ---- timers --------------------------------------------------------------------------------- */
+
+.dk-timers.is-big {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 40px;
+}
+
+.dk-timer {
+  position: relative;
+  aspect-ratio: 1;
+  width: 180px;
+}
+
+.dk-timers.is-big .dk-timer {
+  width: 560px;
+}
+
+.dk-timer-ring .dk-gauge-arc {
+  stroke: var(--mint);
+  filter: drop-shadow(0 0 4px var(--mint));
+  transition: stroke-dashoffset 1000ms linear;
+}
+
+.dk-timer-centre b {
+  font-family: var(--mono);
+  font-size: 40px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.dk-timers.is-big .dk-timer-centre b {
+  font-size: 120px;
+}
+
+/* her content keeps its pictures and screenshots - shown large */
+.dk-her .cb-figure-frame img {
+  max-height: 900px;
+  object-fit: contain;
+}
+
+/* the small weather card: sky and temperature side by side, the words beneath */
+.dk-weather.is-mini .dk-weather-now {
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.dk-weather.is-mini .dk-sky {
+  width: 96px;
+  height: 96px;
+}
+
+.dk-weather.is-mini .dk-weather-sky {
+  flex-basis: 100%;
+}
+
+/* the big one fills the stage: larger days, larger skies */
+.dk-weather.is-big {
+  height: 100%;
+  justify-content: space-between;
+}
+
+.dk-weather.is-big .dk-sky.is-day {
+  width: 150px;
+  height: 150px;
+  align-self: center;
+}
+
+.dk-weather.is-big .dk-day {
+  font-size: 34px;
+  padding: 22px 18px;
+}
+
+.dk-weather.is-big .dk-weather-graph {
+  height: 240px;
+}
+
+/* ---- her last researches ------------------------------------------------------------- */
+
+.dk-research {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dk-research-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--rule);
+  transition: background 200ms ease-out, box-shadow 200ms ease-out;
+}
+
+.dk-research-card:hover {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.dk-research-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dk-research-text b {
+  font-weight: 600;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.dk-research.is-mini {
+  font-size: 19px;
+}
+
+.dk-research.is-mini .dk-label {
+  font-size: 14px;
+}
+
+.dk-research.is-big {
+  gap: 22px;
+  font-size: 40px;
+  padding-top: 10px;
+}
+
+.dk-research.is-big .dk-research-card {
+  padding: 28px 16px;
+  border: 1px solid var(--rule);
+}
+
+.dk-research.is-big .dk-research-text b {
+  -webkit-line-clamp: 2;
+}
+
+.dk-head-timer {
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 20px;
+  color: var(--ink-dim);
+}
+
+.dk-head-timer b {
+  color: var(--mint);
+}
+
+/* the centre's zoom (the old panel's): the layer is the scaled box the scroller
+   scrolls; the content keeps its natural layout and is magnified from its corner */
+.dk-zoom-layer {
+  position: relative;
+  overflow: hidden;
+}
+
+.dk-zoom {
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+/* research cards: a picture like the news cards (theirs, or one drawn for them) */
+.dk-research-card .dk-thumb {
+  flex: 0 0 96px;
+  height: 54px;
+}
+
+.dk-research.is-mini .dk-research-card {
+  padding: 5px 4px;
+}
+
+.dk-research.is-big .dk-research-card .dk-thumb {
+  flex-basis: 320px;
+  height: 180px;
+}
+
+.dk-research-card .dk-thumb .dk-index {
+  padding: 2px 6px;
+  font-size: 14px;
+}
+
+.dk-research.is-big .dk-research-card .dk-thumb .dk-index {
+  padding: 6px 12px;
+  font-size: 22px;
+}
+
+.dk-research-card {
+  align-items: center;
+}
+
+.dk-gen {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- THE PANEL'S STARTUP: a machine running its own 12 s diagnostic -------------
+   On HER clock (its cue goes at 0 - ui/boot.tsx). Her screen is cinematic; this one
+   is technical. Six acts of equal weight, busy the whole way:
+     0     COLD START   a line of light swells in the black; the picture opens from it
+     1200  BLUEPRINT    the layout drafts itself: grid in perspective settling flat,
+                        corner marks, edges connecting them, dimension lines, labels
+     3500  SELF-TEST    every instrument to full scale and back, cascading down
+     6000  SIGNAL       the ticker locks out of noise, a boot log streams to OK,
+                        labels type and resolve
+     7500  MATERIALISE  the cards fill one by one, each in its own way
+     10000 LOCK         brackets drive into the corners, the badge, a final sweep
+     11600 the shared flare
+   NO FLASHING: nothing changes brightness faster than 200 ms; light moves - it
+   travels, wipes, sweeps, dissolves. Layers in ui/boot.css (.pn-*). */
+
+/* ==== COLD START (0-1200): the picture opens from the line, slow and heavy ===== */
+.dk.is-booting .dk-frame {
+  animation:
+    crt-open 620ms cubic-bezier(0.3, 0, 0.2, 1) 680ms both,
+    crt-phosphor 1100ms cubic-bezier(0.3, 0.6, 0.3, 1) 680ms both;
+}
+
+@keyframes crt-open {
+  0% { clip-path: inset(49.7% 0 49.7% 0); }
+  100% { clip-path: inset(0 0 0 0); }
+}
+
+/* the newly lit picture glows (phosphor) and cools, never a jump */
+@keyframes crt-phosphor {
+  0% { filter: brightness(1.7) saturate(0.6) blur(1.2px); }
+  100% { filter: none; }
+}
+
+/* ==== BLUEPRINT (1200-3500): structure before content ========================== */
+
+/* every card is hollow until MATERIALISE fills it */
+.dk.is-booting .dk-mini,
+.dk.is-booting .dk-stage,
+.dk.is-booting .dk-top,
+.dk.is-booting .dk-ticker,
+.dk.is-booting .dk-foot {
+  position: relative;
+  animation: pn-fill 520ms cubic-bezier(0.3, 0.6, 0.3, 1) backwards;
+}
+
+@keyframes pn-fill {
+  from { background: transparent; border-color: transparent; box-shadow: none; }
+}
+
+/* drafted: corner marks appear, then the edges extend from them to connect */
+.dk.is-booting .dk-mini::after,
+.dk.is-booting .dk-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  --c: rgba(170, 245, 255, 0.95);
+  background:
+    linear-gradient(var(--c), var(--c)) top left / var(--e) 1px no-repeat,
+    linear-gradient(var(--c), var(--c)) top left / 1px var(--e) no-repeat,
+    linear-gradient(var(--c), var(--c)) top right / var(--e) 1px no-repeat,
+    linear-gradient(var(--c), var(--c)) top right / 1px var(--e) no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom left / var(--e) 1px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom left / 1px var(--e) no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom right / var(--e) 1px no-repeat,
+    linear-gradient(var(--c), var(--c)) bottom right / 1px var(--e) no-repeat;
+  filter: drop-shadow(0 0 4px rgba(34, 224, 255, 0.7));
+  animation:
+    pn-draft 1500ms cubic-bezier(0.45, 0, 0.25, 1) both,
+    pn-fade-out 700ms ease-in-out both;
+}
+
+@property --e {
+  syntax: "<length-percentage>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes pn-draft {
+  0% { --e: 0px; opacity: 0; }
+  22% { --e: 18px; opacity: 1; }
+  40% { --e: 18px; opacity: 1; }
+  100% { --e: 51%; opacity: 1; }
+}
+
+@keyframes pn-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* down the layout: drafted 1300-2700, fading as MATERIALISE fills each one */
+.dk.is-booting .dk-rail:first-of-type .dk-mini:nth-child(1)::after { animation-delay: 1300ms, 7500ms; }
+.dk.is-booting .dk-rail:first-of-type .dk-mini:nth-child(2)::after { animation-delay: 1450ms, 7750ms; }
+.dk.is-booting .dk-rail:first-of-type .dk-mini:nth-child(3)::after { animation-delay: 1600ms, 8000ms; }
+.dk.is-booting .dk-stage::after { animation-delay: 1850ms, 8250ms; animation-duration: 1800ms, 700ms; }
+.dk.is-booting .dk-rail.is-two .dk-mini:nth-child(1)::after { animation-delay: 2300ms, 8550ms; }
+.dk.is-booting .dk-rail.is-two .dk-mini:nth-child(2)::after { animation-delay: 2450ms, 8850ms; }
+
+/* the fills, in the same order (MATERIALISE) */
+.dk.is-booting .dk-top { animation-delay: 7400ms; }
+.dk.is-booting .dk-rail:first-of-type .dk-mini:nth-child(1) { animation-delay: 7500ms; }
+.dk.is-booting .dk-rail:first-of-type .dk-mini:nth-child(2) { animation-delay: 7750ms; }
+.dk.is-booting .dk-rail:first-of-type .dk-mini:nth-child(3) { animation-delay: 8000ms; }
+.dk.is-booting .dk-stage { animation-delay: 8250ms; }
+.dk.is-booting .dk-rail.is-two .dk-mini:nth-child(1) { animation-delay: 8550ms; }
+.dk.is-booting .dk-rail.is-two .dk-mini:nth-child(2) { animation-delay: 8850ms; }
+.dk.is-booting .dk-ticker { animation-delay: 9150ms; }
+.dk.is-booting .dk-foot { animation-delay: 9350ms; }
+
+/* the division rules extend from the centre */
+.dk.is-booting .dk-top::after,
+.dk.is-booting .dk-ticker::after,
+.dk.is-booting .dk-foot::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #b4f6ff;
+  box-shadow: 0 0 8px rgba(34, 224, 255, 0.8);
+  pointer-events: none;
+  animation:
+    pn-rule 800ms cubic-bezier(0.3, 0.6, 0.3, 1) both,
+    pn-fade-out 700ms ease-in-out both;
+}
+
+.dk.is-booting .dk-top::after { bottom: 0; animation-delay: 1250ms, 7400ms; }
+.dk.is-booting .dk-ticker::after { bottom: 0; animation-delay: 1400ms, 9150ms; }
+.dk.is-booting .dk-foot::after { top: 0; animation-delay: 2700ms, 9350ms; }
+
+@keyframes pn-rule {
+  from { transform: scaleX(0); opacity: 0.3; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+/* ==== SELF-TEST (3500-6000): instruments to full scale and back, cascading ====== */
+.dk.is-booting .dk-top > *,
+.dk.is-booting .dk-stage > :not(.dk-br),
+.dk.is-booting .dk-mini:has(.dk-system) .dk-mini-body,
+.dk.is-booting .dk-mini:has(.dk-markets) .dk-mini-body {
+  animation: pn-reveal 460ms cubic-bezier(0.25, 0.8, 0.3, 1.15) backwards;
+}
+
+.dk.is-booting .dk-top > * { animation-delay: 3500ms; }
+.dk.is-booting .dk-top > :nth-child(2) { animation-delay: 3600ms; }
+.dk.is-booting .dk-top > :nth-child(3) { animation-delay: 3700ms; }
+.dk.is-booting .dk-mini:has(.dk-system) .dk-mini-body { animation-delay: 3750ms; }
+.dk.is-booting .dk-stage > :not(.dk-br) { animation-delay: 3950ms; }
+.dk.is-booting .dk-mini:has(.dk-markets) .dk-mini-body { animation-delay: 4550ms; }
+
+@keyframes pn-reveal {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+}
+
+/* the gauges: empty -> FULL SCALE -> a beat -> their real value (the last stop is
+   the arc's own value); the glow swells and cools with it */
+.dk.is-booting .dk-gauge-arc {
+  animation: pn-fullscale 1300ms cubic-bezier(0.3, 0.7, 0.3, 1) 4050ms both;
+}
+
+.dk.is-booting .dk-mini .dk-gauge-arc { animation-delay: 3850ms; }
+.dk.is-booting .dk-gauge:nth-of-type(2) .dk-gauge-arc { animation-delay: 4150ms; }
+.dk.is-booting .dk-gauge:nth-of-type(3) .dk-gauge-arc { animation-delay: 4250ms; }
+.dk.is-booting .dk-gauge:nth-of-type(4) .dk-gauge-arc { animation-delay: 4350ms; }
+
+@keyframes pn-fullscale {
+  0% { stroke-dashoffset: 100; filter: drop-shadow(0 0 4px rgba(34, 224, 255, 0.6)); }
+  40% { stroke-dashoffset: 0; filter: drop-shadow(0 0 10px rgba(200, 250, 255, 0.95)); }
+  55% { stroke-dashoffset: 0; }
+}
+
+/* sparklines draw left to right at speed (the market rows' text comes later) */
+.dk.is-booting .dk-markets .dk-graph-line {
+  animation: dk-draw 620ms cubic-bezier(0.5, 0, 0.3, 1) 4650ms forwards;
+}
+
+.dk.is-booting .dk-markets .dk-row:nth-child(2) .dk-graph-line { animation-delay: 4760ms; }
+.dk.is-booting .dk-markets .dk-row:nth-child(3) .dk-graph-line { animation-delay: 4870ms; }
+.dk.is-booting .dk-markets .dk-row:nth-child(4) .dk-graph-line { animation-delay: 4980ms; }
+
+.dk.is-booting .dk-markets .dk-row > :not(.dk-graph) {
+  animation: pn-reveal 420ms cubic-bezier(0.25, 0.8, 0.3, 1.25) 9000ms backwards;
+}
+
+.dk.is-booting .dk-markets .dk-row:nth-child(2) > :not(.dk-graph) { animation-delay: 9110ms; }
+.dk.is-booting .dk-markets .dk-row:nth-child(3) > :not(.dk-graph) { animation-delay: 9220ms; }
+.dk.is-booting .dk-markets .dk-row:nth-child(4) > :not(.dk-graph) { animation-delay: 9330ms; }
+
+/* ==== SIGNAL ACQUISITION (6000-7500) ============================================ */
+
+/* the ticker: scrolling noise that locks into readable text */
+.dk.is-booting .dk-ticker-track {
+  animation: pn-signal 1500ms cubic-bezier(0.15, 0.55, 0.25, 1) 6000ms both !important;
+}
+
+@keyframes pn-signal {
+  0% { opacity: 0; transform: translateX(-140%); filter: blur(9px); }
+  18% { opacity: 0.8; }
+  70% { filter: blur(2px); }
+  90% { transform: translateX(0.8%); }
+  100% { opacity: 1; transform: translateX(0); filter: none; }
+}
+
+/* labels type themselves and resolve, cascading down (no blinking cursor) */
+.dk.is-booting .dk-label,
+.dk.is-booting .dk-badge-sub {
+  animation: boot-type 600ms steps(18) 6150ms both;
+}
+
+.dk.is-booting .dk-rail:first-of-type .dk-label { animation-delay: 6350ms; }
+.dk.is-booting .dk-stage .dk-label { animation-delay: 6600ms; }
+.dk.is-booting .dk-rail.is-two .dk-label { animation-delay: 6850ms; }
+.dk.is-booting .dk-foot .dk-label { animation-delay: 7050ms; }
+
+/* ==== MATERIALISE (7500-10000): the cards fill, each with its own character ===== */
+/* (:is() keeps this as specific as the per-card delays below, so they win) */
+.dk.is-booting .dk-mini:is(:has(.dk-weather), :has(.dk-research), :has(.dk-news), :has(.dk-empty)) .dk-mini-body {
+  animation: pn-content 560ms cubic-bezier(0.25, 0.8, 0.3, 1.25) backwards;
+}
+
+.dk.is-booting .dk-mini:has(.dk-weather) .dk-mini-body { animation-delay: 7600ms; }
+.dk.is-booting .dk-mini:has(.dk-research) .dk-mini-body { animation-delay: 8100ms; }
+.dk.is-booting .dk-mini:has(.dk-empty) .dk-mini-body { animation-delay: 8100ms; }
+.dk.is-booting .dk-mini:has(.dk-news) .dk-mini-body { animation-delay: 8650ms; }
+
+@keyframes pn-content {
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+}
+
+/* the weather card draws its sky: opening out from the sun */
+.dk.is-booting .dk-weather-sky,
+.dk.is-booting .dk-sky {
+  animation: pn-sky 1000ms cubic-bezier(0.3, 0.6, 0.3, 1) 7700ms both;
+}
+
+.dk.is-booting .dk-weather .dk-graph-line {
+  animation-delay: 7900ms;
+}
+
+@keyframes pn-sky {
+  from { clip-path: circle(0% at 30% 35%); }
+  to { clip-path: circle(150% at 30% 35%); }
+}
+
+/* news thumbnails resolve from blur to sharp, one by one */
+.dk.is-booting .dk-thumb {
+  animation: pn-focus 700ms cubic-bezier(0.25, 0.8, 0.3, 1.2) 8750ms both;
+}
+
+.dk.is-booting li:nth-child(2) .dk-thumb { animation-delay: 8900ms; }
+.dk.is-booting li:nth-child(3) .dk-thumb { animation-delay: 9050ms; }
+.dk.is-booting li:nth-child(4) .dk-thumb { animation-delay: 9200ms; }
+
+@keyframes pn-focus {
+  0% { opacity: 0; transform: scale(1.12); filter: blur(10px); }
+  60% { opacity: 1; transform: scale(0.97); filter: blur(1px); }
+  100% { transform: none; filter: none; }
+}
+
+/* ==== LOCK (10000-11600) ======================================================== */
+
+/* the brackets drive into the corners: in from outside, overshoot, seat */
+.dk.is-booting .dk-frame > .dk-br,
+.dk.is-booting .dk-stage > .dk-br {
+  animation: pn-clamp 620ms cubic-bezier(0.2, 0.9, 0.25, 1.3) 10000ms both;
+}
+
+.dk.is-booting .dk-frame > .dk-br-tr { animation-delay: 10070ms; }
+.dk.is-booting .dk-frame > .dk-br-bl { animation-delay: 10140ms; }
+.dk.is-booting .dk-frame > .dk-br-br { animation-delay: 10210ms; }
+.dk.is-booting .dk-stage > .dk-br { animation-delay: 10300ms; }
+
+@keyframes pn-clamp {
+  0% { opacity: 0; transform: scale(2.4); }
+  45% { opacity: 1; }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* the IRENE ADLER badge arrives */
+.dk.is-booting .dk-badge {
+  animation: boot-fly 1000ms cubic-bezier(0.2, 0.8, 0.2, 1) 10300ms both;
+}

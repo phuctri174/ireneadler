@@ -1,0 +1,94 @@
+# Voice input (core/irene/listen.py, stt.py, wake.py). Everything runs locally:
+# the microphone, Silero VAD on the CPU, faster-whisper on the GPU.
+
+microphone:
+  # sounddevice input device: null = the Windows default recording device
+  device: null
+  sample_rate: 16000
+
+wake:
+  # "Hey Irene" and "Irene Adler" always wake her; "Irene Adler" also plays the
+  # Victorian entrance. Stock openWakeWord has no "Irene" model, so until a custom
+  # one is trained (Phase 7b) a phrase is heard by Silero VAD and checked by
+  # Whisper. engine: whisper | openwakeword (needs openwakeword_model below).
+  engine: whisper
+  openwakeword_model: null
+  phrases: ["hey irene", "irene adler", "wake up irene", "wake up, daddy's home"]
+  # bare "Irene" wakes her only while she is already awake (follow-ups)
+  bare_name_while_awake: true
+  # after she finishes speaking, how long a follow-up needs no wake word
+  follow_up_seconds: 8
+
+end_of_speech:
+  # silence before deciding he is done: the full wait, so he can pause mid-thought
+  max_silence_s: 3.0
+  # the shortest wait, when the sentence clearly ended (falling pitch AND a
+  # complete phrase); anything in between trails off and gets the full wait
+  min_silence_s: 0.9
+  # when to take a first look at the words so far, into the silence. A clearly
+  # finished sentence (or small talk) is answered from that look at once - the
+  # speculative start (voice_loop.py) - instead of waiting out min_silence_s
+  check_after_s: 0.3
+  speculative: true
+  # a run of speech shorter than this is a cough or a click, not him
+  min_speech_s: 0.25
+  vad_threshold: 0.5
+
+stt:
+  # faster-whisper large-v3-turbo, float16 ONLY (int8 crashes on sm_120).
+  # Weights live in core/models/whisper-large-v3-turbo; loaded on first use.
+  model_dir: models/whisper-large-v3-turbo
+  compute_type: float16
+  language: en
+  beam_size: 3
+  # below this he is asked to say it again instead of acted on as a guess
+  min_avg_logprob: -0.85
+  max_no_speech_prob: 0.6
+
+# How loud she is (core/irene/levels.py). Every sentence of her speech is brought
+# to speech_rms_dbfs (they ranged -26..-20, too quiet and uneven); entrances to
+# clip_rms_dbfs; then master_gain_db on EVERYTHING she plays (speech, sounds,
+# entrances, the boot soundtrack), with a soft limiter at limit_dbfs so nothing
+# clips. Turn master_gain_db up or down to taste (dB; +6 = twice as loud).
+output:
+  master_gain_db: 3.0
+  speech_rms_dbfs: -16.0
+  clip_rms_dbfs: -17.0
+  limit_dbfs: -1.0
+
+barge_in:
+  enabled: true
+  # take her own voice back out of the mic (core/irene/aec.py) - the speakers put
+  # it there; without this she interrupts herself and answers her own sentences
+  echo_cancel: true
+  # where the canceller's reference starts relative to the capture (s); it
+  # recalibrates itself while she talks - measured on this PC: 0.0 lands her echo
+  # 40 ms into the filter (the driver over-reports its output latency by ~150 ms)
+  echo_margin_s: 0.0
+  # while she speaks her own voice reaches the mic through the speakers: speech
+  # only interrupts her above this VAD probability, sustained this long, and
+  # louder than this multiple of what she is playing (1.0 = as loud as her)
+  vad_threshold: 0.8
+  min_speech_s: 0.3
+  over_playback: 1.6
+
+data:
+  # every voice turn's audio + transcript, and his corrections: local only
+  dir: voice_data
+  save_turns: true
+
+# true: core/logs/voice.log also records what the barge-in guard measures, and
+# core/logs/aec_dump.npz what the echo canceller was given during her last answer
+debug: false
+
+speaker:
+  # only his voice is acted on (core/irene/speaker_id.py): every utterance and every
+  # barge-in is scored against his voiceprints (ECAPA, from his corpus takes and
+  # his live turns); below the threshold it is ignored - never transcribed, never
+  # a turn. core/logs/voice.log shows each score ("speaker check") for tuning.
+  # Measured: his corpus takes 0.55-0.88, his live commands mostly 0.38+; her TTS
+  # at most 0.27; videos, songs and room talk mostly under 0.30.
+  enabled: true
+  threshold: 0.35
+  # cpu: the GPU is full (the model, Whisper, her voice); cuda only with VRAM to spare
+  device: cpu

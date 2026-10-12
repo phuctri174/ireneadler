@@ -1,0 +1,20 @@
+# Copy to config/pronunciation.yaml (gitignored). "Tri" is the name the default
+# persona (config/persona.md) addresses its user by; change both together.
+#
+# Spoken-audio pronunciation fixes, applied just before Kokoro.
+# Displayed text is never touched - only what TTS hears.
+#
+# Keys match whole words, in any case: "Tri", "tri" and "TRI" are all his name;
+# "trip", "trial" and "Atri" are untouched.
+#   phonemes: misaki IPA (American English), fed to Kokoro's inline
+#             [word](/phonemes/) override. Preferred.
+#   say:      plain respelling, used only when no phonemes are given.
+
+Tri:
+  phonemes: tɹˈi   # Vietnamese name, rhymes with "tree", not "try"
+  say: Tree        # the same for Chatterbox-Turbo, which reads no phonemes
+
+# the unit SJC gold is priced in (a tael): Vietnamese "lượng", said close to "lung"
+lượng:
+  phonemes: lˈʌŋ
+  say: lung

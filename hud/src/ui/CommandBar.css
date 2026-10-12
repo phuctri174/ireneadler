@@ -1,0 +1,131 @@
+/* The command bar: docked at the bottom of the face well, under her face. */
+
+.cmdbar {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  z-index: 4;
+  width: min(1100px, 72%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 18px;
+  border: 1px solid var(--edge-bright);
+  border-radius: 6px;
+  background: rgba(3, 10, 14, 0.9);
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.6),
+    0 0 26px rgba(34, 224, 255, 0.12);
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.cmdbar.is-confirm {
+  border-color: var(--amber);
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.6),
+    0 0 26px rgba(255, 182, 72, 0.2);
+}
+
+.cmdbar-log {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 17px;
+  line-height: 1.4;
+}
+
+.cmdbar-you {
+  color: var(--ink-dim);
+}
+
+.cmdbar-you::before {
+  content: "you  ";
+  color: var(--ink-faint);
+}
+
+.cmdbar-irene {
+  color: #eaffff;
+}
+
+.cmdbar-irene::before {
+  content: "irene  ";
+  color: var(--accent);
+}
+
+.cmdbar-display {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 15px;
+  white-space: pre-wrap;
+  color: var(--ink);
+}
+
+.cmdbar-status {
+  font-size: 13px;
+  color: var(--amber);
+}
+
+.cmdbar-confirm {
+  max-height: 300px;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 16px;
+  line-height: 1.45;
+  white-space: pre-wrap; /* a dry-run plan is several lines */
+  color: #fff3e0;
+}
+
+.cmdbar-confirm .readout {
+  margin-right: 8px;
+  color: var(--amber);
+}
+
+.cmdbar-confirm b {
+  color: var(--amber);
+}
+
+.cmdbar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cmdbar-prompt {
+  font-family: var(--mono);
+  font-size: 20px;
+  color: var(--accent);
+}
+
+.cmdbar-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  outline: none;
+  background: transparent;
+  font-family: var(--mono);
+  font-size: 20px;
+  color: #eaffff;
+  caret-color: var(--accent);
+}
+
+.cmdbar-input::placeholder {
+  color: var(--ink-faint);
+}
+
+.cmdbar-latency {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.cmdbar-hint {
+  font-size: 12px;
+  color: var(--amber);
+}

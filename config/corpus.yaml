@@ -1,0 +1,434 @@
+# The read-aloud voice corpus (core/irene/corpus.py; Ctrl+Alt+Shift+R in the HUD).
+#
+# Not subjects for her to learn: how HE speaks, across anything he might say to a
+# general assistant. Each sentence is read three times, one file per take.
+#
+# split: test is the fixed held-out set (every 5th sentence, 20%): recorded like
+# the rest, NEVER trained on - scripts/voice_wer.py measures word error rate on it.
+# Lines tagged `sounds` deliberately work sounds that are hard for a Vietnamese
+# speaker of English: final consonants, th, s/z endings, clusters, -ed endings,
+# l/n and r/l.
+
+sentences:
+  # ---- software and AI ---------------------------------------------------------
+  - {id: sw-01, split: train, topic: software, text: "The build failed again because the tests couldn't find the config file."}
+  - {id: sw-02, split: train, topic: software, text: "Can you check why the API keeps returning a four hundred and four?"}
+  - {id: sw-03, split: train, topic: software, text: "I pushed the fix to master, so the deployment should start in a minute."}
+  - {id: sw-04, split: train, topic: software, sounds: [final consonants, clusters], text: "The script crashed with a null pointer exception in the parser."}
+  - {id: sw-05, split: test, topic: software, text: "We fine-tuned the model on twelve thousand examples and the loss still looks weird."}
+  - {id: sw-06, split: train, topic: software, text: "Okay so the thing is, the cache works locally but not in production, and I have no idea why."}
+  - {id: sw-07, split: train, topic: software, text: "Refactor that function, it's doing three different jobs."}
+  - {id: sw-08, split: train, topic: software, sounds: [-ed endings], text: "I rebased, resolved the conflicts, and squashed the commits."}
+  - {id: sw-09, split: train, topic: software, text: "What's the difference between a transformer and a recurrent network, in plain words?"}
+  - {id: sw-10, split: test, topic: software, text: "The Docker container runs out of memory when the batch size is sixty-four."}
+  - {id: sw-11, split: train, topic: software, text: "Is Python three point twelve faster than three point eleven for this kind of code?"}
+  - {id: sw-12, split: train, topic: software, text: "Let's roll back the release, wait, no, let's just hotfix the login page."}
+  - {id: sw-13, split: train, topic: software, sounds: [th], text: "I think the thread pool is throttling the whole thing."}
+  - {id: sw-14, split: train, topic: software, text: "Run the linter and tell me how many warnings are left."}
+  - {id: sw-15, split: test, topic: software, text: "The embeddings are stored in a vector database, and the retrieval step is the slow part."}
+  - {id: sw-16, split: train, topic: software, text: "Quantizing it to four bits made it fast but it started making things up."}
+  - {id: sw-17, split: train, topic: software, sounds: [clusters], text: "The regex matches the first group but skips the next strings."}
+  - {id: sw-18, split: train, topic: software, text: "Why does TypeScript complain that this property might be undefined?"}
+
+  # ---- technology and products -------------------------------------------------
+  - {id: tech-01, split: train, topic: tech, text: "Is the RTX fifty ninety worth it over the fifty eighty for local models?"}
+  - {id: tech-02, split: test, topic: tech, text: "My phone is stuck on the Samsung logo after the update."}
+  - {id: tech-03, split: train, topic: tech, text: "How much VRAM does a twelve billion parameter model need at sixteen bit?"}
+  - {id: tech-04, split: train, topic: tech, text: "The new MacBook has better battery life but I still prefer Windows."}
+  - {id: tech-05, split: train, topic: tech, sounds: [s/z endings], text: "My headphones keep disconnecting from the laptop's Bluetooth."}
+  - {id: tech-06, split: train, topic: tech, text: "Which version of Chrome am I running right now?"}
+  - {id: tech-07, split: test, topic: tech, text: "The router reboots itself every night around two a.m."}
+  - {id: tech-08, split: train, topic: tech, text: "I'm thinking of getting a mechanical keyboard, maybe one with brown switches."}
+  - {id: tech-09, split: train, topic: tech, text: "Does the iPhone sixteen support USB-C fast charging at forty-five watts?"}
+  - {id: tech-10, split: train, topic: tech, sounds: [clusters, final consonants], text: "The SSD's write speed dropped after it filled up past eighty percent."}
+  - {id: tech-11, split: train, topic: tech, text: "Compare the Pixel and the Galaxy cameras for low light."}
+  - {id: tech-12, split: test, topic: tech, text: "Windows eleven wants to restart for updates again, just postpone it."}
+
+  # ---- news and current events -------------------------------------------------
+  - {id: news-01, split: train, topic: news, text: "What's the latest news about the elections?"}
+  - {id: news-02, split: train, topic: news, text: "Did anything happen in the stock market today?"}
+  - {id: news-03, split: train, topic: news, text: "Give me the top three headlines, short version."}
+  - {id: news-04, split: train, topic: news, text: "Is it true they announced a new space mission to the Moon?"}
+  - {id: news-05, split: test, topic: news, text: "What are people saying about the new AI regulations in Europe?"}
+  - {id: news-06, split: train, topic: news, text: "Any updates on the typhoon heading towards Vietnam?"}
+  - {id: news-07, split: train, topic: news, text: "Summarise what happened this week in tech, I missed everything."}
+  - {id: news-08, split: train, topic: news, text: "Who won the match last night?"}
+
+  # ---- games -------------------------------------------------------------------
+  - {id: game-01, split: train, topic: games, text: "I've been stuck on this boss for two hours and I'm about to give up."}
+  - {id: game-02, split: test, topic: games, text: "Which Pokémon is best against a Water and Ground type?"}
+  - {id: game-03, split: train, topic: games, text: "Is Elden Ring's DLC harder than the base game?"}
+  - {id: game-04, split: train, topic: games, text: "My PlayStation controller drifts to the left, can I fix it myself?"}
+  - {id: game-05, split: train, topic: games, text: "Pikachu, Charizard, Gengar and Lucario, that's my team."}
+  - {id: game-06, split: train, topic: games, sounds: [final consonants], text: "The patch nerfed my favourite build, so now it's useless."}
+  - {id: game-07, split: test, topic: games, text: "When does the next Zelda game come out on the Switch two?"}
+  - {id: game-08, split: train, topic: games, text: "Should I play Baldur's Gate three or Cyberpunk first?"}
+  - {id: game-09, split: train, topic: games, text: "What's the fastest way to level up in Pokémon Scarlet?"}
+  - {id: game-10, split: train, topic: games, text: "I parried it perfectly and it still hit me, that's so unfair."}
+  - {id: game-11, split: train, topic: games, text: "Steam says the game needs sixty gigabytes, do I have room?"}
+  - {id: game-12, split: test, topic: games, text: "Minecraft with shaders makes my GPU sound like a jet engine."}
+
+  # ---- proper nouns ------------------------------------------------------------
+  - {id: noun-01, split: train, topic: names, text: "Is Jensen Huang still the CEO of NVIDIA?"}
+  - {id: noun-02, split: train, topic: names, text: "I'm flying from Ho Chi Minh City to Tokyo, then on to Osaka."}
+  - {id: noun-03, split: train, topic: names, text: "Microsoft, Google, Anthropic and Meta all released new models this month."}
+  - {id: noun-04, split: train, topic: names, text: "Do you know who Sherlock Holmes and Irene Adler are?"}
+  - {id: noun-05, split: test, topic: names, text: "My friend Nguyen works at Samsung in Seoul."}
+  - {id: noun-06, split: train, topic: names, text: "Is Uniqlo cheaper than Zara for basic shirts?"}
+  - {id: noun-07, split: train, topic: names, text: "Look up the opening hours of the Louvre in Paris."}
+  - {id: noun-08, split: train, topic: names, sounds: [r/l], text: "Lara and Laura are flying to Rio, not Lille."}
+  - {id: noun-09, split: train, topic: names, text: "What did Elon Musk say about Tesla's new factory?"}
+  - {id: noun-10, split: test, topic: names, text: "Hanoi, Da Nang and Hue are all on the list for next summer."}
+  - {id: noun-11, split: train, topic: names, text: "Play something by Taylor Swift, or maybe Coldplay."}
+  - {id: noun-12, split: train, topic: names, text: "Is the Hugging Face hub down, or is it just me?"}
+
+  # ---- everyday life -----------------------------------------------------------
+  - {id: life-01, split: train, topic: everyday, text: "What should I cook tonight with eggs, rice and some leftover chicken?"}
+  - {id: life-02, split: train, topic: everyday, text: "Is it going to rain this afternoon?"}
+  - {id: life-03, split: test, topic: everyday, text: "Remind me I have a dentist appointment on Thursday at ten thirty."}
+  - {id: life-04, split: train, topic: everyday, sounds: [th], text: "The weather's nice, so I think I'll walk there this time."}
+  - {id: life-05, split: train, topic: everyday, text: "I need to buy milk, bread, bananas and dish soap."}
+  - {id: life-06, split: train, topic: everyday, text: "How many calories are in a bowl of pho?"}
+  - {id: life-07, split: train, topic: everyday, text: "My back hurts from sitting all day, any stretches you'd recommend?"}
+  - {id: life-08, split: test, topic: everyday, sounds: [-ed endings], text: "I booked the hotel, checked the flights, and packed everything already."}
+  - {id: life-09, split: train, topic: everyday, text: "What's a good gift for my mum's birthday, she likes plants."}
+  - {id: life-10, split: train, topic: everyday, text: "How long does it take to get to the airport by taxi at rush hour?"}
+  - {id: life-11, split: train, topic: everyday, text: "I slept badly again, maybe I should stop drinking coffee after lunch."}
+  - {id: life-12, split: train, topic: everyday, sounds: [s/z endings], text: "She washes the dishes, then she dries the glasses and the knives."}
+  - {id: life-13, split: test, topic: everyday, text: "Find me a cheap flight to Singapore sometime in December."}
+  - {id: life-14, split: train, topic: everyday, text: "The package was supposed to arrive yesterday, where is it?"}
+  - {id: life-15, split: train, topic: everyday, text: "I think I'm getting a cold, my throat's been sore since this morning."}
+  - {id: life-16, split: train, topic: everyday, text: "Book a table for two at eight, somewhere quiet."}
+
+  # ---- work and study ----------------------------------------------------------
+  - {id: work-01, split: train, topic: work, text: "I have a meeting at nine and the slides aren't finished."}
+  - {id: work-02, split: test, topic: work, text: "Draft an email to my professor asking for a one week extension."}
+  - {id: work-03, split: train, topic: work, text: "The deadline for the report is Friday, the twenty-third."}
+  - {id: work-04, split: train, topic: work, sounds: [-ed endings], text: "I submitted the assignment, but I forgot to attach the appendix."}
+  - {id: work-05, split: train, topic: work, text: "Can you summarise this paper in three bullet points?"}
+  - {id: work-06, split: train, topic: work, text: "My manager moved the stand-up to ten, so I've got time for breakfast."}
+  - {id: work-07, split: test, topic: work, text: "What's a polite way to say no to extra work?"}
+  - {id: work-08, split: train, topic: work, text: "I need to study for the statistics exam, especially the regression part."}
+  - {id: work-09, split: train, topic: work, sounds: [clusters], text: "The client asked for the project's next steps and a cost estimate."}
+  - {id: work-10, split: train, topic: work, text: "Schedule a call with the team for tomorrow afternoon, around three."}
+  - {id: work-11, split: train, topic: work, text: "Honestly this lecture is so boring, I'm going to fall asleep."}
+  - {id: work-12, split: test, topic: work, text: "Proofread this paragraph and fix the grammar, but keep my tone."}
+
+  # ---- natural conversation ----------------------------------------------------
+  - {id: talk-01, split: train, topic: conversation, text: "Hey Irene, how's it going?"}
+  - {id: talk-02, split: train, topic: conversation, text: "Haha, that was actually pretty funny."}
+  - {id: talk-03, split: train, topic: conversation, text: "You're being a bit dramatic today, aren't you?"}
+  - {id: talk-04, split: train, topic: conversation, text: "Ugh, I'm so tired, today was a really long day."}
+  - {id: talk-05, split: test, topic: conversation, text: "Wait, no, I meant the other one, the blue one."}
+  - {id: talk-06, split: train, topic: conversation, text: "Tell me a joke, but a good one this time."}
+  - {id: talk-07, split: train, topic: conversation, text: "Sure you are, Irene, sure you are."}
+  - {id: talk-08, split: train, topic: conversation, text: "Anyway, forget that, what were we talking about before?"}
+  - {id: talk-09, split: train, topic: conversation, text: "Guess what, I finally got the job!"}
+  - {id: talk-10, split: test, topic: conversation, text: "Hmm, I don't know, let me think about it for a second."}
+  - {id: talk-11, split: train, topic: conversation, text: "Oh by the way, did I tell you about the cat next door? It keeps coming into my room."}
+  - {id: talk-12, split: train, topic: conversation, text: "No, no, stop, that's not what I asked for."}
+  - {id: talk-13, split: train, topic: conversation, text: "Thanks, you're the best, seriously."}
+  - {id: talk-14, split: train, topic: conversation, text: "What are you doing right now?"}
+  - {id: talk-15, split: test, topic: conversation, text: "Good night Irene, see you tomorrow."}
+  - {id: talk-16, split: train, topic: conversation, text: "So I was thinking, um, maybe we could, like, try a different approach, you know?"}
+  - {id: talk-17, split: train, topic: conversation, text: "That's not what I meant, but okay, close enough."}
+  - {id: talk-18, split: train, topic: conversation, text: "Irene Adler, are you there?"}
+
+  # ---- his commands, for every tool she has ------------------------------------
+  - {id: cmd-01, split: train, topic: commands, text: "Open my downloads folder."}
+  - {id: cmd-02, split: test, topic: commands, text: "Find all the PDFs on my desktop."}
+  - {id: cmd-03, split: train, topic: commands, text: "Set a timer for twenty-five minutes."}
+  - {id: cmd-04, split: train, topic: commands, text: "What time is it?"}
+  - {id: cmd-05, split: train, topic: commands, text: "How many days until Christmas?"}
+  - {id: cmd-06, split: train, topic: commands, text: "Turn the volume down a bit."}
+  - {id: cmd-07, split: test, topic: commands, text: "Set the volume to thirty percent."}
+  - {id: cmd-08, split: train, topic: commands, text: "Mute."}
+  - {id: cmd-09, split: train, topic: commands, text: "Pause the music."}
+  - {id: cmd-10, split: train, topic: commands, text: "Skip to the next song."}
+  - {id: cmd-11, split: train, topic: commands, text: "Go back to the previous track."}
+  - {id: cmd-12, split: test, topic: commands, text: "Take a look at my screen and tell me what's wrong."}
+  - {id: cmd-13, split: train, topic: commands, text: "Quarantine that old installer in my downloads."}
+  - {id: cmd-14, split: train, topic: commands, text: "Organise my desktop by file type."}
+  - {id: cmd-15, split: train, topic: commands, text: "Read this document and summarise it for me."}
+  - {id: cmd-16, split: train, topic: commands, text: "Open YouTube and play some lo-fi music."}
+  - {id: cmd-17, split: test, topic: commands, text: "Search YouTube for kendo tournament highlights."}
+  - {id: cmd-18, split: train, topic: commands, text: "Show the sources on the panel."}
+  - {id: cmd-19, split: train, topic: commands, text: "Close the panel."}
+  - {id: cmd-20, split: train, topic: commands, text: "Save the panel as a PDF."}
+  - {id: cmd-21, split: train, topic: commands, text: "How's my PC doing, is the GPU busy?"}
+  - {id: cmd-22, split: test, topic: commands, text: "Open this link in my browser, not yours."}
+  - {id: cmd-23, split: train, topic: commands, text: "Read me the text on this page."}
+  - {id: cmd-24, split: train, topic: commands, text: "Forget this conversation."}
+  - {id: cmd-25, split: train, topic: commands, text: "Do a little show for me, wave and then give me a thumbs up."}
+  - {id: cmd-26, split: train, topic: commands, text: "List what's in my downloads, newest first."}
+
+  # ---- research and follow-ups -------------------------------------------------
+  - {id: res-01, split: test, topic: research, text: "Research the best budget GPUs for machine learning."}
+  - {id: res-02, split: train, topic: research, text: "Look up how long the Great Wall of China actually is."}
+  - {id: res-03, split: train, topic: research, text: "Tell me more about the second source."}
+  - {id: res-04, split: train, topic: research, text: "What did that article say about battery life?"}
+  - {id: res-05, split: train, topic: research, text: "Find out when the museum opens on Sundays."}
+  - {id: res-06, split: test, topic: research, text: "Can you look into whether intermittent fasting actually works?"}
+  - {id: res-07, split: train, topic: research, text: "Explain that again, but simpler."}
+  - {id: res-08, split: train, topic: research, text: "Compare the two options and tell me which one you'd pick."}
+  - {id: res-09, split: train, topic: research, text: "Where did you read that?"}
+  - {id: res-10, split: train, topic: research, text: "Look it up, I don't trust my memory on this one."}
+
+  # ---- numbers, dates, times, money, measurements, spelling ---------------------
+  - {id: num-01, split: test, topic: numbers, text: "It costs three hundred and forty-nine dollars and ninety-nine cents."}
+  - {id: num-02, split: train, topic: numbers, text: "My flight leaves at six fifteen a.m. on the fourth of November."}
+  - {id: num-03, split: train, topic: numbers, text: "Convert seventy-five kilograms to pounds."}
+  - {id: num-04, split: train, topic: numbers, text: "The room is four point five metres by three point two metres."}
+  - {id: num-05, split: train, topic: numbers, text: "What's fifteen percent of two hundred and eighty?"}
+  - {id: num-06, split: test, topic: numbers, text: "My phone number ends in eight, three, zero, seven."}
+  - {id: num-07, split: train, topic: numbers, text: "I was born in two thousand and four."}
+  - {id: num-08, split: train, topic: numbers, text: "Spell it with me: T, R, I, Tri."}
+  - {id: num-09, split: train, topic: numbers, text: "How many minutes is two and a half hours?"}
+  - {id: num-10, split: train, topic: numbers, text: "It's about one point two million dong, so roughly fifty dollars."}
+  - {id: num-11, split: test, topic: numbers, text: "The meeting got moved from the twelfth to the thirteenth."}
+  - {id: num-12, split: train, topic: numbers, sounds: [th], text: "The third, the fourth and the fifth are all free this month."}
+  - {id: num-13, split: train, topic: numbers, text: "Set an alarm for seven forty-five tomorrow."}
+  - {id: num-14, split: train, topic: numbers, text: "It's minus two degrees in Seoul and thirty-four in Saigon."}
+  - {id: num-15, split: train, topic: numbers, text: "Spell necessary for me, I always get it wrong."}
+
+  # ---- hard sounds, deliberately -----------------------------------------------
+  - {id: snd-01, split: test, topic: sounds, sounds: [th], text: "Thank you, that's the thirtieth thing this Thursday."}
+  - {id: snd-02, split: train, topic: sounds, sounds: [th], text: "They thought about it, then they went there together."}
+  - {id: snd-03, split: train, topic: sounds, sounds: [final consonants], text: "The cat sat on the mat and bit the dog's tail."}
+  - {id: snd-04, split: train, topic: sounds, sounds: [final consonants], text: "Stop, drop the bag, and grab the red cup."}
+  - {id: snd-05, split: train, topic: sounds, sounds: [final consonants], text: "Put the book back on the top shelf, left side."}
+  - {id: snd-06, split: test, topic: sounds, sounds: [s/z endings], text: "He buys shoes, she sells rice, and the kids eat fries."}
+  - {id: snd-07, split: train, topic: sounds, sounds: [s/z endings], text: "The prices of phones, laptops and games keep rising."}
+  - {id: snd-08, split: train, topic: sounds, sounds: [clusters], text: "The street's crowded, so the bus struggles through the traffic."}
+  - {id: snd-09, split: train, topic: sounds, sounds: [clusters], text: "She screamed, sprinted, and splashed straight into the stream."}
+  - {id: snd-10, split: train, topic: sounds, sounds: [clusters], text: "The sixth text asks for the next three tasks."}
+  - {id: snd-11, split: test, topic: sounds, sounds: [-ed endings], text: "I walked, talked, laughed and finally relaxed."}
+  - {id: snd-12, split: train, topic: sounds, sounds: [-ed endings], text: "The file was saved, zipped, uploaded and deleted."}
+  - {id: snd-13, split: train, topic: sounds, sounds: [-ed endings], text: "We needed it, wanted it, and waited for it."}
+  - {id: snd-14, split: train, topic: sounds, sounds: [l/n], text: "Nine lions lay near the long lake at night."}
+  - {id: snd-15, split: train, topic: sounds, sounds: [l/n], text: "No, the lock on the light blue door is new."}
+  - {id: snd-16, split: test, topic: sounds, sounds: [l/n], text: "Lunch is at noon, not at nine, and it's usually noodles."}
+  - {id: snd-17, split: train, topic: sounds, sounds: [r/l], text: "The river rolls really slowly along the rocky hill."}
+  - {id: snd-18, split: train, topic: sounds, sounds: [r/l], text: "Right, the light is red, so the car should wait in the left lane."}
+  - {id: snd-19, split: train, topic: sounds, sounds: [r/l], text: "I'd rather read the long letter later."}
+  - {id: snd-20, split: train, topic: sounds, sounds: [final consonants, s/z endings], text: "Her friends' birthdays are both in March."}
+  - {id: snd-21, split: test, topic: sounds, sounds: [th, s/z endings], text: "These clothes smell fresh, those ones don't."}
+  - {id: snd-22, split: train, topic: sounds, sounds: [clusters, -ed endings], text: "He asked, texted twice, then just left."}
+
+  # ---- long ramblings, interruptions, self-corrections --------------------------
+  - {id: ramble-01, split: train, topic: rambling, text: "So basically what happened was, I was trying to install the driver, and then the whole screen went black, and I had to restart twice before it worked."}
+  - {id: ramble-02, split: train, topic: rambling, text: "Can you, actually no, never mind, just open the folder."}
+  - {id: ramble-03, split: train, topic: rambling, text: "I want to learn Japanese, but not like textbook Japanese, more like the way people actually talk in anime and games."}
+  - {id: ramble-04, split: test, topic: rambling, text: "Set a timer for ten, no wait, fifteen minutes."}
+  - {id: ramble-05, split: train, topic: rambling, text: "The thing is, I kind of like both, but if I had to pick one, I'd probably go with the cheaper one, because I'm broke."}
+  - {id: ramble-06, split: train, topic: rambling, text: "Remind me to, um, what was it, oh right, call my mum tonight."}
+  - {id: ramble-07, split: train, topic: rambling, text: "I read somewhere that octopuses have three hearts, is that real or is that one of those internet facts?"}
+  - {id: ramble-08, split: train, topic: rambling, text: "Open the, the thing, the settings, the sound settings."}
+  - {id: ramble-09, split: test, topic: rambling, text: "Okay, new plan: we finish the backend tonight, test it tomorrow morning, and if it breaks, we blame the cache."}
+  - {id: ramble-10, split: train, topic: rambling, text: "What was I saying? Oh yeah, the flight, can you check if it's delayed?"}
+
+  # ---- kendo and chess (a small slice) ------------------------------------------
+  - {id: kc-01, split: train, topic: kendo, text: "I got a clean men in keiko today, sensei actually nodded."}
+  - {id: kc-02, split: train, topic: kendo, text: "My kote is too slow, I telegraph it every time."}
+  - {id: kc-03, split: train, topic: kendo, text: "Take kamae and face me, Irene."}
+  - {id: kc-04, split: test, topic: kendo, text: "Gyaku-dou is the hardest strike for me, and tsuki scares me a bit."}
+  - {id: kc-05, split: train, topic: kendo, text: "I need a new shinai, the old one is splintering."}
+  - {id: kc-06, split: train, topic: chess, text: "Play the Sicilian, I want to practise against it."}
+  - {id: kc-07, split: train, topic: chess, text: "Is castling queenside ever better than kingside?"}
+  - {id: kc-08, split: train, topic: chess, text: "Knight to f three, bishop to c four, then castle."}
+  - {id: kc-09, split: test, topic: chess, text: "I blundered my queen in a winning position, again."}
+  - {id: kc-10, split: train, topic: chess, text: "Explain en passant like I'm five."}
+
+  # ================================================================================
+  # The terms he says that Whisper gets wrong - she once heard 'first dan' as
+  # something else. Every term below appears in at least three different natural
+  # sentences (core/tests/test_listen.py checks it). No diacritics: he says them
+  # in English sentences, and that is how Whisper should write them.
+  # ================================================================================
+
+  # ---- kendo: dan and kyu, the techniques, the dojo --------------------------------
+  - {id: kd-01, split: train, topic: kendo, text: "I'm taking my first dan exam next month, so I need to practise every day."}
+  - {id: kd-02, split: train, topic: kendo, text: "What do you actually need to pass the second dan grading in kendo?"}
+  - {id: kd-03, split: train, topic: kendo, text: "My sensei says my tenouchi is too tight, so my men strike sounds dull."}
+  - {id: kd-04, split: test, topic: kendo, text: "How long after first dan can you try for second dan?"}
+  - {id: kd-05, split: train, topic: kendo, text: "I passed first kyu last year, so the next step is my first dan."}
+  - {id: kd-06, split: train, topic: kendo, text: "Oji waza are the counter techniques, like debana and suriage."}
+  - {id: kd-07, split: train, topic: kendo, text: "Debana men is my favourite, you hit him right as he starts to move."}
+  - {id: kd-08, split: train, topic: kendo, text: "Show me how suriage men works, the deflection and the strike in one motion."}
+  - {id: kd-09, split: test, topic: kendo, text: "Kaeshi do is when you block his men and cut his do on the way past."}
+  - {id: kd-10, split: train, topic: kendo, text: "I lost the shiai because I kept waiting instead of attacking."}
+  - {id: kd-11, split: train, topic: kendo, text: "Tonight's keiko at the dojo was brutal, my legs are dead."}
+  - {id: kd-12, split: train, topic: kendo, text: "Remind me to pack my bogu and my shinai before keiko tomorrow."}
+  - {id: kd-13, split: train, topic: kendo, text: "My kote got hit so many times in the shiai that my wrist is bruised."}
+  - {id: kd-14, split: test, topic: kendo, text: "Is tsuki allowed for kyu grades, or only from dan level?"}
+  - {id: kd-15, split: train, topic: kendo, text: "The dojo in Da Lat only has one sensei above fourth dan."}
+  - {id: kd-16, split: train, topic: kendo, text: "Can you explain the difference between kyu and dan in simple words?"}
+  - {id: kd-17, split: train, topic: kendo, text: "My tenouchi gets sloppy when I'm tired, especially on kote."}
+  - {id: kd-18, split: train, topic: kendo, text: "Watch me try a suriage kote, I think I'm finally getting it."}
+  - {id: kd-19, split: test, topic: kendo, text: "We practised oji waza for an hour, mostly kaeshi do and debana kote."}
+  - {id: kd-20, split: train, topic: kendo, text: "How heavy should a shinai be for someone my size?"}
+  - {id: kd-21, split: train, topic: kendo, text: "The bogu smells terrible after summer keiko, how do I clean it?"}
+  - {id: kd-22, split: train, topic: kendo, text: "In shiai, a clean tsuki counts the same as a men or a do."}
+  - {id: kd-23, split: train, topic: kendo, text: "My second dan grading has a kata part too, not just the fighting."}
+  - {id: kd-24, split: test, topic: kendo, text: "Sensei said my debana timing is good, but my kaeshi is too slow."}
+  - {id: kd-25, split: train, topic: kendo, text: "I want to practise tsuki, but only with bogu on and with a partner."}
+  - {id: kd-26, split: train, topic: kendo, text: "Is a third dan in kendo like a black belt in karate?"}
+  - {id: kd-27, split: train, topic: kendo, text: "Suriage waza only works if your tenouchi is relaxed."}
+  - {id: kd-28, split: train, topic: kendo, text: "After the shiai we bowed, cleaned the dojo floor, and went for pho."}
+  - {id: kd-29, split: test, topic: kendo, text: "Oji waza feels backwards to me, I always want to attack first."}
+  - {id: kd-30, split: train, topic: kendo, text: "My shinai cracked near the tip, is it still safe to use?"}
+
+  # ---- chess: openings, rules, players ---------------------------------------------
+  - {id: chs-01, split: train, topic: chess, text: "Let's play the Sicilian today, I want to try the Najdorf."}
+  - {id: chs-02, split: train, topic: chess, text: "Why is the Najdorf considered so sharp for Black?"}
+  - {id: chs-03, split: train, topic: chess, text: "Magnus Carlsen plays the Sicilian a lot less these days, right?"}
+  - {id: chs-04, split: test, topic: chess, text: "I missed an en passant capture and it cost me the game."}
+  - {id: chs-05, split: train, topic: chess, text: "Is en passant only possible right after the pawn moves two squares?"}
+  - {id: chs-06, split: train, topic: chess, text: "My opponent was in zugzwang, any move he made would lose."}
+  - {id: chs-07, split: train, topic: chess, text: "Explain zugzwang with a simple king and pawn ending."}
+  - {id: chs-08, split: train, topic: chess, text: "I like to fianchetto my bishop on the long diagonal."}
+  - {id: chs-09, split: test, topic: chess, text: "Does a kingside fianchetto work well against the Sicilian?"}
+  - {id: chs-10, split: train, topic: chess, text: "Carlsen won that endgame by squeezing his opponent into zugzwang."}
+  - {id: chs-11, split: train, topic: chess, text: "Show me the Najdorf on the board, the first ten moves."}
+  - {id: chs-12, split: train, topic: chess, text: "How many times has Carlsen been world champion?"}
+  - {id: chs-13, split: train, topic: chess, text: "After the fianchetto, I castle short and push the f pawn."}
+  - {id: chs-14, split: test, topic: chess, text: "Can you set up a position where en passant is the only winning move?"}
+
+  # ---- tech and products -----------------------------------------------------------
+  - {id: prod-01, split: train, topic: products, text: "My iPhone won't sync with the new macOS update."}
+  - {id: prod-02, split: train, topic: products, text: "Should I buy the new iPhone or wait for the next one?"}
+  - {id: prod-03, split: train, topic: products, text: "Can I run Docker on macOS without it eating all my memory?"}
+  - {id: prod-04, split: train, topic: products, text: "NVIDIA just released a new driver, should I update now?"}
+  - {id: prod-05, split: test, topic: products, text: "How much faster is the NVIDIA card for running local models?"}
+  - {id: prod-06, split: train, topic: products, text: "Push the fix to GitHub and open a pull request."}
+  - {id: prod-07, split: train, topic: products, text: "Is GitHub Copilot any good for TypeScript?"}
+  - {id: prod-08, split: train, topic: products, text: "The Docker image works, but the Kubernetes pod keeps crashing."}
+  - {id: prod-09, split: train, topic: products, text: "Explain Kubernetes to me like I've only ever used Docker."}
+  - {id: prod-10, split: test, topic: products, text: "Do I really need Kubernetes for a small side project?"}
+  - {id: prod-11, split: train, topic: products, text: "Convert this JavaScript file to TypeScript and fix the type errors."}
+  - {id: prod-12, split: train, topic: products, text: "Which is better for coding, Claude or ChatGPT?"}
+  - {id: prod-13, split: train, topic: products, text: "I asked ChatGPT the same question and it made up a library."}
+  - {id: prod-14, split: train, topic: products, text: "Claude wrote most of this function, but I still had to fix the tests."}
+  - {id: prod-15, split: test, topic: products, text: "My macOS laptop runs hot whenever Docker is running."}
+  - {id: prod-16, split: train, topic: products, text: "Does NVIDIA make the chip inside the Nintendo Switch?"}
+  - {id: prod-17, split: train, topic: products, text: "Check GitHub for open issues about the TypeScript build."}
+  - {id: prod-18, split: train, topic: products, text: "Can ChatGPT or Claude read a whole PDF at once?"}
+  - {id: prod-19, split: train, topic: products, text: "Back up the photos from my iPhone to the desktop, please."}
+
+  # ---- games -----------------------------------------------------------------------
+  - {id: play-01, split: test, topic: games, text: "I pulled a rare card from a Yu-Gi-Oh booster pack today."}
+  - {id: play-02, split: train, topic: games, text: "Is Yu-Gi-Oh harder to learn than Pokemon cards?"}
+  - {id: play-03, split: train, topic: games, text: "My little cousin only wants to play Pokemon on the Nintendo Switch."}
+  - {id: play-04, split: train, topic: games, text: "Which Pokemon game should I start with?"}
+  - {id: play-05, split: train, topic: games, text: "The new Zelda is the best game on the Nintendo Switch, change my mind."}
+  - {id: play-06, split: test, topic: games, text: "How long does it take to finish Zelda if I do all the shrines?"}
+  - {id: play-07, split: train, topic: games, text: "Splatoon is so chaotic, but it's the most fun I've had online."}
+  - {id: play-08, split: train, topic: games, text: "Is Splatoon worth it if I don't have friends who play?"}
+  - {id: play-09, split: train, topic: games, text: "I've died to the same boss in Elden Ring forty times."}
+  - {id: play-10, split: train, topic: games, text: "Should I play Elden Ring or Zelda first?"}
+  - {id: play-11, split: test, topic: games, text: "My Nintendo Switch controller keeps drifting to the left."}
+  - {id: play-12, split: train, topic: games, text: "Build me a Yu-Gi-Oh deck that beats my friend's dragons."}
+  - {id: play-13, split: train, topic: games, text: "Elden Ring looks much better on the PC than on a console."}
+  - {id: play-14, split: train, topic: games, text: "We played Splatoon until two in the morning again."}
+
+  # ---- Vietnam: places and food, said in English -----------------------------------
+  - {id: vn-01, split: train, topic: vietnam, text: "What's the fastest way to get from Da Lat to Ho Chi Minh City?"}
+  - {id: vn-02, split: test, topic: vietnam, text: "Is it cheaper to fly from Hanoi to Da Nang or take the train?"}
+  - {id: vn-03, split: train, topic: vietnam, text: "Find me a good pho place near Xuan Huong Lake."}
+  - {id: vn-04, split: train, topic: vietnam, text: "I had banh mi for breakfast and bun cha for lunch, and I regret nothing."}
+  - {id: vn-05, split: train, topic: vietnam, text: "The best com tam I ever had was in a tiny alley in Saigon."}
+  - {id: vn-06, split: train, topic: vietnam, text: "Should I visit Hoi An or Hue first if I only have three days?"}
+  - {id: vn-07, split: test, topic: vietnam, text: "Cao lau is only really made in Hoi An, right?"}
+  - {id: vn-08, split: train, topic: vietnam, text: "Is Ha Long Bay worth it in the rainy season?"}
+  - {id: vn-09, split: train, topic: vietnam, text: "My friends want to hike Langbiang this weekend if it doesn't rain."}
+  - {id: vn-10, split: train, topic: vietnam, text: "Bun bo Hue is spicier than pho, but I like it more."}
+  - {id: vn-11, split: train, topic: vietnam, text: "How far is Nha Trang from Da Lat by bus?"}
+  - {id: vn-12, split: test, topic: vietnam, text: "Can you find a banh xeo recipe that doesn't need a special pan?"}
+  - {id: vn-13, split: train, topic: vietnam, text: "Goi cuon are fresh spring rolls, not the fried ones."}
+  - {id: vn-14, split: train, topic: vietnam, text: "I need a ca phe sua da before I can think about anything."}
+  - {id: vn-15, split: train, topic: vietnam, text: "Banh trang nuong is basically Da Lat pizza, and it's cheap."}
+  - {id: vn-16, split: train, topic: vietnam, text: "What's the weather like in Sapa in December?"}
+  - {id: vn-17, split: test, topic: vietnam, text: "Phu Quoc is great for beaches, but the flights from Hanoi are expensive."}
+  - {id: vn-18, split: train, topic: vietnam, text: "Mi Quang is the noodle dish everyone eats in Da Nang."}
+  - {id: vn-19, split: train, topic: vietnam, text: "We walked around Xuan Huong Lake and then got che from a street stall."}
+  - {id: vn-20, split: train, topic: vietnam, text: "Is the overnight train from Hanoi to Hue comfortable?"}
+  - {id: vn-21, split: train, topic: vietnam, text: "My mum makes the best banh xeo, crispy and full of shrimp."}
+  - {id: vn-22, split: test, topic: vietnam, text: "Saigon traffic is crazy compared to Da Lat."}
+  - {id: vn-23, split: train, topic: vietnam, text: "Order me some bun cha and two goi cuon for dinner."}
+  - {id: vn-24, split: train, topic: vietnam, text: "How many hours is the drive from Ho Chi Minh City to the Mekong Delta?"}
+  - {id: vn-25, split: train, topic: vietnam, text: "The night market in Da Lat has the best banh trang nuong."}
+  - {id: vn-26, split: train, topic: vietnam, text: "Which is better for a honeymoon, Phu Quoc or Nha Trang?"}
+  - {id: vn-27, split: test, topic: vietnam, text: "I tried cao lau and mi Quang on the same day, and I can't pick a favourite."}
+  - {id: vn-28, split: train, topic: vietnam, text: "Bring a jacket for Sapa, it gets cold at night."}
+  - {id: vn-29, split: train, topic: vietnam, text: "There's a new com tam place near the university in Ho Chi Minh City."}
+  - {id: vn-30, split: train, topic: vietnam, text: "Can you find the opening hours of the flower gardens in Da Lat?"}
+  - {id: vn-31, split: train, topic: vietnam, text: "Che is my favourite dessert, especially on a hot day in Saigon."}
+  - {id: vn-32, split: test, topic: vietnam, text: "My ca phe sua da is too sweet, next time I'll ask for less milk."}
+  - {id: vn-33, split: train, topic: vietnam, text: "Is it safe to swim in Ha Long Bay, or should we just take the boat tour?"}
+  - {id: vn-34, split: train, topic: vietnam, text: "Let's climb Langbiang early, before the clouds come in."}
+  - {id: vn-35, split: train, topic: vietnam, text: "Hue has amazing history, but the bun bo Hue is the real reason I'd go."}
+  - {id: vn-36, split: train, topic: vietnam, text: "A banh mi in Hoi An costs less than a coffee in Hanoi."}
+  - {id: vn-37, split: test, topic: vietnam, text: "The ca phe sua da in Da Nang hit different, I swear."}
+  - {id: vn-38, split: train, topic: vietnam, text: "Order a banh mi and a bowl of pho, same as always."}
+  - {id: vn-39, split: train, topic: vietnam, text: "How tall is Langbiang mountain?"}
+  - {id: vn-40, split: train, topic: vietnam, text: "Plan a two day trip to Sapa with a homestay."}
+  - {id: vn-41, split: train, topic: vietnam, text: "Book a cruise on Ha Long Bay for next month."}
+  - {id: vn-42, split: test, topic: vietnam, text: "The seafood in Nha Trang was so fresh."}
+  - {id: vn-43, split: train, topic: vietnam, text: "How long is the ferry to Phu Quoc?"}
+  - {id: vn-44, split: train, topic: vietnam, text: "Is it safe to jog around Xuan Huong Lake at night?"}
+  - {id: vn-45, split: train, topic: vietnam, text: "Obama ate bun cha in Hanoi, didn't he?"}
+  - {id: vn-46, split: train, topic: vietnam, text: "Com tam with a fried egg is the perfect lunch."}
+  - {id: vn-47, split: test, topic: vietnam, text: "Is banh xeo from the south different from the one in the centre?"}
+  - {id: vn-48, split: train, topic: vietnam, text: "Find a bun bo Hue place that's open late."}
+  - {id: vn-49, split: train, topic: vietnam, text: "Make the goi cuon with shrimp, and extra herbs."}
+  - {id: vn-50, split: train, topic: vietnam, text: "My little sister eats banh trang nuong every single evening."}
+  - {id: vn-51, split: train, topic: vietnam, text: "What makes cao lau noodles so chewy?"}
+  - {id: vn-52, split: test, topic: vietnam, text: "Mi Quang has less broth than pho, right?"}
+  - {id: vn-53, split: train, topic: vietnam, text: "Is there vegan che, without condensed milk?"}
+
+  # ---- well-known people and companies ---------------------------------------------
+  - {id: who-01, split: train, topic: people, text: "What did Jensen Huang announce at the NVIDIA keynote?"}
+  - {id: who-02, split: train, topic: people, text: "Is Elon Musk still running Tesla and SpaceX at the same time?"}
+  - {id: who-03, split: train, topic: people, text: "Sam Altman says OpenAI will release a new model soon, is that true?"}
+  - {id: who-04, split: test, topic: people, text: "Anthropic was founded by Dario Amodei and his sister, right?"}
+  - {id: who-05, split: train, topic: people, text: "What's the difference between OpenAI and Anthropic?"}
+  - {id: who-06, split: train, topic: people, text: "Google and Microsoft are both building their own AI chips now."}
+  - {id: who-07, split: train, topic: people, text: "Sundar Pichai said something about Google search changing, find it."}
+  - {id: who-08, split: train, topic: people, text: "Satya Nadella turned Microsoft around, how did he do it?"}
+  - {id: who-09, split: test, topic: people, text: "Tim Cook presented the new iPhone at the Apple event."}
+  - {id: who-10, split: train, topic: people, text: "Is Apple going to make its own search engine?"}
+  - {id: who-11, split: train, topic: people, text: "Mark Zuckerberg keeps talking about Meta's smart glasses."}
+  - {id: who-12, split: train, topic: people, text: "Samsung phones are everywhere in Vietnam, but Apple is catching up."}
+  - {id: who-13, split: train, topic: people, text: "VinFast is Vingroup's car company, and they sell electric cars abroad."}
+  - {id: who-14, split: test, topic: people, text: "Is a VinFast cheaper than a Tesla in Vietnam?"}
+  - {id: who-15, split: train, topic: people, text: "Hideo Kojima made Metal Gear, and then Death Stranding."}
+  - {id: who-16, split: train, topic: people, text: "Shigeru Miyamoto created Mario and Zelda, didn't he?"}
+  - {id: who-17, split: train, topic: people, text: "What's Jensen Huang's leather jacket thing about?"}
+  - {id: who-18, split: train, topic: people, text: "Did Dario Amodei write an essay about AI and the future?"}
+  - {id: who-19, split: test, topic: people, text: "SpaceX launched another rocket this week, how many is that this year?"}
+  - {id: who-20, split: train, topic: people, text: "Meta wants everyone to wear their glasses, but I'd rather not."}
+  - {id: who-21, split: train, topic: people, text: "Vingroup owns hospitals, schools and even a phone brand, it's huge."}
+  - {id: who-22, split: train, topic: people, text: "Is Hideo Kojima working on a new game?"}
+  - {id: who-23, split: train, topic: people, text: "Shigeru Miyamoto is basically why I love Nintendo."}
+  - {id: who-24, split: test, topic: people, text: "What does Sundar Pichai think about AI replacing search?"}
+  - {id: who-25, split: train, topic: people, text: "Tim Cook said Apple doesn't want to rush into AI, find the interview."}
+  - {id: who-26, split: train, topic: people, text: "Mark Zuckerberg competes in jiu-jitsu tournaments, is that real?"}
+  - {id: who-27, split: train, topic: people, text: "Sam Altman and Elon Musk used to work together at OpenAI."}
+  - {id: who-28, split: train, topic: people, text: "Did Satya Nadella say Microsoft would use Anthropic models?"}
+  - {id: who-29, split: test, topic: people, text: "Samsung makes the memory chips for a lot of NVIDIA cards."}
+  - {id: who-30, split: train, topic: people, text: "Is the new Samsung Galaxy better than the iPhone?"}
+  - {id: who-31, split: train, topic: people, text: "VinFast opened a factory in the US, didn't they?"}
+  - {id: who-32, split: train, topic: people, text: "How much of Tesla does Elon Musk own?"}
+  - {id: who-33, split: train, topic: people, text: "Jensen Huang says every company will need AI factories."}
+  - {id: who-34, split: test, topic: people, text: "Dario Amodei and Anthropic care a lot about AI safety."}
+  - {id: who-35, split: train, topic: people, text: "Is Google Gemini better than ChatGPT at maths?"}
+  - {id: who-36, split: train, topic: people, text: "Vingroup is the biggest private company in Vietnam, right?"}
+  - {id: who-37, split: train, topic: people, text: "Did SpaceX's Starship blow up again, or was that a success?"}
+  - {id: who-38, split: train, topic: people, text: "Meta and Google both want to build AI assistants for phones."}
+  - {id: who-39, split: test, topic: people, text: "What did Sam Altman say about the next GPT model?"}
+  - {id: who-40, split: train, topic: people, text: "Sundar Pichai grew up in India and studied in the US, right?"}
+  - {id: who-41, split: train, topic: people, text: "Satya Nadella writes a lot of his own emails to the company, I heard."}
+  - {id: who-42, split: train, topic: people, text: "Is Tim Cook retiring soon?"}
+  - {id: who-43, split: train, topic: people, text: "Mark Zuckerberg's new model is open source, right?"}
+  - {id: who-44, split: test, topic: people, text: "Hideo Kojima's games are weird in the best way."}
+  - {id: who-45, split: train, topic: people, text: "Shigeru Miyamoto got the idea for Zelda from exploring caves as a kid."}

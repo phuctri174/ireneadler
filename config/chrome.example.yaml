@@ -1,0 +1,18 @@
+# Your own Chrome: everything you will look at or use opens here (YouTube, a site
+# you ask for, a research source, a panel link) - logged in, your tabs, your
+# extensions. Irene's own browser (a separate profile under core/) is only for
+# silent research fetching and reading pages.
+#
+# Irene only LAUNCHES into this profile (chrome.exe --profile-directory=...). She
+# can't automate it while it is running: Chrome allows one process per profile, so
+# no debugging port can be attached to yours. Playback in it is controlled through
+# Windows' media session instead (tools/media.py).
+#
+# Copy to config/chrome.yaml (gitignored) and fill in your own.
+
+chrome: C:\Program Files\Google\Chrome\Application\chrome.exe
+# your profile, found by the Google account name in Chrome's "Local State" - so a
+# renamed profile folder still resolves; profile_directory is the fallback.
+# Empty: use profile_directory as-is.
+account_name: ""
+profile_directory: Default

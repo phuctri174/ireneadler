@@ -1,0 +1,583 @@
+@import "./chrome.css";
+
+/* The primary surface: fills the transparent overlay window (the primary
+   monitor's work area - his taskbar stays), edge to edge. Laid out at config/hud.json's design size and scaled
+   uniformly (--ui-scale, --ui-w, --ui-h set from JS); a different aspect widens or
+   heightens the layout, never stretches it. Knows nothing about the panel. */
+
+.irene {
+  --ui-scale: 1;
+
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 40;
+  width: var(--ui-w, 1920px);
+  height: var(--ui-h, 1080px);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, calc(-50% + 18px)) scale(calc(var(--ui-scale) * 0.97));
+  transform-origin: 50% 50%;
+  transition:
+    opacity 260ms ease-out,
+    transform 320ms cubic-bezier(0.18, 0.9, 0.3, 1);
+}
+
+.irene.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, -50%) scale(var(--ui-scale));
+}
+
+.irene.is-dormant {
+  --accent: var(--slate);
+}
+
+.irene.is-listening {
+  --accent: var(--cyan);
+}
+
+.irene.is-thinking {
+  --accent: var(--amber);
+}
+
+.irene.is-speaking {
+  --accent: var(--mint);
+}
+
+.irene.is-error {
+  --accent: var(--red);
+}
+
+.irene-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 30px 40px 22px;
+  border: 1px solid var(--edge);
+  border-radius: 0;
+  background:
+    linear-gradient(180deg, rgba(20, 44, 56, 0.55), rgba(4, 10, 15, 0.2)),
+    var(--shell);
+  /* no backdrop blur: the shell is 94% opaque, and re-blurring 2400x1350 of the
+     desktop behind every face frame was GPU work that stalled under the model */
+  box-shadow:
+    0 40px 110px rgba(0, 0, 0, 0.62),
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 var(--edge-bright),
+    inset 0 0 120px rgba(34, 224, 255, 0.05);
+  overflow: hidden;
+  pointer-events: auto;
+  transition: box-shadow 260ms ease-out;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .irene-shell {
+    background: var(--shell-solid);
+  }
+}
+
+/* ---- arrival flare ------------------------------------------------------ */
+
+.irene-flare {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    130% 130% at 50% 60%,
+    rgba(255, 255, 255, 0.6),
+    var(--accent) 42%,
+    transparent 76%
+  );
+  mix-blend-mode: screen;
+  animation: irene-wash 900ms cubic-bezier(0.16, 0.9, 0.3, 1) forwards;
+}
+
+.irene-flare::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid #eaffff;
+  border-radius: 0;
+  animation: irene-ring 900ms ease-out forwards;
+}
+
+@keyframes irene-wash {
+  0% {
+    opacity: 1;
+  }
+  22% {
+    opacity: 0.62;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes irene-ring {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.04);
+    opacity: 0;
+  }
+}
+
+/* ---- identity, status, meters ------------------------------------------- */
+
+/* meters | her name, a badge centred at the top | status */
+.irene-head {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 40px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.irene-head * {
+  pointer-events: none;
+}
+
+.irene-badge {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: -14px;
+}
+
+.irene-badge-plate {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 14px 46px 12px;
+  border: 1px solid var(--accent);
+  /* a cut-corner plate, the HUD's own shape */
+  clip-path: polygon(22px 0, calc(100% - 22px) 0, 100% 50%, calc(100% - 22px) 100%, 22px 100%, 0 50%);
+  background:
+    linear-gradient(180deg, rgba(234, 255, 255, 0.12), rgba(234, 255, 255, 0) 55%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.55), rgba(10, 30, 38, 0.85) 50%, rgba(0, 0, 0, 0.55));
+  box-shadow:
+    inset 0 0 0 1px rgba(234, 255, 255, 0.08),
+    inset 0 0 36px color-mix(in srgb, var(--accent) 35%, transparent);
+  transition: border-color 260ms ease-out, box-shadow 260ms ease-out;
+}
+
+/* the plate's outline (clip-path cuts the border at the points) */
+.irene-badge-plate::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  clip-path: polygon(
+    22px 0, calc(100% - 22px) 0, 100% 50%, calc(100% - 22px) 100%, 22px 100%, 0 50%, 22px 0,
+    23px 2px, 2.5px 50%, 23px calc(100% - 2px), calc(100% - 23px) calc(100% - 2px), calc(100% - 2.5px) 50%, calc(100% - 23px) 2px, 23px 2px
+  );
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.irene-badge-gem {
+  width: 10px;
+  height: 10px;
+  transform: rotate(45deg);
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent), 0 0 22px var(--accent);
+}
+
+.irene-badge-wing {
+  position: absolute;
+  top: 34px;
+  right: calc(100% + 10px);
+  width: 120px;
+  height: 2px;
+  background: linear-gradient(270deg, var(--accent), transparent);
+  box-shadow: 0 0 8px var(--accent);
+}
+
+.irene-badge-wing::after {
+  content: "";
+  position: absolute;
+  top: -5px;
+  right: 18px;
+  width: 6px;
+  height: 6px;
+  transform: rotate(45deg);
+  border: 1px solid var(--accent);
+}
+
+.irene-badge-wing.is-right {
+  right: auto;
+  left: calc(100% + 10px);
+  transform: scaleX(-1);
+}
+
+.irene-mark {
+  font-family: var(--mono);
+  font-size: 50px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.3em;
+  /* the last letter's tracking would push the name off centre */
+  margin-right: -0.3em;
+  white-space: nowrap;
+  color: #eaffff;
+  text-shadow:
+    0 0 2px #fff,
+    0 0 22px var(--accent),
+    0 0 56px var(--accent);
+  transition: text-shadow 260ms ease-out;
+}
+
+.irene-expand {
+  margin-top: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.irene-expand b {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.irene-status {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border: 1px solid var(--edge);
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+}
+
+.irene-status-text {
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--accent);
+  text-shadow: 0 0 14px var(--accent);
+}
+
+.irene-lamp {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  animation: irene-pulse 2.6s ease-in-out infinite;
+}
+
+.irene.is-dormant .irene-lamp {
+  animation-duration: 4.2s;
+}
+
+.irene.is-thinking .irene-lamp,
+.irene.is-error .irene-lamp {
+  animation-duration: 0.7s;
+}
+
+@keyframes irene-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.irene-meters {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+}
+
+.irene-meter {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.irene-meter.is-wide {
+  flex: 1;
+}
+
+.irene-meter .readout {
+  font-size: 13px;
+}
+
+.irene-bar {
+  position: relative;
+  flex: 1;
+  height: 8px;
+  border: 1px solid rgba(34, 224, 255, 0.22);
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(34, 224, 255, 0.14) 0 2px,
+    transparent 2px 6px
+  );
+}
+
+.irene-bar-fill {
+  position: absolute;
+  inset: 1px;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  will-change: transform;
+}
+
+.irene.is-muted .irene-bar {
+  border-color: rgba(255, 182, 72, 0.45);
+}
+
+.irene-rail {
+  margin: 18px 0 16px;
+}
+
+/* ---- LED well ------------------------------------------------------------ */
+
+.irene-well {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  padding: 26px 60px;
+  border: 1px solid rgba(34, 224, 255, 0.12);
+  border-radius: 4px;
+  background:
+    radial-gradient(120% 90% at 50% 40%, rgba(34, 224, 255, 0.07), transparent 70%),
+    var(--well);
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.75);
+}
+
+/* the face is positioned, not flowed: a canvas in flow sizes itself from its
+   backing store and would push the well (and the footer) off the shell */
+.irene-well .face {
+  position: absolute;
+  inset: 28px 34px 22px 22px;
+}
+
+.irene-well-tag {
+  position: absolute;
+  top: 9px;
+  left: 12px;
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.irene-well-scale {
+  position: absolute;
+  top: 16px;
+  right: 12px;
+  bottom: 16px;
+  display: flex;
+}
+
+/* ---- foot --------------------------------------------------------------- */
+
+.irene-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+}
+
+.irene-foot .readout {
+  font-size: 11px;
+  opacity: 0.65;
+}
+
+/* ---- emergency dock ------------------------------------------------------
+   Small circular controls stacked in the bottom-left corner - the right side is
+   where the panel opens, and PANEL must stay reachable to close it. Quiet on
+   purpose: a fallback for when voice fails, never competing with the face. */
+
+.irene-dock {
+  position: absolute;
+  /* inside the well's bottom-left corner */
+  left: 70px;
+  bottom: 84px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.irene-dock-btn {
+  --dwell: 0;
+
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(34, 224, 255, 0.2);
+  border-radius: 50%;
+  color: var(--ink-dim);
+  background: rgba(2, 8, 12, 0.55);
+  opacity: 0.42;
+  transition:
+    opacity 140ms ease-out,
+    border-color 140ms ease-out,
+    color 140ms ease-out,
+    transform 140ms ease-out;
+}
+
+/* dwell progress as a ring filling clockwise around the button */
+.irene-dock-btn::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: conic-gradient(var(--accent) calc(var(--dwell) * 360deg), transparent 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  opacity: 0.9;
+}
+
+.irene-dock-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+.irene-dock-label {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  white-space: nowrap;
+  color: var(--ink);
+  opacity: 0;
+  transform: translate(-6px, -50%);
+  transition:
+    opacity 140ms ease-out,
+    transform 140ms ease-out;
+  pointer-events: none;
+}
+
+.irene-dock-btn.is-hover {
+  opacity: 1;
+  color: var(--accent);
+  border-color: var(--accent);
+  transform: scale(1.08);
+}
+
+.irene-dock-btn.is-hover .irene-dock-label {
+  opacity: 0.9;
+  transform: translate(0, -50%);
+}
+
+.irene-dock-btn.is-flash {
+  opacity: 1;
+  color: #04121a;
+  background: var(--accent);
+  border-color: #eaffff;
+  box-shadow: 0 0 26px var(--accent);
+}
+
+/* latched (MUTE while muted): stays lit in amber so the state is never hidden */
+.irene-dock-btn.is-on {
+  opacity: 0.85;
+  color: var(--amber);
+  border-color: rgba(255, 182, 72, 0.6);
+}
+
+/* ---- boot-up: every show, ~4 s before the entrance (ui/boot.tsx timeline) -------
+   Depth: the grid (far, boot.css) first, the cards (mid) next, her name and the
+   status (foreground) last - each flies past its place and snaps back. */
+
+.irene-boot-status {
+  bottom: 70px;
+}
+
+/* 0: power on, one flicker; 400: the frame opens from its centre line */
+.irene.is-booting .irene-shell {
+  animation:
+    boot-flicker 420ms steps(1, end) both,
+    boot-open 700ms cubic-bezier(0.2, 0.8, 0.2, 1) 400ms both;
+}
+
+/* 620: the corner brackets land, one by one (the relay clicks) */
+.irene.is-booting .brackets span {
+  animation: boot-bracket 520ms cubic-bezier(0.2, 0.8, 0.2, 1) 620ms both;
+}
+
+.irene.is-booting .brackets span:nth-child(2) { animation-delay: 680ms; }
+.irene.is-booting .brackets span:nth-child(3) { animation-delay: 740ms; }
+.irene.is-booting .brackets span:nth-child(4) { animation-delay: 800ms; }
+
+/* 900: mid layer - the parts rise past their place and snap back, one by one */
+.irene.is-booting .irene-rail,
+.irene.is-booting .irene-well,
+.irene.is-booting .irene-foot,
+.irene.is-booting .irene-dock,
+.irene.is-booting .irene-meters,
+.irene.is-booting .irene-status {
+  animation: boot-pop 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.irene.is-booting .irene-meters { animation-delay: 900ms; }
+.irene.is-booting .irene-status { animation-delay: 1020ms; }
+.irene.is-booting .irene-rail { animation-delay: 1120ms; }
+.irene.is-booting .irene-well { animation-delay: 1240ms; }
+.irene.is-booting .irene-foot { animation-delay: 1420ms; }
+.irene.is-booting .irene-dock { animation-delay: 1540ms; }
+
+/* 1150: the signal meter fills from nothing */
+.irene.is-booting .irene-bar-fill {
+  transform-origin: left;
+  animation: boot-open-x 900ms cubic-bezier(0.2, 0.8, 0.2, 1) 1150ms both;
+}
+
+@keyframes boot-open-x {
+  from { transform: scaleX(0); }
+}
+
+/* 1300: labels type themselves, a cursor at the end */
+.irene.is-booting .readout,
+.irene.is-booting .irene-expand {
+  animation:
+    boot-type 700ms steps(18) 1300ms both,
+    boot-caret 900ms linear 1300ms both;
+}
+
+/* 2100: the one line that stutters and recovers (the tick rail under her head) */
+.irene.is-booting .irene-rail {
+  animation:
+    boot-pop 700ms cubic-bezier(0.2, 0.8, 0.2, 1) 1120ms both,
+    boot-stutter 300ms steps(1, end) 2100ms;
+}
+
+/* 3900: foreground - her name flies in from in front of the glass, locking
+   with the reveal's IRENE ADLER */
+.irene.is-booting .irene-badge {
+  animation: boot-fly 900ms cubic-bezier(0.2, 0.8, 0.2, 1) 3900ms both;
+}
+
+/* no face during the boot: she first appears with her entrance - the board is
+   the reveal's until then */
+.irene.is-booting .irene-well .face {
+  visibility: hidden;
+}

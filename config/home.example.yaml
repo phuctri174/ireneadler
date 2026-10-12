@@ -1,0 +1,12 @@
+# Where you are. Every turn's context carries it, like the date (core/irene/home.py),
+# so the weather, "near me", sunrise, local prices and the like are YOURS - and a
+# location-dependent search that names no place gets it added (never New York).
+#
+# Copy to config/home.yaml (gitignored) and fill in your own. City-level is enough.
+city: London
+region: England
+country: United Kingdom
+timezone: Europe/London
+# for anything that wants coordinates (the weather card): the city centre
+latitude: 51.5072
+longitude: -0.1276

@@ -1,0 +1,149 @@
+[
+  {
+    "_": "chess: the piece set down, her hand moving to the clock",
+    "name": "entrance-chess",
+    "stage": {
+      "state": "speaking",
+      "level": 0.35,
+      "entrance": {
+        "name": "chess",
+        "at": -2385
+      }
+    }
+  },
+  {
+    "_": "kendo: the shinai landing on the men, mid-kiai",
+    "name": "entrance-kendo",
+    "stage": {
+      "state": "speaking",
+      "level": 0.35,
+      "entrance": {
+        "name": "kendo",
+        "at": -1196
+      }
+    }
+  },
+  {
+    "_": "web_swing: mid-swing, legs tucked, the line taut",
+    "name": "entrance-web_swing",
+    "stage": {
+      "state": "speaking",
+      "level": 0.35,
+      "entrance": {
+        "name": "web_swing",
+        "at": -1380
+      }
+    }
+  },
+  {
+    "_": "energy_wave: the beam across the matrix",
+    "name": "entrance-energy_wave",
+    "stage": {
+      "state": "speaking",
+      "level": 0.35,
+      "entrance": {
+        "name": "energy_wave",
+        "at": -2640
+      }
+    }
+  },
+  {
+    "_": "run_in: the skid, feet dug in, arms flung out",
+    "name": "entrance-run_in",
+    "stage": {
+      "state": "speaking",
+      "level": 0.35,
+      "entrance": {
+        "name": "run_in",
+        "at": -2112
+      }
+    }
+  },
+  {
+    "_": "cards: the card revealed, her face on it",
+    "name": "entrance-cards",
+    "stage": {
+      "state": "speaking",
+      "level": 0.35,
+      "entrance": {
+        "name": "cards",
+        "at": -3588
+      }
+    }
+  },
+  {
+    "_": "pop_in: out of the box, both arms up",
+    "name": "entrance-pop_in",
+    "stage": {
+      "state": "speaking",
+      "level": 0.35,
+      "entrance": {
+        "name": "pop_in",
+        "at": -1890
+      }
+    }
+  },
+  {
+    "_": "robo_pet: the pup carrying the ball back",
+    "name": "entrance-robo_pet",
+    "stage": {
+      "state": "speaking",
+      "level": 0.35,
+      "entrance": {
+        "name": "robo_pet",
+        "at": -2976
+      }
+    }
+  },
+  {
+    "_": "gaming: fists up, the fire sitting on her head",
+    "name": "entrance-gaming",
+    "stage": {
+      "state": "speaking",
+      "level": 0.35,
+      "entrance": {
+        "name": "gaming",
+        "at": -3332
+      }
+    }
+  },
+  {
+    "_": "bow: this round's new gesture",
+    "name": "cue-bow",
+    "stage": {
+      "state": "speaking",
+      "level": 0.3,
+      "reaction": {
+        "name": "bow",
+        "at": -700
+      }
+    }
+  },
+  {
+    "_": "satisfied: the expression that came with save_panel_pdf",
+    "name": "cue-satisfied",
+    "stage": {
+      "state": "speaking",
+      "level": 0.3,
+      "emotion": "satisfied"
+    }
+  },
+  {
+    "_": "sulking: new this round",
+    "name": "cue-sulking",
+    "stage": {
+      "state": "speaking",
+      "level": 0.3,
+      "emotion": "sulking"
+    }
+  },
+  {
+    "_": "sheepish: new this round",
+    "name": "cue-sheepish",
+    "stage": {
+      "state": "speaking",
+      "level": 0.3,
+      "emotion": "sheepish"
+    }
+  }
+]

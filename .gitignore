@@ -1,0 +1,83 @@
+.venv/
+__pycache__/
+node_modules/
+target/
+models/
+*.task
+*.wasm
+
+!hud/public/mediapipe/hand_landmarker.task
+!hud/public/mediapipe/pose_landmarker_lite.task
+!hud/public/mediapipe/vision_wasm_internal.wasm
+.claude/
+
+# rendered locally for listening; not source
+core/voice_samples/
+
+# personal hand-pose measurements, local only
+core/calibration/
+
+# rendered key frames for review (hud/scripts/render_frames.mjs); not source
+hud/shots/
+
+# per-turn timing (irene/app.py log_turn); local only
+core/logs/
+
+# saved research (tools/research.py): screenshots and extracts, local only
+core/data/
+
+# his voice: every voice turn and the corpus recordings (irene/voice_data.py); local only
+core/voice_data/
+
+# quick replies rendered in her live voice at startup (irene/quick.py); a cache
+core/assets/quick/
+
+# skit lines rendered in her voice (irene/skit.py): a cache, rebuilt on demand
+core/assets/skits/
+
+# ---- personal: his own data, never published. Each config has a committed
+# config/<name>.example.yaml that a fresh clone runs on (tools/localconfig.py).
+config/chrome.yaml
+config/home.yaml
+config/pronunciation.yaml
+config/vocabulary.yaml
+config/summon_music.yaml
+# frames of his own hand and body (cut from core/calibration/): the trainers write
+# them; the parity tests skip without them (hud/tests/run.mjs)
+hud/tests/zoom.golden.json
+hud/tests/zoom.engine.json
+hud/tests/kamae.golden.json
+hud/tests/strike.golden.json
+# reference images that aren't ours to publish (third-party fan art, the club's mark)
+assets/domain-expansion.png
+assets/dalat-kendo-logo.png
+
+# ---- large or generated: fetched or rebuilt by the setup steps (README)
+*.mp3
+*.m4a
+*.flac
+*.gguf
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.onnx
+stockfish*/
+core/irene-browser/
+hud/.verify/
+
+# ---- belt and braces: personal or bulky wherever it lands
+# voiceprints and embeddings (his voice, biometric) - core/data/ already, and anywhere else
+*.npz
+*.npy
+# recordings, documents and video he may drop in a working folder (skit props, lectures)
+*.pdf
+*.mp4
+*.mov
+*.webm
+# credentials, if one is ever needed
+.env
+.env.*
+*.pem
+*.key
+hud/.verify-replay/

@@ -1,0 +1,17 @@
+/* LED dot-matrix face. The matrix is drawn on a canvas (led/render.ts); this is
+   only the fixture it sits in. */
+
+.face {
+  --face-breathe: 1;
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  opacity: var(--face-breathe);
+}
+
+.face-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

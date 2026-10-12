@@ -1,0 +1,33 @@
+{
+  "_about": "First Dance. Ctrl+Alt+Shift+K starts it (the newest file in config/skits/), Ctrl+Alt+Shift+X aborts; K mid-take starts over. She starts hidden, and wakes on Hey Irene (the domain expansion) or Irene Adler (her Victorian scene) - her full intro, boot and summon song, every take. The prop - First Dance in Kendo - is only a PDF on his Desktop (core/scripts/skit_pdf.py first_dance); nothing is put on her panel. Beats run in order - every key is explained in core/irene/skit.py. Beat 6 is her working state while he apologises: it waits for him. Beat 10 repeats his beat-7 words back at him. Her lines are slowed (speed < 1, same pitch) and rendered steady (temperature 0.5-0.6) - the end, from Nevermind on, slowest. The 2 s silence after beat 10 is the comedy: exact, and nothing fills it.",
+  "beats": [
+    { "who": "wait_for_me", "note": "Hey Irene - or Irene Adler, for her Victorian scene", "wake": true, "silence_ms": 700 },
+    { "who": "summon", "entrance": "domain_expansion", "adler": "victorian", "boot": true, "music": true },
+    { "who": "irene", "line": "What's up, Mister Tri?", "cue": ["happy", "wave"], "speed": 0.95, "temperature": 0.6 },
+    { "who": "wait_for_me", "note": "his long rant, ending 'I hate you so bad'", "silence_ms": 1500 },
+    {
+      "who": "irene",
+      "line": "I'm so sorry, Mister Tri. Let me redo it for you.",
+      "cue": "sobbing",
+      "speed": 0.92,
+      "temperature": 0.6,
+      "sound": "wail",
+      "sound_gain": 0.75,
+      "sound_lead_ms": 1100,
+      "max_gap_ms": 700
+    },
+    { "who": "working", "prop": "folder", "hold_ms": 2500 },
+    { "who": "wait_for_me", "note": "Nevermind, I'll take that back. I'm sorry.", "silence_ms": 900 },
+    {
+      "who": "irene",
+      "line": "Anyway... although you hate me, I still don't hate you the way she does, Mister Tri.",
+      "cue": "innocent",
+      "speed": 0.92,
+      "temperature": 0.5,
+      "max_gap_ms": 800
+    },
+    { "who": "wait_for_me", "note": "What did you just say?", "silence_ms": 700 },
+    { "who": "irene", "line": "Nevermind, I'll take that back.", "cue": "peeking", "speed": 0.85, "temperature": 0.6, "max_gap_ms": 350, "pause_after_ms": 2000 },
+    { "who": "irene", "line": "...even though I was telling the truth.", "cue": "smug", "speed": 0.85, "temperature": 0.5, "pause_after_ms": 2500 }
+  ]
+}
