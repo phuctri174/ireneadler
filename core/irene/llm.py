@@ -49,11 +49,16 @@ class Ollama:
         # Ollama's own counters for the last streamed call (see stats())
         self.last: dict = {}
         self._client = httpx.AsyncClient(base_url=OLLAMA, timeout=180)
+        # out of VRAM on purpose (a lecture capture): background warm-ups wait - only
+        # a real request (his turn, the summary) may load it
+        self.parked = False
         # thinking models (gemma4, qwen3) answer far slower with it on; gemma3 has no
         # thinking mode and rejects the flag outright
         self._think = {} if model.startswith("gemma3") else {"think": False}
 
-    async def chat(self, messages: list[dict], temperature: float = 0.6) -> str:
+    async def chat(self, messages: list[dict], temperature: float = 0.6, json_mode: bool = False) -> str:
+        """json_mode: Ollama constrains the output to valid JSON (live, gemma closed
+        brackets in the wrong order often enough to lose a lecture summary's parts)."""
         r = await self._client.post(
             "/api/chat",
             json={
@@ -62,6 +67,7 @@ class Ollama:
                 "stream": False,
                 "keep_alive": KEEP_ALIVE,
                 "options": {"temperature": temperature, "num_ctx": NUM_CTX},
+                **({"format": "json"} if json_mode else {}),
                 **self._think,
             },
         )
@@ -96,6 +102,8 @@ class Ollama:
     async def prefill(self, messages: list[dict]) -> None:
         """Read `messages` into Ollama's cache and stop (brain.Conversation.warm_cache).
         Cancelling it closes the request; Ollama keeps what it had read."""
+        if self.parked:
+            return
         try:
             r = await self._client.post(
                 "/api/chat",

@@ -57,7 +57,7 @@ def test_image_goes_to_the_model_once_then_leaves_history(monkeypatch):
         "<speak>A code editor, sir.</speak>",
     ])
     conv = Conversation(llm)
-    asyncio.run(conv.respond("what's on my screen?", ShieldHost()))
+    asyncio.run(conv.respond("what does this error on my screen mean?", ShieldHost()))
     sent = llm.seen[1][-1]
     assert sent["content"].startswith("[tool result for capture_screen]")
     assert "images" not in sent  # dropped from history once answered (same dict object)
@@ -79,7 +79,7 @@ def test_image_is_attached_on_the_call_that_answers(monkeypatch):
         '<tool_call>{"name": "capture_screen", "arguments": {"target": "full"}}</tool_call>',
         "<speak>A code editor, sir.</speak>",
     ])
-    asyncio.run(Conversation(llm).respond("what's on my screen?", ShieldHost()))
+    asyncio.run(Conversation(llm).respond("what does this error on my screen mean?", ShieldHost()))
     assert snapshots[1][-1]["images"] == ["SU1BR0U="]
     assert "images" not in snapshots[0][-1]
 

@@ -158,6 +158,8 @@ export const HANDS = {
   fist: { index: CURL, middle: CURL, ring: CURL, pinky: CURL, thumb: CURL },
   point: { index: STRAIGHT, middle: CURL, ring: CURL, pinky: CURL, thumb: CURL },
   peace: { index: { ext: 1, lean: -13 }, middle: { ext: 1, lean: 12 }, ring: CURL, pinky: CURL, thumb: CURL },
+  // counting: three fingers up (countOff's last count)
+  three: { index: { ext: 1, lean: -12 }, middle: { ext: 1, lean: 0 }, ring: { ext: 1, lean: 11 }, pinky: CURL, thumb: CURL },
   // the summon sign: index and middle lean into each other and cross, middle in front
   crossed: {
     index: { ext: 1, lean: 27, shift: { x: -0.4, y: 0.6 } },

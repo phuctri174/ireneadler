@@ -47,6 +47,8 @@
 .cb-text {
   margin: 0 0 0.85em;
   text-wrap: pretty;
+  /* a block's own line breaks (a list of points) are kept, as in the PDF */
+  white-space: pre-line;
 }
 
 .cb-quote {

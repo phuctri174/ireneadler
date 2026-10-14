@@ -3,6 +3,8 @@
 kokoro
 soundfile
 sounddevice
+# lecture capture (irene/lecture.py): WASAPI loopback - what the PC plays, apart from his mic
+soundcard
 fastapi
 uvicorn[standard]
 websockets

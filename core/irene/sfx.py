@@ -696,12 +696,60 @@ def boot(rng: np.random.Generator, dur: float | None = None) -> np.ndarray:
     return _norm(out)
 
 
+def bubble_snap(rng: np.random.Generator, dur: float | None = None) -> np.ndarray:
+    """A manga speech bubble slamming in: a hard paper-crack transient, a bright
+    snapped pop, and a tiny high ring as it settles."""
+    t = _t(0.22)
+    crack = _band(rng.standard_normal(len(t)), 2500, 10000) * np.exp(-t * 140)
+    pop_ = np.sin(_sweep(1600, 520, 0.22, 0.35)) * np.exp(-t * 34)
+    ring = np.sin(TAU * 3150 * t) * np.exp(-t * 26) * 0.18
+    knock = np.sin(_sweep(240, 110, 0.22)) * np.exp(-t * 45) * 0.6
+    return _norm(crack * 1.4 + pop_ * 0.7 + ring + knock)
+
+
+# when the HUD's domain moments happen, after the visor's summon/start (led/summon.ts:
+# part2 is sent DOMAIN_PART2_S in; the eye reaches full burn HOOK_IN + 0.75 LIFT later)
+DOMAIN_PART2_S = 0.42
+DOMAIN_REVEAL_S = DOMAIN_PART2_S + 0.22 + 0.45 * 0.75
+
+
+def domain_win(rng: np.random.Generator, dur: float | None = None) -> np.ndarray:
+    """The domain expansion, re-fired on a line (skit "domain"): the summon's own
+    riser and bass swell under the visor sliding in, then - on the ice-blue eye - a
+    deep impact (a sub drop, a body hit, a cold crystalline shimmer and a reversed
+    suck into it). (bubble_snap goes on top when a line has a speech bubble.)"""
+    # (every effect is under 3 s: the impact's tail is over by ~2.6 s)
+    out = np.zeros(int(2.9 * SR), np.float32)
+    reveal = int(DOMAIN_REVEAL_S * SR)
+    # the visor: the summon's whoosh, rising and stopping dead at the reveal
+    rise = riser(DOMAIN_REVEAL_S, rng)
+    _place(out, rise * 0.55, 0)
+    # the summon's bass swell, peaking on the eye
+    from .summon_fx import bass_swell
+
+    _place(out, bass_swell(DOMAIN_REVEAL_S, 1.6) * 0.9, 0)
+    # a reversed shimmer sucked INTO the reveal: cold air pulled in before the hit
+    suck = chime(4, rng)[: int(0.5 * SR)][::-1] * np.linspace(0, 1, int(0.5 * SR)) ** 2
+    _place(out, suck * 0.35, max(0, reveal - len(suck)))
+    # the impact: a sub drop with a hard body under it
+    t = _t(1.6)
+    sub = np.sin(_sweep(95, 32, 1.6, 0.4)) * np.exp(-t * 2.2)
+    body = _band(rng.standard_normal(len(t)), 60, 900) * np.exp(-t * 18)
+    crack = _band(rng.standard_normal(len(t)), 1500, 9000) * np.exp(-t * 55) * 0.5
+    _place(out, (sub * 1.0 + body * 0.7 + crack).astype(np.float32), reveal)
+    # the eye's cold shimmer, ringing out under it
+    shimmer = chime(4, rng)
+    _place(out, highpass(shimmer, 900) * 0.4, reveal + int(0.05 * SR))
+    return _norm(out)
+
+
 EFFECTS: dict[str, Callable[..., np.ndarray]] = {
     fn.__name__: fn
     for fn in (
         click, swish, thwack, thwip, whoosh, thud, charge, beam, paper, dust, footsteps, skid, riffle, ding, sparkle,
         rattle, pop, glitch, beep, boing, chirp, giggle, gasp, sigh, tada, boop, wail,
         kiai, clock_tap, bark, meow, mash, game_over, fire, whimper, carriage_bell, boot, huff, flags,
+        bubble_snap, domain_win,
     )
 }
 

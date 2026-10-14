@@ -23,7 +23,7 @@ function at(stage) {
   if (s.entrance) s.entrance = { ...s.entrance, at: NOW + s.entrance.at };
   if (s.reaction) s.reaction = { ...s.reaction, at: NOW + s.reaction.at };
   if (s.activity) s.activity = { ...s.activity, at: NOW + s.activity.at };
-  if (s.summon) s.summon = { start: NOW + s.summon.start, part2: s.summon.part2 == null ? null : NOW + s.summon.part2 };
+  if (s.summon) s.summon = { ...s.summon, start: NOW + s.summon.start, part2: s.summon.part2 == null ? null : NOW + s.summon.part2 };
   if (s.emotionAt != null) s.emotionAt = NOW + s.emotionAt;
   const f = new Frame();
   compose(f, s);

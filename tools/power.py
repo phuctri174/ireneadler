@@ -212,9 +212,25 @@ def _keep(flags: int) -> None:
     _keeper.hold(flags)
 
 
+# who needs the system awake right now: "dark" (screens-off mode), "lecture" (a
+# capture running - he may be asleep, the PC must not be). Any one keeps it up.
+_AWAKE: set[str] = set()
+
+
+def stay_awake(reason: str, on: bool) -> None:
+    """Hold (or release) the system awake for `reason`; the displays may still sleep."""
+    (_AWAKE.add if on else _AWAKE.discard)(reason)
+    _keep(ES_CONTINUOUS | (ES_SYSTEM_REQUIRED if _AWAKE else 0))
+    log.info("system kept awake for: %s", ", ".join(sorted(_AWAKE)) or "nothing - normal sleep allowed")
+
+
+def awake_reasons() -> set[str]:
+    return set(_AWAKE)
+
+
 def displays_off() -> None:
     """The PC stays awake (system required), the monitors go dark."""
-    _keep(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
+    stay_awake("dark", True)
     ctypes.windll.user32.PostMessageW(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, MONITOR_OFF)
     log.info("screens off: monitors dark, system kept awake")
 
@@ -224,7 +240,8 @@ def displays_on() -> None:
     wakes displays on input: a zero-distance mouse nudge (moves nothing) plus the
     display-required flag and the monitor-power message."""
     _keep(ES_DISPLAY_REQUIRED)
-    _keep(ES_CONTINUOUS)
+    # the system may sleep again - unless something else (a lecture) still holds it
+    stay_awake("dark", False)
     ctypes.windll.user32.PostMessageW(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, MONITOR_ON)
     nudge = _Input(type=INPUT_MOUSE, mi=_MouseInput(0, 0, 0, MOUSEEVENTF_MOVE, 0, 0))
     ctypes.windll.user32.SendInput(1, ctypes.byref(nudge), ctypes.sizeof(_Input))

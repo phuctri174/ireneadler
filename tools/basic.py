@@ -94,7 +94,7 @@ async def set_timer(ctx: ToolContext, minutes: float, label: str = "") -> str:
 
 @tool(
     "forget_conversation",
-    "Clear this conversation's history. Only when he explicitly asks you to forget it.",
+    "Clear this conversation's history (and what your memory kept of it). Only when he explicitly asks you to forget it.",
     confirm=True,
     readonly=False,
     summary=lambda _args: "Forget everything said in this conversation",

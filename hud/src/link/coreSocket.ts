@@ -19,7 +19,8 @@ export type CoreMessage =
   | { type: "panel"; value: PanelContent | null }
   | { type: "transcript"; role: "user" | "irene"; text: string }
   | { type: "muted"; value: boolean }
-  | { type: "summon"; phase: SummonPhase }
+  // hold_ms, bubble: a skit line's domain expansion (core/irene/skit.py)
+  | { type: "summon"; phase: SummonPhase; hold_ms?: number; bubble?: string }
   | { type: "activity"; value: string | null; loops?: number }
   // keiko (core/irene/keiko.py): start / end, or her answer to his strike
   | { type: "keiko"; action: "start" | "end" | "block" | "hit" | "strike" | "ippon"; target?: "men" | "kote" | "dou"; flags?: number }
@@ -116,6 +117,8 @@ export type HudMessage =
   | { type: "dashboard_refresh" }
   | { type: "research_recall"; id: string }
   | { type: "screens_off" }
+  // Ctrl+Alt+Shift+L: lecture capture on/off (core listens to the system audio)
+  | { type: "lecture"; action: "toggle" | "start" | "stop" }
   // gesture calibration: one take's frames, written to core/calibration/<profile>-*.jsonl
   | { type: "calibration"; profile: string; session: string; pose: string; rep: number; frames: object[] };
 

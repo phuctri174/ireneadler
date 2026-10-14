@@ -19,6 +19,7 @@ while Irene runs, so each one here was checked two ways:
 | Ctrl+Alt+Esc | hide her | free (Task Manager is Ctrl+**Shift**+Esc) |
 | Ctrl+Alt+D | toggle click-through | free on this PC. Word: insert endnote |
 | Ctrl+Alt+Shift+O | screens-off mode: monitors off, PC awake, she keeps listening (config/power.yaml enables it) | free on this PC |
+| Ctrl+Alt+Shift+L | lecture capture on/off - she transcribes what the PC plays (core/irene/lecture.py); off by default | free on this PC (registered at launch) |
 | Ctrl+Alt+H | hand control on/off - his hand as the system-wide pointer (off = mouse only) | free on this PC. Word: highlight (some builds) |
 | Ctrl+Alt+A | cycle her activity (debug) | free on this PC. QQ/WeChat screenshot while they run |
 

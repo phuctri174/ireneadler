@@ -7,6 +7,7 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
+mod lifeline;
 mod intro_cursor;
 mod pointer;
 mod zorder;
@@ -31,6 +32,8 @@ const PANEL_HOLD_MAX: Duration = Duration::from_millis(13_000);
 const EVENT_PANEL_BURST: &str = "irene://panel-burst";
 /// Ctrl+Alt+Shift+O: screens-off mode (core decides, if it is enabled).
 const EVENT_SCREENS_OFF: &str = "irene://screens-off";
+/// Ctrl+Alt+Shift+L: lecture capture on/off (core listens to the system audio).
+const EVENT_LECTURE: &str = "irene://lecture";
 /// Hand control on/off (Ctrl+Alt+H): the HUD shows it and traces it to core.
 const EVENT_POINTER: &str = "irene://pointer";
 /// WebView2's flags, the same for every window (one browser environment): Tauri's
@@ -103,6 +106,10 @@ fn hide_shortcut() -> Shortcut {
 
 fn screens_off_shortcut() -> Shortcut {
     Shortcut::new(Some(operator()), Code::KeyO)
+}
+
+fn lecture_shortcut() -> Shortcut {
+    Shortcut::new(Some(operator()), Code::KeyL)
 }
 
 fn pointer_shortcut() -> Shortcut {
@@ -821,6 +828,8 @@ fn greet(name: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // how this run ends gets written down (core/logs/exits.jsonl, who "hud")
+    lifeline::install();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(
@@ -836,6 +845,8 @@ pub fn run() {
                             summon_main(&app, "hotkey");
                         } else if shortcut.matches(operator(), Code::KeyO) {
                             let _ = app.emit(EVENT_SCREENS_OFF, ());
+                        } else if shortcut.matches(operator(), Code::KeyL) {
+                            let _ = app.emit(EVENT_LECTURE, ());
                         } else if shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyH) {
                             let on = pointer::toggle(&app);
                             if !SHELL_UP.load(Ordering::Relaxed) {
@@ -959,6 +970,7 @@ pub fn run() {
                 ("ctrl+alt+i", focus_shortcut()),
                 ("ctrl+alt+h", pointer_shortcut()),
                 ("ctrl+alt+shift+o", screens_off_shortcut()),
+                ("ctrl+alt+shift+l", lecture_shortcut()),
                 ("ctrl+alt+d", cursor_shortcut()),
                 ("ctrl+alt+a", activity_shortcut()),
                 ("ctrl+alt+escape", hide_shortcut()),
@@ -1053,10 +1065,15 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![greet, summon, sleep, command_bar, show, capture_shield, panel_rect, corpus_keys, summon_voice, show_panel_window, pointer::hand_pointer, pointer::pointer_enabled, dev_visibility_path, visibility_report, geometry_report, panel_burst, yield_front, toggle_pin, dark_mode, warmup, intro_cursor])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app, event| {
-            if let tauri::RunEvent::Exit = event {
+        .run(|_app, event| match event {
+            tauri::RunEvent::ExitRequested { code, .. } => {
+                eprintln!("[irene] exit requested (code {code:?})");
+            }
+            tauri::RunEvent::Exit => {
+                lifeline::exit_record("normal exit", "");
                 intro_cursor::set(false);
                 intro_cursor::restore();
             }
+            _ => {}
         });
 }

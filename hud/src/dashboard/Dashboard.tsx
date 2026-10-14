@@ -8,6 +8,8 @@ import "../ui/chrome.css";
 import "../ui/boot.css";
 import { BOOT_COUNT_AT_MS, BootLayers, BootStatus, PANEL_BOOT_MS, Scramble } from "../ui/boot";
 import hudConfig from "../../../config/hud.json";
+import { LectureBadge } from "../ui/LectureBadge";
+import type { LectureStatus } from "../ui/LectureBadge";
 import "./Dashboard.css";
 
 /* Her panel, on the second screen (his MSI, portrait). One large CENTRE - what he
@@ -45,6 +47,8 @@ export interface DashboardState {
   timers: Timer[];
   research: ResearchItem[];
   stale: Record<string, boolean>;
+  /** a lecture being captured (core/irene/lecture.py), else null */
+  lecture?: LectureStatus | null;
 }
 
 
@@ -934,6 +938,8 @@ export function Dashboard() {
             </span>
           </div>
         </header>
+
+        {state.lecture ? <LectureBadge status={state.lecture} compact /> : null}
 
         <div className="dk-ticker" aria-hidden={!ticker.length}>
           <div className="dk-ticker-track" style={{ animationDuration: `${Math.max(30, ticker.length * 6)}s` }}>

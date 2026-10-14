@@ -483,3 +483,45 @@ def test_a_slower_line_is_her_voice_at_the_same_pitch():
     peak = np.fft.rfftfreq(len(slow) - 4000, 1 / sr)[np.argmax(spectrum)]
     assert abs(peak - 210) < 5
     assert stretch(voice, 1.0) is not None and len(stretch(voice, 1.0)) == len(voice)
+
+
+def test_who_is_stronger_parses_and_fires_the_domain_on_its_last_line():
+    from irene import entrances, sfx
+
+    s = S.load("who_is_stronger", {e["name"] for e in entrances.load_registry()})
+    assert [b.who for b in s.beats] == ["wait_for_me", "summon", "irene", "wait_for_me", "irene", "wait_for_me", "irene"]
+    assert s.start_hidden and s.beats[0].wake and s.beats[1].boot
+    flat, last = s.beats[4], s.beats[6]
+    assert flat.pause_after_ms == 800 and flat.domain is None
+    assert last.line == "Nah. I'd win." and last.sound == "domain_win"
+    assert last.domain == {"hold_ms": 3000, "bubble": ""}
+    # his turns end after 1.2 s of quiet; the Jarvis question (beat 4) gets 2.5 s
+    assert [b.silence_ms for b in s.beats if b.who == "wait_for_me"] == [1200, 2500, 1200]
+    # the visor first, the lift at the time the sound's impact is built around
+    (t0, start), (t1, part2) = S.domain_messages(last.domain)
+    assert (t0, start["phase"], part2["phase"]) == (0.0, "start", "part2")
+    assert t1 == sfx.DOMAIN_PART2_S and part2["hold_ms"] == 3000 and not part2["bubble"]
+    # her words land on the impact: they start just before the eye's full burn
+    assert last.sound_lead_ms / 1000 < sfx.DOMAIN_REVEAL_S < last.sound_lead_ms / 1000 + 0.3
+
+
+def test_a_bad_domain_is_refused():
+    from pathlib import Path
+
+    beat = {"who": "irene", "line": "Nah.", "cue": "smug"}
+    for domain in ({"hold": 3000}, {"bubble": "this is far too long for the bubble"}, "yes"):
+        with pytest.raises(S.SkitError):
+            S.parse({"beats": [{**beat, "domain": domain}]}, "x", Path("x.json"))
+
+
+def test_domain_sounds_render():
+    import numpy as np
+
+    from irene import sfx
+
+    win = sfx.render("domain_win", np.random.default_rng(3))
+    snap = sfx.render("bubble_snap", np.random.default_rng(3))
+    assert 2 * sfx.SR < len(win) < 3 * sfx.SR and len(snap) < 0.5 * sfx.SR
+    # the impact is on the reveal: the loudest moment is right after it
+    peak = int(np.argmax(np.abs(win))) / sfx.SR
+    assert sfx.DOMAIN_REVEAL_S <= peak < sfx.DOMAIN_REVEAL_S + 0.3

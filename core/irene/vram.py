@@ -66,6 +66,9 @@ class VramGuard:
         self.suspect: str | None = None
         self.next_allowed = 0.0
         self.recoveries = 0
+        # set while the model is out of VRAM on purpose (a lecture capture, lecture.py):
+        # "not loaded" is then the plan, not a fault to repair
+        self.parked: str | None = None
         self._wake = asyncio.Event()
 
     # ---- the signals ------------------------------------------------------------
@@ -91,6 +94,10 @@ class VramGuard:
     async def check(self) -> bool:
         """Look, and reload if spilled (or suspected and the model isn't fully in VRAM,
         or not loaded at all). Returns whether it reloaded."""
+        if self.parked:
+            self.suspect = None
+            log.debug("vram: model parked (%s) - not checking", self.parked)
+            return False
         placement = await self.llm.placement()
         why = self.suspect
         self.suspect = None

@@ -26,7 +26,7 @@ from tools import power as power_tool
 from tools import research as research_tool
 from tools import sandbox
 
-from . import calibration, chess_game, drawing, entrances, fast, greeting, illustrate, keiko, music, openers, presence, quick, sfx, skit, stt, summon, vram
+from . import calibration, chess_game, dispatch, drawing, entrances, fast, greeting, illustrate, keiko, music, openers, presence, quick, recall, sfx, skit, stt, summon, vram
 from . import react as cues
 from .brain import Conversation, Line, StreamingReply
 from .bridge import Bridge
@@ -37,6 +37,10 @@ from .tts import SpeechStream
 from .tts import Speaker, block_levels
 from .corpus import Corpus
 from .dashboard import Dashboard
+from .lectures import Lectures
+from . import lifeline
+
+LIFELINE: "lifeline.Lifeline | None" = None
 from .voice_loop import Voice
 from tools.localconfig import personal
 
@@ -87,7 +91,8 @@ ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ROOT / "config"
 LOGS = ROOT / "core" / "logs"
 # tools that take seconds: she says a cached "Let me look that up!" as one starts
-SLOW_TOOLS = {"research", "daily_briefing"}
+# lecture_summary: a map-reduce of several model calls (lecture_summary.py) - minutes for a long lecture
+SLOW_TOOLS = {"research", "daily_briefing", "lecture_summary"}
 # the briefing's readings kept fresh while she is idle (tools/briefing.prefetch):
 # first this long after startup, then checked this often
 BRIEFING_PREFETCH_START_S = 90.0
@@ -202,6 +207,10 @@ class Core:
         # voice (Phase 6): the microphone, and the read-aloud corpus recorder
         self.voice = Voice(self)
         self.corpus = Corpus(self)
+        # lecture capture (lectures.py): what the PC plays, transcribed - his mic's
+        # Whisper shared, never his speaker check; off until he starts it
+        self.lectures = Lectures(self)
+        self.bridge.handlers["lecture"] = self.on_lecture
         # the second screen's info dashboard (news, weather, stocks, load, timers)
         self.dashboard = Dashboard(self)
         self.bridge.handlers["dashboard_open"] = self.dashboard.on_open
@@ -247,6 +256,12 @@ class Core:
         loop = asyncio.get_running_loop()
         self.loop = loop
         self.bridge.bind(loop)
+        # a lecture capture that was running when core died is picked up again first
+        # thing - before her voice loads (~25 s), so the gap in the transcript is short
+        try:
+            await self.lectures.resume_interrupted()
+        except Exception:  # noqa: BLE001 - never stops core from starting
+            log.exception("lecture: resuming an interrupted capture failed")
         t0 = time.perf_counter()
         self.speaker = await asyncio.to_thread(
             Speaker,
@@ -254,6 +269,9 @@ class Core:
             lambda level: self.bridge.send_threadsafe({"type": "audio_level", "value": round(level, 3)}),
         )
         log.info("voice %s ready in %.1fs", self.speaker.engine, time.perf_counter() - t0)
+        # a resumed capture: her voice is now out of the speakers, so out of the lecture too
+        if self.lectures.active:
+            self.lectures._tap()
         self.music.load_in_background()
         voice = self.speaker.voice
         self.summon_clip = await asyncio.to_thread(summon.load_or_render, lambda: voice._kokoro().pipeline)
@@ -263,6 +281,9 @@ class Core:
         if voice.name == "turbo" and not summon.TURBO_WAV.exists():
             await asyncio.to_thread(summon.render_turbo, voice.engine)
         log.info("entrances: %s", ", ".join(f"{n} {c.duration:.1f}s" for n, c in self.entrance_clips.items()))
+        # her long-term memory: the embedding model loads here, while nothing else is
+        # importing (transformers' lazy imports are not thread-safe), then expiry runs
+        await asyncio.to_thread(self._memory_start)
         # small talk in her voice: from the cache, or rendered in the background (a
         # minute, once) - until then it goes to the model like anything else
         self._quick_task = asyncio.create_task(asyncio.to_thread(self.quick.load_or_render, voice))
@@ -274,6 +295,8 @@ class Core:
         self._lag_task = asyncio.create_task(self._watch_loop_lag())
         # the VRAM spill guard: reloads the model when it has spilled (vram.py)
         self.vram = vram.VramGuard(self.llm, self._idle_for_reload)
+        if self.lectures.active:
+            self.vram.parked = "lecture"  # resumed above, before the guard existed
         self._vram_task = asyncio.create_task(self.vram.run())
         self._briefing_task = asyncio.create_task(self._keep_briefing_warm())
         self.dashboard.start()
@@ -283,6 +306,7 @@ class Core:
         briefing_tool.TRANSLATE = self.translate
         if self.voice.start(loop):
             log.info("voice on: wake with 'Hey Irene' or 'Irene Adler'")
+
         await self.bridge.send({"type": "voice", "phase": "asleep" if self.voice.available else "off"})
 
     async def translate(self, texts: list[str]) -> list[str] | None:
@@ -323,7 +347,8 @@ class Core:
         await asyncio.sleep(BRIEFING_PREFETCH_START_S)
         while True:
             try:
-                if self.bridge.hud_connected and self._idle_for_reload() and not self.dark:
+                # not while a lecture holds the model out of VRAM: translating would load it
+                if self.bridge.hud_connected and self._idle_for_reload() and not self.dark and not self.lectures.active:
                     translated = await briefing_tool.prefetch()
                     if translated:
                         log.info("briefing prefetch: %d new headline(s) translated - re-reading the conversation", translated)
@@ -339,6 +364,19 @@ class Core:
             if self.conversation.expired() and not (self._turn and not self._turn.done()):
                 self.conversation.reset()
                 await self.bridge.send({"type": "conversation", "event": "reset"})
+
+    async def on_lecture(self, message: dict) -> None:
+        """Ctrl+Alt+Shift+L from his HUD (toggle), or start/stop from a script: no OS
+        input, nothing opened - only the system audio listened to - so any origin may."""
+        action = str(message.get("action", "toggle"))
+        log.info("lecture: %s asked (%s)", action, message.get("_origin", "?"))
+        if action == "toggle":
+            await self.lectures.toggle("hotkey")
+        elif action == "start":
+            # dev: a live check may name the output device to listen to
+            await self.lectures.start("socket", device=str(message["device"]) if DEV and message.get("device") else None)
+        elif action == "stop":
+            await self.lectures.stop("socket")
 
     async def on_screens_off(self, message: dict) -> None:
         """Ctrl+Alt+Shift+O, from his HUD: the same as "Irene, screens off"."""
@@ -513,6 +551,12 @@ class Core:
             return None
         return f"state {state!r} unchanged for {quiet:.0f} s" + (" with nothing playing" if state == "speaking" else "")
 
+    def vitals(self) -> dict:
+        """For the heartbeat and an exit record: what she was doing."""
+        turn = self._turn
+        return {"state": self.bridge.current_state, "turn": "running" if turn is not None and not turn.done() else "idle",
+                "dark": self.dark, "lecture": self.lectures.status(), "hud": self.bridge.hud_connected}
+
     def snapshot(self) -> dict:
         """What everything was doing, for the log."""
         turn = self._turn
@@ -570,6 +614,9 @@ class Core:
     async def _warm_llm(self) -> None:
         # warm() never raises; this guard is for anything unforeseen, so a warm-up
         # problem can only ever cost speed, never the backend
+        if self.llm.parked:
+            log.info("ollama warm-up skipped: a resumed lecture capture keeps the model out of VRAM")
+            return
         try:
             await self.llm.warm()
         except Exception:
@@ -1062,6 +1109,8 @@ class Core:
         # reaches his apps (tools/sandbox.py). The turn task inherits this.
         sandbox.enter(message.get("_origin"), bool(message.get("real_launch")))
         log.info("command from %s: %s", message.get("_origin", "?"), sandbox.describe())
+        # a turn during a lecture capture loads the model; it is parked again after quiet
+        self.lectures.note_turn()
         if message.get("via") != "voice":
             # typed right after a voice turn, close to what was heard: his correction
             fixed = self.voice.data.correction_for(text, "typed")
@@ -1080,24 +1129,24 @@ class Core:
             for future in self._confirms.values():
                 if not future.done():
                     future.set_result(False)
-        keiko_kind = keiko.command(text, self.keiko.active)
-        if keiko_kind is not None:
-            self._turn = asyncio.create_task(self._respond_keiko(text, keiko_kind))
+        # (the evals take the same route: dispatch.py)
+        who, found = dispatch.route(
+            keiko=lambda: keiko.command(text, self.keiko.active),
+            chess=lambda: self.chess_claims(text),
+            quick=lambda: self.quick_answer(text),
+        )
+        if who == dispatch.KEIKO:
+            self._turn = asyncio.create_task(self._respond_keiko(text, found))
             return
-        kind = self.chess_claims(text)
-        if kind is not None:
-            if message.get("_origin") in sandbox.HIS:
-                self.presence.heard()
-            self._turn = asyncio.create_task(self._respond_chess(text, kind))
-            return
-        answer = self.quick_answer(text)
         # (after the greeting read how long it had been)
         if message.get("_origin") in sandbox.HIS:
             self.presence.heard()
-        if answer is not None:
-            self._turn = asyncio.create_task(self._respond_quick(text, answer, time.perf_counter()))
-            return
-        self._turn = asyncio.create_task(self._respond(text))
+        if who == dispatch.CHESS:
+            self._turn = asyncio.create_task(self._respond_chess(text, found))
+        elif who == dispatch.QUICK:
+            self._turn = asyncio.create_task(self._respond_quick(text, found, time.perf_counter()))
+        else:
+            self._turn = asyncio.create_task(self._respond(text))
 
     async def retract_turn(self, settle: bool = True, why: str = "the full transcript differs") -> None:
         """The reply begun on his first words was premature (the speculative start):
@@ -1121,6 +1170,20 @@ class Core:
             await self.bridge.send({"type": "draw", "value": None})
             await self.bridge.emotion("neutral")
             await self.bridge.state("listening")
+
+    def _memory_start(self) -> None:
+        if not recall.POLICY.enabled:
+            log.info("memory: off (config/memory.yaml)")
+            return
+        try:
+            recall.EMBEDDER.load()
+            recall.backfill(recall.HIS)
+            for store in (recall.HIS, recall.DEV):
+                store.prune()
+            log.info("memory: %d kept (his), %d (dev); budget %d tokens a message, %d for a question about the past",
+                     len(recall.HIS), len(recall.DEV), recall.POLICY.budget_tokens, recall.POLICY.recall_budget_tokens)
+        except Exception:  # noqa: BLE001 - no memory is a lesser Irene, not a dead one
+            log.exception("memory: could not start")
 
     def greeting_context(self) -> greeting.Context:
         """What is real right now, for her greeting: the clock, his city's weather
@@ -1586,6 +1649,9 @@ class Core:
             "first_text_ms": round(getattr(self, "last_first_text_ms", 0) or 0),
             "turn_ms": round((time.perf_counter() - received) * 1000),
             "voice": self.speaker.engine if self.speaker else None,
+            # her long-term memory for this message: the time it took, what it added
+            "recall_ms": round(self.conversation._recalled.ms, 1),
+            "recalled": len(self.conversation._recalled.items),
             "calls": calls,
             # the model's own text, to see what it wrote before its first spoken phrase
             "raw": next((m["content"] for m in reversed(self.conversation.history) if m["role"] == "assistant"), "")[:1500],
@@ -1720,7 +1786,8 @@ class TurnHost:
         await self.core.say(text)
 
     def forget(self) -> None:
-        self.core.conversation.reset()
+        # the conversation, and what her long-term memory kept of it
+        self.core.conversation.forget_session()
 
     async def capture_shield(self, on: bool) -> None:
         await self.core.capture_shield(on)
@@ -1942,11 +2009,18 @@ def log_memory() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # how this run ends gets written down, whatever ends it (lifeline.py)
+    global LIFELINE
+    LIFELINE = lifeline.Lifeline("core", status=core.vitals)
+    LIFELINE.install()
     await core.start()
     log.info("core up on ws://%s:%d/ws", HOST, PORT)
     log_memory()
     yield
     log.info("core shutting down")
+    if core.lectures.active:
+        # what is still queued is transcribed and the session closed: nothing lost
+        await asyncio.to_thread(core.lectures.capture.stop, 30.0)
     core.voice.stop()
     await core.llm.close()
 

@@ -60,6 +60,19 @@ def vocabulary(path: Path = VOCABULARY) -> list[str]:
 
 
 @dataclass(frozen=True)
+class Segment:
+    """One timed piece of a long transcription (seconds from the audio's start)."""
+
+    start: float
+    end: float
+    text: str
+    avg_logprob: float
+    no_speech_prob: float
+    # Whisper's own repetition signal: a looping hallucination compresses very well
+    compression_ratio: float = 0.0
+
+
+@dataclass(frozen=True)
 class Heard:
     text: str
     # mean log-probability of the words; closer to 0 is surer
@@ -130,6 +143,12 @@ class Transcriber:
         self.prompt = "Hey Irene. Mister Tri."
         self._model = None
         self._lock = threading.Lock()
+        # his turns go first: a background job (a lecture chunk) waits while one of
+        # his is waiting for, or holding, the model
+        self._foreground = 0
+        self._foreground_lock = threading.Lock()
+        self._foreground_clear = threading.Event()
+        self._foreground_clear.set()
 
     @property
     def loaded(self) -> bool:
@@ -152,20 +171,55 @@ class Transcriber:
         """16 kHz mono float32 -> what he said."""
         model = self.load()
         started = time.perf_counter()
-        with self._lock:
-            segments, _info = model.transcribe(
-                audio.astype(np.float32),
-                language=self.language,
-                beam_size=beam_size or self.beam_size,
-                hotwords=" ".join([*(w for terms in _CONTEXT.values() for w in terms), self.hotwords]),
-                initial_prompt=self.prompt if prompt else None,
-                condition_on_previous_text=False,
-                vad_filter=False,
-                without_timestamps=True,
-            )
-            segments = list(segments)
+        self._front(+1)
+        try:
+            with self._lock:
+                segments, _info = model.transcribe(
+                    audio.astype(np.float32),
+                    language=self.language,
+                    beam_size=beam_size or self.beam_size,
+                    hotwords=" ".join([*(w for terms in _CONTEXT.values() for w in terms), self.hotwords]),
+                    initial_prompt=self.prompt if prompt else None,
+                    condition_on_previous_text=False,
+                    vad_filter=False,
+                    without_timestamps=True,
+                )
+                segments = list(segments)
+        finally:
+            self._front(-1)
         ms = (time.perf_counter() - started) * 1000
         return heard_from(segments, len(audio) / SAMPLE_RATE, ms)
+
+    def _front(self, step: int) -> None:
+        with self._foreground_lock:
+            self._foreground += step
+            if self._foreground > 0:
+                self._foreground_clear.clear()
+            else:
+                self._foreground_clear.set()
+
+    def transcribe_background(self, audio: np.ndarray, prompt: str = "", beam_size: int | None = None) -> list[Segment]:
+        """Long audio that is not him (a lecture chunk) -> timestamped segments. The
+        same model as his turns - never a second one in VRAM - but it waits while
+        one of his turns is waiting or running, so a lecture never delays her
+        hearing him. No hotwords: his vocabulary is not the lecturer's."""
+        model = self.load()
+        while True:
+            self._foreground_clear.wait()
+            with self._lock:
+                if not self._foreground_clear.is_set():
+                    continue  # he got there between the wait and the lock: he goes first
+                segments, _info = model.transcribe(
+                    audio.astype(np.float32),
+                    language=self.language,
+                    beam_size=beam_size or self.beam_size,
+                    initial_prompt=prompt or None,
+                    condition_on_previous_text=False,
+                    vad_filter=False,
+                    without_timestamps=False,
+                )
+                return [Segment(float(s.start), float(s.end), s.text.strip(), float(s.avg_logprob), float(s.no_speech_prob),
+                                float(getattr(s, "compression_ratio", 0.0) or 0.0)) for s in segments]
 
     def confident(self, heard: Heard) -> bool:
         return heard.confident(self.min_avg_logprob, self.max_no_speech_prob)

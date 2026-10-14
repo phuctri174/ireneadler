@@ -1,0 +1,58 @@
+/* a lecture being captured: her instrument-readout look, a red recording dot */
+.lecture-badge {
+  position: fixed;
+  top: 14px;
+  right: 18px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 92, 120, 0.45);
+  border-radius: 3px;
+  background: rgba(6, 14, 20, 0.82);
+  color: #d8f6ff;
+  font-family: "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  pointer-events: none;
+}
+
+.lecture-badge.is-compact {
+  position: static;
+  margin: 0 0 10px;
+  justify-content: center;
+}
+
+.lecture-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ff5c78;
+  box-shadow: 0 0 8px rgba(255, 92, 120, 0.9);
+  animation: lecture-pulse 1.6s ease-in-out infinite;
+}
+
+.lecture-label {
+  color: #ff8fa3;
+}
+
+.lecture-time {
+  color: #9ffbff;
+  font-variant-numeric: tabular-nums;
+}
+
+.lecture-words {
+  color: rgba(216, 246, 255, 0.55);
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes lecture-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}

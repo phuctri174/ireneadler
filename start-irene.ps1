@@ -1,4 +1,4 @@
-# Start Irene: core (Python backend) and the HUD (Tauri dev), each in its own window.
+﻿# Start Irene: core (Python backend) and the HUD (Tauri dev), each in its own window.
 #
 #   powershell -ExecutionPolicy Bypass -File .\start-irene.ps1        normal
 #   powershell -ExecutionPolicy Bypass -File .\start-irene.ps1 -Dev   test hooks on
@@ -25,6 +25,18 @@ function Stop-PortOwner([int]$port) {
             Stop-Process -Id $id -Force -ErrorAction SilentlyContinue
         }
     }
+}
+
+function Write-StoppedRecord([string]$who, [int]$id) {
+    # its exit record, written for it: a core or HUD this script stops is not a crash. Without
+    # it the next start finds "unknown - no exit record" - the verdict a real, unexplained
+    # death gets (irene/lifeline.py) - and a launch looked exactly like one
+    $record = '{"at": "' + (Get-Date -Format "yyyy-MM-ddTHH:mm:ss") + '", "who": "' + $who + '", "pid": ' + $id +
+        ', "event": "exit", "reason": "stopped by start-irene.ps1 (a new run)"}'
+    $exits = Join-Path $root "core\logs\exits.jsonl"
+    try {
+        [System.IO.File]::AppendAllText($exits, $record + "`n", (New-Object System.Text.UTF8Encoding($false)))
+    } catch {}
 }
 
 function Wait-Port([int]$port, [int]$seconds) {
@@ -70,10 +82,23 @@ Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction Silen
         Write-Host "  old Irene window (pid $($_.ProcessId)) - closing"
         Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
     }
+# the keeper first (core/scripts/keeper.py): it would start a stopped core again
+Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match "keeper\.py" } |
+    ForEach-Object {
+        Write-Host "  old core keeper (pid $($_.ProcessId)) - stopping"
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
 Get-Process -Name "tauri-app" -ErrorAction SilentlyContinue | ForEach-Object {
     Write-Host "  leftover HUD (pid $($_.Id)) - stopping"
+    Write-StoppedRecord "hud" $_.Id
     Stop-Process -Id $_.Id -Force
 }
+# every core process (the venv's python.exe is a launcher with the real interpreter as
+# its child - both carry the command line) gets its exit record before it goes
+Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match "-m irene\.app" } |
+    ForEach-Object { Write-StoppedRecord "core" $_.ProcessId }
 Stop-PortOwner $hudPort
 Stop-PortOwner $corePort
 # a core that never got its port (still loading, or wedged) holds GBs of RAM and
@@ -127,7 +152,9 @@ if (-not (Test-Path $python)) { throw "core venv missing: $python" }
 
 Write-Host "Irene: starting core (its own window)"
 $devFlag = if ($Dev) { "`$env:IRENE_DEV = '1'; " } else { "" }
-$coreCommand = "`$Host.UI.RawUI.WindowTitle = 'Irene core'; `$env:PYTHONIOENCODING = 'utf-8'; $devFlag& '$python' -m irene.app"
+# core runs under its keeper (core/scripts/keeper.py): if it dies of anything but a chosen
+# exit (Ctrl+C, this window closed), it is started again - and a lecture capture resumes
+$coreCommand = "`$Host.UI.RawUI.WindowTitle = 'Irene core'; `$env:PYTHONIOENCODING = 'utf-8'; $devFlag& '$python' scripts\keeper.py"
 Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-NoProfile", "-Command", $coreCommand -WorkingDirectory (Join-Path $root "core")
 if (Wait-Port $corePort 120) {
     Write-Host "  core listening on ws://127.0.0.1:$corePort/ws"

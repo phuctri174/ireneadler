@@ -1,0 +1,28 @@
+# Copy to config/publish.yaml (gitignored) and fill in your own. The scan patterns
+# are themselves personal - your name, where you live - so the real list is never
+# committed: this example only shows the shape.
+#
+# Used by core/scripts/publish.py: it exports HEAD to `public_dir`, scans the export,
+# and refuses to commit or push if anything below matches.
+
+# the clean clone of the public repository (its own .git and origin)
+public_dir: ../ireneadler
+branch: main
+
+# a match anywhere (any file's text, a file name, the commit message) stops the
+# publish. Case and accents never matter.
+#   names: matched with spaces, dashes and underscores ignored, so "Jane Q Doe",
+#          "jane_q_doe" and "janeqdoe@example.com" are all caught
+#   text:  matched as written (still case- and accent-insensitive)
+names:
+  - Jane Q Doe
+  - Doe Jane Q
+text:
+  - "12.3456"          # latitude of home, as written in config
+  - "98.7654"          # longitude
+  - "C:/Users/you"
+  - "C:\\Users\\you"
+  - "C:\\\\Users\\\\you"
+
+# file types that are never published, whatever their name (recordings, voiceprints)
+extensions: [.npz, .npy]

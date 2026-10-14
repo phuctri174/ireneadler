@@ -1,0 +1,32 @@
+{
+  "_about": "Who is stronger. Ctrl+Alt+Shift+K starts the newest skit file, Ctrl+Alt+Shift+X aborts. She starts hidden and wakes on Hey Irene. His turns end after 1.2 s of quiet - except the Jarvis question (beat 4), which gets 2.5 s: her full intro (boot, summon song, the domain expansion) plays to the end before her first line. Beat 5 she answers thinking it over (the thinking face, a finger at her chin) - no attitude yet - and the 800 ms after it is the setup. Beat 7 fires her domain expansion on the line, exactly as the summon draws it (visor in, lifted off one eye, ice-blue, the black hole behind), held 3 s after the eye ignites; the sound (domain_win: the summon's riser and swell, the impact on the eye) leads her words by 850 ms so 'Nah.' lands on the impact. Every key is explained in core/irene/skit.py.",
+  "beats": [
+    { "who": "wait_for_me", "note": "Hey Irene", "wake": true, "silence_ms": 1200 },
+    { "who": "summon", "entrance": "domain_expansion", "adler": "domain_expansion", "boot": true, "music": true },
+    { "who": "irene", "line": "What's up, Mister Tri?", "cue": ["happy", "wave"], "speed": 0.95, "temperature": 0.6 },
+    { "who": "wait_for_me", "note": "Who's stronger, you or Jarvis?", "silence_ms": 2500 },
+    {
+      "who": "irene",
+      "line": "If Jarvis used at 100% its power, he might give me some trouble.",
+      "cue": "thinking",
+      "speed": 0.95,
+      "temperature": 0.5,
+      "max_gap_ms": 600,
+      "pause_after_ms": 800
+    },
+    { "who": "wait_for_me", "note": "Damn, so would you lose?", "silence_ms": 1200 },
+    {
+      "who": "irene",
+      "line": "Nah. I'd win.",
+      "cue": "smug",
+      "speed": 0.9,
+      "temperature": 0.5,
+      "max_gap_ms": 700,
+      "sound": "domain_win",
+      "sound_gain": 0.6,
+      "sound_lead_ms": 850,
+      "domain": { "hold_ms": 3000 },
+      "pause_after_ms": 3000
+    }
+  ]
+}

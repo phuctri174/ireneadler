@@ -29,6 +29,7 @@ import entranceRegistry from "../../config/entrances.json";
 import { prepare } from "./board/board";
 import type { Prepared } from "./board/board";
 import type { SummonTimes } from "./led/summon";
+import { summonTail } from "./led/summon";
 import { setSyntheticPoint } from "./tracking/synthetic";
 import { CAPTURE_PROFILES, GestureCapture } from "./ui/GestureCapture";
 import { CorpusRecorder } from "./ui/CorpusRecorder";
@@ -53,6 +54,8 @@ import {
 } from "./tracking/gestures";
 import { neutralDiag } from "./tracking/gestures";
 import type { GestureState } from "./tracking/gestures";
+import { LectureBadge } from "./ui/LectureBadge";
+import type { LectureStatus } from "./ui/LectureBadge";
 import "./App.css";
 
 const SKELETON_COLOR = "#22e0ff";
@@ -501,6 +504,8 @@ function App() {
   const speechLevel = useMemo(() => streamedLevel(), []);
   const core = useMemo(() => new CoreSocket(), []);
   const [pointerOn, setPointerOn] = useState(true);
+  // a lecture being captured (core's dashboard state): the badge, top right
+  const [lecture, setLecture] = useState<LectureStatus | null>(null);
   const pointerOnRef = useRef(true);
   const shellUp = useRef(false);
   const [coreUp, setCoreUp] = useState(false);
@@ -532,6 +537,8 @@ function App() {
       if (kind === "dashboard") {
         // a partial update (load, timers) merges into the last full one
         last = { ...(last as object | null), ...(message as object) };
+        // a lecture being captured: the badge on this screen too
+        if ("lecture" in (message as object)) setLecture((message as unknown as { lecture: LectureStatus | null }).lecture);
         void emitTo("dashboard", EVENT_DASHBOARD, message);
       } else if (kind === "dashboard_focus") {
         void emitTo("dashboard", EVENT_DASHBOARD_FOCUS, message);
@@ -790,6 +797,10 @@ function App() {
     const darken = listen("irene://screens-off", () => {
       core.send({ type: "screens_off" });
     });
+    // Ctrl+Alt+Shift+L: lecture capture on/off (core decides which)
+    const lecture = listen("irene://lecture", () => {
+      core.send({ type: "lecture", action: "toggle" });
+    });
     const clicked = listen<[number, number, boolean]>("irene://hand-click", (event) => {
       const [x, y, ok] = event.payload;
       core.send({ type: "hud_trace", step: `hand click at (${x}, ${y})${ok ? "" : " - Windows refused the input"}` });
@@ -798,6 +809,7 @@ function App() {
       void toggled.then((unlisten) => unlisten());
       void clicked.then((unlisten) => unlisten());
       void darken.then((unlisten) => unlisten());
+      void lecture.then((unlisten) => unlisten());
     };
   }, [core, setActive]);
 
@@ -885,15 +897,18 @@ function App() {
         case "summon": {
           const at = performance.now();
           window.clearTimeout(summonClear.current);
+          // a skit line's domain (core/irene/skit.py) carries its own hold and bubble
+          const hold = typeof message.hold_ms === "number" ? message.hold_ms : undefined;
+          const bubble = typeof message.bubble === "string" && message.bubble ? message.bubble : undefined;
           if (message.phase === "start") {
-            setSummonTimes({ start: at, part2: null });
+            setSummonTimes({ start: at, part2: null, hold, bubble });
           } else if (message.phase === "part2") {
             setFlareCount((value) => value + 1);
-            setSummonTimes((value) => ({ start: value?.start ?? at, part2: at }));
+            setSummonTimes((value) => ({ start: value?.start ?? at, part2: at, hold: hold ?? value?.hold, bubble: bubble ?? value?.bubble }));
           }
           // end: let the lift and the drop finish, then drop the sequence
           if (message.phase !== "start") {
-            summonClear.current = window.setTimeout(() => setSummonTimes(null), SUMMON_TAIL_MS);
+            summonClear.current = window.setTimeout(() => setSummonTimes(null), summonTail({ start: at, part2: at, hold }));
           }
           break;
         }
@@ -1525,6 +1540,8 @@ function App() {
       ) : null}
 
       {calibrate ? <Calibration gestures={gestureRef} scrollDebug={scrollDebug} /> : null}
+
+      {lecture ? <LectureBadge status={lecture} /> : null}
 
       <MainInterface
         state={assistant}

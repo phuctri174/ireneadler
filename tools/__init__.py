@@ -2,6 +2,6 @@
 (confirm) and whether it only reads (readonly). See registry.py."""
 from .registry import REGISTRY, Prepared, Tool, ToolError, ToolResult, tool
 
-from . import basic, briefing, browser, dashboard, files, power, media, panel, pdf, perform, research, screen, system  # noqa: E402,F401  - registers the built-in tools
+from . import basic, briefing, browser, dashboard, files, lecture, memory, power, media, panel, pdf, perform, research, screen, system  # noqa: E402,F401  - registers the built-in tools
 
 __all__ = ["REGISTRY", "Prepared", "Tool", "ToolError", "ToolResult", "tool"]

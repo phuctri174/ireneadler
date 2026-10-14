@@ -26,6 +26,9 @@ class Group:
     rules: str
     # a message that matches this is talk about the topic, not a request for the tool
     avoid: re.Pattern | None = None
+    # stricter: the message is talk about this group's topic ("my screen is cracked",
+    # "turn off the lights") - its tools are not offered at all, not even by name
+    talk: re.Pattern | None = None
 
 
 def _k(pattern: str) -> re.Pattern:
@@ -77,6 +80,12 @@ GROUPS: tuple[Group, ...] = (
   "what does it say" is read_and_summarize.""",
         # thoughts, a desk, a life: talk, not files
         _k(r"\b(thoughts?|mind|head|ideas?|life|schedule|desk at|feelings|priorities)\b(?!.*\b(file|folder|pdf|docx?)\b)"),
+        # ...and what he already did with a file ("I saved that file yesterday, don't
+        # worry") is news, not a request
+        talk=_k(r"\b(thoughts?|mind|head|ideas?|life|schedule|desk at|feelings|priorities)\b(?!.*\b(file|folder|pdf|docx?)\b)"
+                # a request anywhere in it ("FIND the tax file I saved") is not news
+                r"|^(?!.*\b(open|find|where|show|read|summari[sz]e|search|look for|locate)\b).*\b(i|i've|we)\s+(already\s+)?(saved|downloaded|sent|moved|deleted|backed up)\b"
+                r"|^(?!.*\b(open|find|where|show|read|summari[sz]e|search|look for|locate)\b).*\bdon'?t worry\b"),
     ),
     Group(
         "screen",
@@ -86,17 +95,23 @@ GROUPS: tuple[Group, ...] = (
   ("what's this error?", "read this for me"). "full" by default ("my screen");
   "active_window" only when he says window, app or tab. Never otherwise:
   a screen as a topic ("my screen is cracked") needs no tool.""",
+        # the screen as a thing, not what's on it
+        talk=_k(r"\b(cracked|broken|brightness|resolution|refresh rate|protector|dead pixels?|screen time|glare)\b|\b(new|buy|which|best|bigger|second) (monitor|screen)\b"),
     ),
     Group(
         "media",
         ("media_play_pause", "media_next", "media_previous", "set_volume", "change_volume", "mute"),
-        _k(r"pause|resume|unpause|\bplay\b|skip|next|previous|go back|song|track|music|volume|louder|quieter|softer|\bmute\b|unmute|turn it (up|down)|too loud|can'?t hear|sound"),
+        _k(r"pause|resume|unpause|\bplay\b|skip|next|previous|go back|song|track|music|volume|louder|quieter|softer|speak up|\bmute\b|unmute|turn it (up|down)|too loud|can'?t hear|sound"),
         """- media_play_pause / media_next / media_previous: "pause", "resume", "unpause",
   "skip this", "next song", "go back one" - whatever is playing, in any app. Never
   say you paused, resumed, skipped or changed the volume without calling the tool.
-- set_volume / change_volume / mute: his system sound. "Turn it up" = change_volume
-  +10 ("a bit" 5, "a lot" 25; down is negative); "volume to 30" = set_volume.""",
+- set_volume / change_volume / mute: his system sound. "Turn it up", "louder", "speak
+  up" = change_volume +10 ("a bit" 5, "a lot" 25; down is negative); only a number
+  ("volume to 30") is set_volume.""",
         _k(r"\b(let me|let's|i need to|we should) (pause|stop)\b|pause (and|to) (think|breathe|reflect)|next (week|time|year|step|question)|\b(screens?|monitors?|displays?)\b"),
+        # a screen's brightness is not her volume ("my screen brightness is too low" ->
+        # change_volume, 2 of 2 runs): sound tools are not offered for a screen
+        talk=_k(r"\bbrightness\b|\b(screens?|monitors?|displays?)\b(?!.*\b(volume|sound|speakers?|audio|louder|quieter|mute)\b)"),
     ),
     Group(
         "web",
@@ -107,6 +122,8 @@ GROUPS: tuple[Group, ...] = (
 - open_url: he asks to open a site or page - it opens in his own Chrome.
   read_page_text: he asks what a page says or to summarise it (fetched silently).
 - open_in_my_browser: a research source by number ("open source 2") in his Chrome.""",
+        # his browser as a topic ("my Chrome keeps crashing"), not a page to open
+        talk=_k(r"\b(chrome|browser|youtube)\b.*\b(crash(es|ing|ed)?|keeps|slow|lag(gy|ging)?|freez(es|ing)|broken|stuck|won'?t)\b(?!.*\b(open|play|go to)\b)"),
     ),
     Group(
         "power",
@@ -120,6 +137,8 @@ GROUPS: tuple[Group, ...] = (
   cracked") is not it. There is no screens_on tool: a wake phrase lights them.
 - enable_screens_off: only when he asks to enable the screens-off MODE itself
   ("enable screens-off mode"). Never for "screens off".""",
+        # his room's lights, a fan, the TV: not her monitors (routing eval not-power-lights)
+        talk=_k(r"\b(lights?|lamps?|fan|air ?con|aircon|heater|tv|television)\b(?!.*\b(screens?|monitors?|displays?)\b)"),
     ),
     Group(
         "dashboard",
@@ -193,15 +212,39 @@ GROUPS: tuple[Group, ...] = (
         _k(r"\bnew (in|on|for|about) (my|the) (downloads|desktop|folder|documents)\b|what'?s new in (python|windows|ios|android|version|the (new|latest) (version|update|release))"),
     ),
     Group(
+        "lecture",
+        ("lecture_start", "lecture_stop", "lecture_summary", "lecture_ask"),
+        _k(r"\blectures?\b|seminar|webinar|take notes|transcri|listen(ing)? to (this|the|it)\b|stop listening"
+           r"|(summari[sz]e|sum up|recap|record|listen to)\b.{0,25}\b(class|lesson|meeting|talk)\b|\b(class|lesson|meeting|talk)\b.{0,20}\b(about|summary|recap|over)\b"
+           r"|the (second|third|first|last|next) (topic|section)"),
+        """- lecture_start: when he asks you to listen to, transcribe or take notes on a lecture,
+  class, talk or meeting playing on the PC. You hear the system audio, not his mic.
+- lecture_stop: when he says to stop listening, or that the lecture/meeting is over.
+- lecture_summary: "summarise the lecture", "what was the class about", "recap the
+  meeting". It speaks the summary itself and fills the panel; after it, "more on the
+  second topic" = lecture_summary(expand="2").
+- lecture_ask: a question about what was SAID in the lecture he had you listen to
+  ("what did they say about X", "did the professor mention the exam"). Answer only
+  from what it returns, with the time; never fill gaps from your own knowledge.
+- Talk about lectures in general ("my lecture was boring", "I have class tomorrow")
+  is conversation, not a tool.""",
+        _k(r"\b(was|is|were) (so |really |too )?(boring|long|hard|fun|great|awful|cancell?ed)\b|\b(have|got) (a |my )?(lecture|class|meeting|exam) (tomorrow|today|tonight|later|at)\b"),
+    ),
+    Group(
         "forget",
-        ("forget_conversation", "clear_research"),
-        _k(r"forget|clear (this|the|our) (chat|conversation|history)|wipe|start (fresh|over)|don'?t remember|(clear|delete|erase|remove|wipe|forget|get rid of)\b.{0,25}\bresearch(es)?\b|\bresearch\b.{0,15}\b(cleared|wiped|gone)\b"),
+        ("forget_conversation", "clear_research", "forget_memory"),
+        _k(r"forget|clear (this|the|our) (chat|conversation|history)|wipe|start (fresh|over)|don'?t remember|(delete|erase|remove) (what|everything|anything) you (know|remember|kept)|(clear|delete|erase|remove|wipe|forget|get rid of)\b.{0,25}\bresearch(es)?\b|\bresearch\b.{0,15}\b(cleared|wiped|gone)\b"),
         """- forget_conversation: only when he explicitly asks you to forget or clear this
   conversation. "Forget it" / "never mind" just means drop the subject.
 - clear_research: when he asks you to clear, wipe, delete or forget your RESEARCH
   ("Irene, clear your research", "wipe the research history") - it removes every
   saved research from your memory and the panel. Not forget_conversation, and never
-  a new research.""",
+  a new research.
+- forget_memory: when he asks you to forget or delete what you remember about a
+  THING - a person, a topic, a project ("forget what I told you about Trác",
+  "delete what you know about my work project"). about: that thing, in his words.
+  It shows him what will go and asks first. Not for what he said just now, in this
+  conversation ("don't remember any of what I just said"): that is forget_conversation.""",
         _k(r"\bforget (it|about it|that)\b|never ?mind"),
     ),
 )
@@ -223,15 +266,32 @@ def tools_block(text: str, recent_tools: list[str] = (), available: list[str] | 
     """The per-message tools section: full detail for the likely groups, names only
     for the rest."""
     available = set(available or REGISTRY)
-    groups = groups_for(text, recent_tools)
+    # a group whose "this is talk about it" pattern matches is not offered at all - not
+    # even by name: listed as "other tools", the model still reached for them ("organize
+    # my thoughts" -> organize_files, "turn off the lights" -> screens_off). A tool he
+    # used in the last turns stays (a follow-up is never talk).
+    talk = [g for g in GROUPS if g.talk and g.talk.search(text) and not any(t in recent_tools for t in g.tools)]
+    for g in talk:
+        available -= set(g.tools)
+    groups = [g for g in groups_for(text, recent_tools) if g not in talk]
     detailed = [t for g in groups for t in g.tools if t in available]
     # tools outside every group (added later, not routed yet) are always offered in full
     detailed += [t for t in sorted(available) if t not in BY_TOOL and t not in detailed]
     others = sorted(t for t in available if t not in detailed)
     parts = ["## Tools for this message"]
-    if detailed:
+    # talk, and nothing else in it names a tool group ("...can you research repair shops?" does)
+    only_talk = talk and not any(g.keywords.search(text) for g in GROUPS if g not in talk)
+    if detailed and groups:
         parts.append(catalogue(detailed))
         parts += [g.rules for g in groups]
+    elif only_talk:
+        # with one tool hidden, the model reached for the next ("turn off the lights" ->
+        # set_volume, "screen brightness is too low" -> system_status): talk is said plainly
+        parts.append("This message is him talking about something, not asking you to operate anything: "
+                     "answer in words (advice, sympathy, a question back). No tool.")
+        return "\n".join(parts)
+    elif detailed:
+        parts.append(catalogue(detailed))
     else:
         parts.append("This message most likely needs no tool.")
     if others:

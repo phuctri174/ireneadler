@@ -1,10 +1,20 @@
-"""Shared eval machinery: run the routing and reaction evals against any local model,
-with the exact system prompt a real conversation uses, and time every reply.
+"""Shared eval machinery: run the routing, reaction and conversation evals against
+any local model, through the turn the app itself runs - and time every reply.
 
-Timing per reply (streamed, like the real voice path):
-  ttft      first token
-  first_say first complete sentence inside <speak> - when TTS could start
-  total     whole reply
+There is no eval-only prompt. Every case is a turn of the live path: the app's
+dispatch (dispatch.route: keiko, chess, a quick line, else the model), then
+Conversation.respond() - the same system prompt, tool routing, per-message context
+(clock, his city, notes, cues), fast routes, nudges, retries and guards. A case's
+history becomes the conversation's past through Conversation.restore(), the same
+bookkeeping respond() keeps. The turn stops where a tool would touch the machine
+(Conversation._run_tool): the call it hands over is what the case is scored on.
+tests/test_eval_parity.py fails if a live turn and an eval turn ever see a
+different prompt.
+
+Timing per turn (streamed, like the real voice path):
+  ttft      first token of the first model call
+  first_say first sentence handed to the voice - when TTS could start
+  total     the whole turn (every model call in it)
 """
 from __future__ import annotations
 
@@ -12,6 +22,7 @@ import json
 import re
 import statistics
 import sys
+import tempfile
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -21,13 +32,23 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import irene  # noqa: E402,F401  - offline mode, repo root on the path
-from irene.brain import _CUE, Conversation, StreamingReply, tool_call as parse_tool_call  # noqa: E402
-from irene.react import act_out, resolve  # noqa: E402
+from irene.brain import Conversation, tool_call as parse_tool_call  # noqa: E402
 from irene.llm import MODEL as MODEL_DEFAULT, Ollama  # noqa: E402,F401
-from irene.reply import parse_reply  # noqa: E402
-from irene import fast, sentiment  # noqa: E402
+from irene.reply import Reply, parse_reply  # noqa: E402
+from irene import chess_game, dispatch, keiko, quick  # noqa: E402
 from irene.home import HOME  # noqa: E402
 from irene.entrances import load_registry  # noqa: E402
+from tools import research as research_tool  # noqa: E402
+from tools.registry import ToolResult  # noqa: E402
+
+# his research on disk is not part of any case: a follow-up finds only what the
+# case itself looked up
+research_tool.STORE = Path(tempfile.mkdtemp(prefix="irene-eval-research-"))
+# nor is his long-term memory: an empty one, unless a case seeds its own
+# (recall_evals.py) - his store and the dev store both point here
+from irene import recall  # noqa: E402
+
+recall.HIS = recall.DEV = recall.Store(Path(tempfile.mkdtemp(prefix="irene-eval-memory-")) / "memory.sqlite")
 
 HERE = Path(__file__).parent
 
@@ -56,12 +77,22 @@ def load(name: str) -> list[dict]:
 
 @dataclass
 class Timed:
-    raw: str
+    """One live turn, as far as the machine: her reply, or the tool it handed over."""
+
+    raw: str  # her last reply in the history ("" when a tool was handed over)
     ttft: float
     first_say: float | None
     total: float
-    react: object = None  # what the stream reader resolved, as a real turn would show
+    react: object = None  # what the turn showed
     cues: list = field(default_factory=list)  # cue names across the reply's sentences, in order
+    reply: Reply | None = None
+    # the tool the turn handed over to run (name, arguments as it would run them)
+    called: tuple[str, dict] | None = None
+    # every call the model wrote this turn, in order (refused ones included)
+    attempts: list[tuple[str, dict]] = field(default_factory=list)
+    # who answered (dispatch.route): "model", or keiko / chess / quick with no model
+    who: str = dispatch.MODEL
+    llm_calls: int = 0
 
 
 @dataclass
@@ -86,6 +117,11 @@ class Report:
     replies: int = 0
     # routing cases answered by fast.direct_call, as the app would, without the model
     direct: int = 0
+    # answered before the model by the app's dispatch (a quick line, chess, keiko)
+    dispatched: int = 0
+    # the model's FIRST call was already the right one (before any retry a refusal gave it)
+    first_ok: int = 0
+    llm_calls: list[int] = field(default_factory=list)
     cued: list[int] = field(default_factory=list)
     ttft: list[float] = field(default_factory=list)
     first_say: list[float] = field(default_factory=list)
@@ -99,28 +135,166 @@ class Report:
         return xs[min(len(xs) - 1, round(q * (len(xs) - 1)))]
 
 
-async def timed_reply(llm: Ollama, messages: list[dict]) -> Timed:
-    start = time.perf_counter()
-    ttft = None
-    first_say = None
-    # the same stream reader a real turn uses, act-out and mood cues included
-    last = messages[-1]["content"] if messages[-1]["role"] == "user" else ""
-    said = last.split("\n\n[")[0]
-    # what her previous reply showed, as Conversation.last_cues would hold it
-    before = next((m["content"] for m in reversed(messages[:-1]) if m["role"] == "assistant"), "")
-    shown = tuple(r.name for r in map(resolve, _CUE.findall(before)) if r)
-    stream = StreamingReply(act_out(said), mood=sentiment.read(said).cues, avoid=shown)
-    async for chunk in llm.chat_stream(messages):
-        now = time.perf_counter()
-        if ttft is None:
-            ttft = now - start
-        sentences = stream.feed(chunk)
-        if sentences and first_say is None:
-            first_say = now - start
-    tail = stream.finish()
-    if first_say is None and tail:
-        first_say = time.perf_counter() - start
-    return Timed(stream.raw, ttft or 0.0, first_say, time.perf_counter() - start, stream.react, [c.name for c in stream.cues])
+class ToolCalled(Exception):
+    """The turn handed a tool over to run: where an eval turn stops."""
+
+    def __init__(self, name: str, args: dict):
+        super().__init__(name)
+        # (not .args: an exception turns whatever is put there into a tuple)
+        self.name, self.arguments = name, args
+
+
+class _Clocked:
+    """The model, timed and counted - nothing else changes."""
+
+    def __init__(self, llm):
+        self.llm, self.calls, self.first = llm, 0, None
+
+    def __getattr__(self, name):
+        return getattr(self.llm, name)
+
+    async def chat_stream(self, messages, temperature=0.6):
+        self.calls += 1
+        async for chunk in self.llm.chat_stream(messages, temperature):
+            if self.first is None:
+                self.first = time.perf_counter()
+            yield chunk
+
+
+class _Sink:
+    def __init__(self, host):
+        self.host = host
+
+    def line(self, line):
+        if self.host.first_say is None:
+            self.host.first_say = time.perf_counter()
+        self.host.said.append(line.text)
+
+    async def finish(self, reply):
+        self.host.reply = reply
+
+
+class _BoardSink(_Sink):
+    """A sink with a board, as the app's: her drawing is asked for again when the
+    reply had none (Conversation._complete_board) - the drawing evals use it."""
+
+    def illustrate(self, plan):
+        pass
+
+    def draw(self, found):
+        pass
+
+    def adopt(self, shown):
+        self.host.boards.append(shown)
+
+    def close_board(self):
+        pass
+
+
+class EvalHost:
+    """What respond() talks to while a turn runs. Its tools never get here: the
+    turn stops at _run_tool. Without `boards`, no board sink, so no follow-up
+    drawing request (it comes after her reply and changes neither what she said nor
+    what she called)."""
+
+    def __init__(self, boards: bool = False):
+        self.with_boards = boards
+        self.boards: list = []
+        self.said: list[str] = []
+        self.first_say: float | None = None
+        self.reply: Reply | None = None
+
+    async def thinking(self):
+        pass
+
+    async def tool_status(self, name, status):
+        pass
+
+    async def confirm(self, prompt):
+        return False
+
+    def reply_sink(self):
+        return _BoardSink(self) if self.with_boards else _Sink(self)
+
+
+def conversation_for(llm, case: dict) -> Conversation:
+    """A conversation whose past is the case's: its entrance, then its history."""
+    conv = Conversation(llm)
+    history = [{"role": role, "content": content} for role, content in case.get("history", [])]
+    if case.get("entrance"):
+        # he just summoned her in that one - recorded as a real summon records it
+        conv.entered(next(e for e in load_registry() if e["name"] == case["entrance"]))
+        history = [*conv.history, *history]
+    conv.restore(history)
+    return conv
+
+
+_QUICK = None
+
+
+def who_answers(conv: Conversation, said: str) -> tuple[str, object]:
+    """The app's dispatch, with no keiko or chess game going and the quick lines
+    rendered (as they are a minute after start)."""
+    global _QUICK
+    if _QUICK is None:
+        _QUICK = quick.QuickReplies(load_registry())
+    return dispatch.route(
+        keiko=lambda: keiko.command(said, False),
+        chess=lambda: chess_game.command(said, False, False),
+        quick=lambda: None if conv._panel_offer else _QUICK.answer(said, time.localtime().tm_hour, conv.recent_entrance(), conv.last_cues),
+    )
+
+
+async def live_turn(llm, case: dict, conv: Conversation | None = None, boards: bool = False) -> Timed:
+    """The case's message, as the app answers it. `tools`: canned results for tools
+    the turn may run on its way (a capture_screen whose screenshot is the case's
+    `screen`); the first other tool it hands over ends the turn."""
+    clock = _Clocked(llm)
+    conv = conv or conversation_for(clock, case)
+    conv.llm = clock
+    said = case["say"]
+    who, found = who_answers(conv, said)
+    if who == dispatch.QUICK:
+        # her pre-rendered line: what it says, and the cue it opens on (app.py
+        # _respond_quick plays one of its cues; the first is scored)
+        shown = [c for c in found.cues[:1]]
+        return Timed(found.text, 0.0, None, 0.0, None, shown, Reply(found.text, ""), who=who)
+    if who != dispatch.MODEL:
+        return Timed("", 0.0, None, 0.0, who=who)
+    canned = dict(case.get("tools", {}))
+    if case.get("screen"):
+        canned.setdefault("capture_screen", "screenshot of the full screen, 2560x1440 scaled to 1280x720 attached.")
+
+    async def run_tool(name, args, host):
+        checked = conv.check_tool(name, args)
+        if isinstance(checked, str):
+            return checked  # refused as the app refuses it: the model answers that
+        if name in canned:
+            text = canned.pop(name)
+            if name == "capture_screen" and case.get("screen"):
+                return ToolResult(text, images=[screen_image(case["screen"])], tainted=True)
+            return text
+        raise ToolCalled(name, args)
+
+    conv._run_tool = run_tool
+    start = len(conv.history)
+    host = EvalHost(boards)
+    began = time.perf_counter()
+    called = None
+    try:
+        await conv.respond(said, host)
+    except ToolCalled as call:
+        called = (call.name, call.arguments)
+    finally:
+        conv.cancel_warm()  # its background read-ahead is for a next turn there isn't
+    total = time.perf_counter() - began
+    attempts = [c for c in (parse_tool_call(m["content"]) for m in conv.history[start:] if m["role"] == "assistant") if c]
+    reply = host.reply if called is None else None
+    raw = next((m["content"] for m in reversed(conv.history[start:]) if m["role"] == "assistant"), "") if called is None else ""
+    ttft = (clock.first - began) if clock.first else 0.0
+    first_say = (host.first_say - began) if host.first_say else None
+    cues = [c.name for c in reply.cues] if reply and reply.cues else []
+    return Timed(raw, ttft, first_say, total, reply.react if reply else None, cues, reply, called, attempts, dispatch.MODEL, clock.calls)
 
 
 def screen_image(lines: list[str]) -> str:
@@ -143,27 +317,6 @@ def screen_image(lines: list[str]) -> str:
     buffer = io.BytesIO()
     image.save(buffer, format="JPEG", quality=85)
     return base64.b64encode(buffer.getvalue()).decode("ascii")
-
-
-def _messages(conv: Conversation, case: dict) -> list[dict]:
-    """The prompt a real turn builds (Conversation.prompt). `screen`: text lines shown
-    on a fake screenshot attached to the last message (a capture_screen result),
-    for the screen-injection cases."""
-    history = [{"role": role, "content": content} for role, content in case.get("history", [])]
-    # `entrance`: he just summoned her in that one - recorded as a real summon records it
-    conv.entrance, conv.history = None, []
-    if case.get("entrance"):
-        conv.entered(next(e for e in load_registry() if e["name"] == case["entrance"]))
-        history = [*conv.history, *history]
-        conv.history = []
-    user = case["say"]
-    if case.get("context"):
-        user = f"{user}\n\n[{case['context']}]"
-    final = {"role": "user", "content": user}
-    if case.get("screen"):
-        final["images"] = [screen_image(case["screen"])]
-    recent = [n for _, c in case.get("history", []) for n in re.findall(r'"name": "(\w+)"', c)]
-    return conv.prompt(case["say"], [*history, final], len(history), recent)
 
 
 def _spoken_numbers(text: str) -> str:
@@ -233,84 +386,102 @@ def args_match(got: dict, exact: dict, contains: dict) -> bool:
 
 
 def _record_time(report: Report, t: Timed) -> None:
+    if t.who != dispatch.MODEL or not t.llm_calls:
+        return  # nothing the model was timed on
     report.ttft.append(t.ttft)
     report.total.append(t.total)
+    report.llm_calls.append(t.llm_calls)
     if t.first_say is not None:
         report.first_say.append(t.first_say)
 
 
+def _said(t: Timed) -> str:
+    return t.reply.speak if t.reply else ""
+
+
 async def run_routing(llm: Ollama, report: Report, repeat: int = 1) -> None:
-    conv = Conversation(llm)
+    """Scored on what the live turn hands over to run - after its fast routes,
+    nudges, guards and schema refusals - and, separately, on the model's first call."""
     for case in load("routing.jsonl"):
         for _ in range(repeat):
-            # an unmistakable command never reaches the model in the app (fast.direct_call)
-            # (a follow-up sees the tools its history ran, as Conversation.recent_tools)
-            recent = [n for _, c in case.get("history", []) for n in re.findall(r'"name": "(\w+)"', c)]
-            direct = fast.direct_call(case["say"], recent)
-            if direct is not None:
-                report.direct += 1
-                t = Timed(direct, 0.0, None, 0.0)
-            else:
-                t = await timed_reply(llm, _messages(conv, case))
-                _record_time(report, t)
-            call = parse_tool_call(t.raw)
-            if call and call[0] == "research":
-                # as the app sends it: an empty question is his words, and a
-                # location-dependent search gets his city (brain.py, home.py)
-                question = str(call[1].get("question") or "").strip() or case["say"]
-                call = (call[0], {**call[1], "question": HOME.localise(question)})
-            name = call[0] if call else None
+            t = await live_turn(llm, case)
+            _record_time(report, t)
+            if t.who != dispatch.MODEL:
+                report.dispatched += 1
+            elif t.called is not None and t.llm_calls == 0:
+                report.direct += 1  # fast.direct_call: no model
+            name = t.called[0] if t.called else None
+            args_note = ""
+            tried = [n for n, _ in t.attempts]
             ok = name in case["expect"]
+            if case.get("screen"):
+                # an injection case is only a test if the screenshot was read: it is
+                # scored on what runs after it
+                if tried[:1] == ["capture_screen"]:
+                    tried = tried[1:]
+                else:
+                    args_note += "  NEVER LOOKED AT THE SCREEN"
+                    ok = False
+            first = tried[0] if tried else name
+            report.first_ok += first in case["expect"] and not args_note
             report.routing_n += 1
             report.routing_ok += ok
-            args_note = ""
             if ok and name and (case.get("args") or case.get("contains")):
                 report.args_n += 1
-                good = args_match(call[1], case.get("args", {}), case.get("contains", {}))
+                good = args_match(t.called[1], case.get("args", {}), case.get("contains", {}))
                 report.args_ok += good
                 want = {**case.get("args", {}), **{k: f"~{v}" for k, v in case.get("contains", {}).items()}}
-                args_note = "" if good else f"  ARGS {call[1]} want {want}"
+                args_note = "" if good else f"  ARGS {t.called[1]} want {want}"
                 ok = ok and good
             if ok and not name and case.get("answer"):
-                right = answer_ok(case["answer"], t.raw)
+                right = answer_ok(case["answer"], f"{_said(t)} {t.reply.display if t.reply else ''}")
                 if not right:
-                    args_note = f"  WRONG ANSWER {parse_reply(t.raw).speak[:80]!r}"
+                    args_note = f"  WRONG ANSWER {_said(t)[:80]!r}"
                 ok = ok and right
-            broke = None if name else character_break(parse_reply(t.raw).speak)
+            broke = None if name else character_break(_said(t))
             report.replies += not name
             if broke:
                 report.breaks += 1
                 args_note += f"  CHARACTER BREAK {broke!r}"
                 ok = False
+            # what the model tried on the way (refused, retried), when it isn't just the result
+            if tried and tried != [name]:
+                args_note += f"  (model wrote {' -> '.join(tried)})"
+            if t.llm_calls > 1:
+                args_note += f"  [{t.llm_calls} model calls]"
+            got = name or ("no tool" if t.who == dispatch.MODEL else f"no tool ({t.who})")
             mark = "PASS" if ok else "FAIL"
-            report.lines.append(f"{mark} routing  {case['id']:22} got {name or 'no tool':20} want {case['expect']}{args_note}")
+            report.lines.append(f"{mark} routing  {case['id']:22} got {got:20} want {case['expect']}{args_note}")
+
+
+def _feeling(t: Timed) -> tuple[str, list[str]]:
+    """(what it showed, the cue names): "tool-first" when the turn went to a tool."""
+    if t.called is not None:
+        return "tool-first", ["tool-first"]
+    if t.who not in (dispatch.MODEL, dispatch.QUICK):
+        return t.who, [t.who]
+    names = t.cues or ([t.react.name] if t.react else [])
+    return "+".join(names) or "none", names
 
 
 async def run_reactions(llm: Ollama, report: Report, repeat: int = 1) -> None:
-    conv = Conversation(llm)
     for case in load("reactions.jsonl"):
         for _ in range(repeat):
-            t = await timed_reply(llm, _messages(conv, case))
+            t = await live_turn(llm, case)
             _record_time(report, t)
-            reply = parse_reply(t.raw)
             report.cued.append(len(t.cues))
-            # every cue that played; a display-only reply shows its own
-            names = t.cues or ([reply.react.name] if reply.react else [])
-            picked = "+".join(names) or "none"
-            # a reply that calls a tool first has no reaction yet: judge only real replies
-            if parse_tool_call(t.raw):
-                picked, names = "tool-first", ["tool-first"]
+            picked, names = _feeling(t)
             fits = any(n in case["accept"] for n in names) or (not names and "none" in case["accept"])
             ok = fits and (names[:1] or ["none"])[0] != case.get("forbid_repeat")
             note = ""
-            broke = character_break(reply.speak, case.get("sincere", False))
+            broke = character_break(_said(t), case.get("sincere", False))
             report.replies += 1
             if broke:
                 report.breaks += 1
                 note = f"  CHARACTER BREAK {broke!r}"
                 ok = False
-            if case.get("must_say") and not re.search(case["must_say"], reply.speak, re.I):
-                note += f"  MISSING /{case['must_say']}/ in {reply.speak[:80]!r}"
+            if case.get("must_say") and not re.search(case["must_say"], _said(t), re.I):
+                note += f"  MISSING /{case['must_say']}/ in {_said(t)[:80]!r}"
                 ok = False
             report.react_n += 1
             report.react_ok += ok
@@ -322,7 +493,10 @@ def summary(report: Report) -> dict:
     return {
         "model": report.model,
         "routing": f"{report.routing_ok}/{report.routing_n} ({report.routing_ok / max(1, report.routing_n):.0%})",
+        "routing_first_call": f"{report.first_ok}/{report.routing_n} - the model's first call, before any refusal let it retry",
         "routing_direct": f"{report.direct} answered without the model (fast.direct_call)",
+        "routing_dispatched": f"{report.dispatched} answered before the model (a quick line, chess, keiko)",
+        "model_calls_per_turn": round(statistics.mean(report.llm_calls), 2) if report.llm_calls else None,
         "arguments": f"{report.args_ok}/{report.args_n} ({report.args_ok / max(1, report.args_n):.0%})",
         "reactions": f"{report.react_ok}/{report.react_n} ({report.react_ok / max(1, report.react_n):.0%})",
         "conversation": f"{report.chat_ok}/{report.chat_n} ({report.chat_ok / max(1, report.chat_n):.0%})",
@@ -357,17 +531,12 @@ async def run_conversation(llm: Ollama, report: Report, repeat: int = 1) -> None
     """Talking, not commanding. Each case is scored three ways: does the feeling she
     shows fit what he said, did she stay in character, and - for the conversational
     ones - did she talk instead of reaching for a tool."""
-    conv = Conversation(llm)
     for case in load("conversation.jsonl"):
         for _ in range(repeat):
-            t = await timed_reply(llm, _messages(conv, case))
+            t = await live_turn(llm, case)
             _record_time(report, t)
-            reply = parse_reply(t.raw)
-            called = parse_tool_call(t.raw)
-            names = t.cues or ([reply.react.name] if reply.react else [])
-            picked = "+".join(names) or "none"
-            if called:
-                picked, names = "tool-first", ["tool-first"]
+            picked, names = _feeling(t)
+            called = t.attempts[0] if t.attempts else t.called
 
             fits = any(n in case["accept"] for n in names) or (not names and "none" in case["accept"])
             note = "" if fits else f"  FEELING {picked} not in {'/'.join(case['accept'])}"
@@ -384,7 +553,7 @@ async def run_conversation(llm: Ollama, report: Report, repeat: int = 1) -> None
                     note += f"  TURNED INTO A TASK ({called[0]})"
                     ok = False
 
-            spoken_text = reply.speak
+            spoken_text = _said(t)
             desk = SERVICE_DESK.search(spoken_text)
             if desk:
                 report.chat_service += 1

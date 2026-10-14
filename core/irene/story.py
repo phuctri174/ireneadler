@@ -31,7 +31,12 @@ from dataclasses import dataclass, field
 # someone did or said something: a subject, then a reporting or doing verb in the past
 _SUBJECT = (
     r"(?:he|she|they|we|i|nobody|no\s+one|everyone|everybody|someone|somebody|my\s+\w+(?:\s+\w+)?|this\s+(?:guy|girl|dude|woman|man|person|kid|lady)|"
-    r"the\s+(?:boss|manager|teacher|sensei|guy|girl|landlord|driver|waiter|waitress|neighbou?r)|[A-Z][\w'’]+)"
+    r"the\s+(?:boss|manager|teacher|sensei|guy|girl|landlord|driver|waiter|waitress|neighbou?r)|"
+    r"(?:sensei|senpai|coach|teacher|mom|mum|dad)|"
+    # a name - capitalised for real: under re.I this alternative once matched every
+    # word, so "the backup script failed", "you've made my week" and "the opponent's
+    # left dou" were all someone doing something (13/49 reaction cases in story mode)
+    r"(?-i:(?!I['’])[A-Z][\w'’]+))"
 )
 _DID = (
     r"(?:said|says|told|tells|asked|goes|went|was\s+like|is\s+like|yelled|shouted|texted|messaged|called|"
@@ -42,16 +47,22 @@ _DID = (
     r"complained|bragged|admitted|apologi[sz]ed|interrupted|embarrassed|humiliated|"
     r"invited|uninvited|picked|chose|showed|copied|reported|scolded|shouted|screamed|"
     r"sat|stood|realised|realized|ended\s+up|found\s+out|noticed|saw|heard|met|ran\s+into|walked\s+into|came\s+(?:in|into|over|back)|"
-    r"announced|confessed|showed\s+me|grabbed|pushed|hugged|visited)"
+    r"announced|confessed|showed\s+me|grabbed|pushed|hugged|visited|"
+    r"stopped|dropped|deleted|erased|wrote|bought|sold|paid|borrowed|turned|opened|shared|forwarded|changed|moved)"
 )
-_NARRATIVE = re.compile(rf"\b{_SUBJECT}\s+(?:just\s+|actually\s+|literally\s+|then\s+|even\s+|still\s+|totally\s+)?{_DID}\b", re.I)
+_NARRATIVE = re.compile(
+    rf"\b{_SUBJECT}\s+(?:just\s+|actually\s+|literally\s+|then\s+|even\s+|still\s+|totally\s+|never\s+|always\s+|finally\s+|apparently\s+)?{_DID}\b",
+    re.I,
+)
 
 # how a story is opened or carried along
 _STORY_OPENER = re.compile(
     r"\b(?:so\s+(?:today|yesterday|this\s+morning|last\s+night|tonight|at\s+work|in\s+class|at\s+practice|at\s+kendo)|"
     r"you\s+won'?t\s+believe|guess\s+what\s+\w+\s+(?:did|said)|story\s+time|"
     r"let\s+me\s+tell\s+you\s+(?:about|what)|i\s+have\s+to\s+tell\s+you|"
-    r"(?:the\s+)?drama|spill(?:ing)?\s+the\s+tea|so\s+there'?s\s+this|"
+    r"(?:the\s+)?drama|spill(?:ing)?\s+the\s+tea|so\s+there'?s\s+this|^\W*turns\s+out\s+(?:my|his|her|the|that)\b|"
+    # how a spoken story starts: "So my landlord...", "So this girl I was talking to..."
+    r"^\W*so\s+(?:this|my|our)\s+(?!\w+\s+(?:is|isn'?t|was\s+(?:slow|broken|down)|keeps|won'?t|doesn'?t|can'?t)\b)|"
     r"remember\s+(?:\w+|my\s+\w+)\s*\?|"
     r"(?:today|yesterday|this\s+morning|last\s+night|earlier)\s*,?\s+(?:at\s+\w+\s*,?\s+)?(?:my|this|the|he|she|they|we|i)\b)",
     re.I,
@@ -70,7 +81,11 @@ _REQUEST = re.compile(
     r"open|close|show|find|search|look\s+up|google|play|pause|save|delete|move|copy|"
     r"write|read|send|set|make|create|build|run|start|turn|switch|draw|explain|tell\s+me\s+(?:about|how|what|why)|"
     r"what'?s\s+the|what\s+is|what\s+are|who\s+is|who\s+was|how\s+do|how\s+does|how\s+many|how\s+much|"
-    r"when\s+is|where\s+is|why\s+is|why\s+does|remind|calculate|convert|translate|zoom|scroll)\b",
+    r"when\s+is|where\s+is|why\s+is|why\s+does|remind|calculate|convert|translate|zoom|scroll|"
+    # what she keeps: "forget what I told you about Trác" is a command, not a story
+    # about Trác (live, 2026-10-13: story mode took it, offered no tool, and she only
+    # said "consider it forgotten")
+    r"forget|erase|wipe|remove|remember\s+(?:that|this))\b",
     re.I,
 )
 
@@ -79,6 +94,19 @@ _ASKS_WORK = re.compile(
     r"\b(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:open|close|show|find|search|look|play|pause|save|"
     r"write|read|send|set|make|create|remind|put|draw|check|turn|switch|start|stop|get|pull|bring)\b"
     r"|\bremind\s+me\b|\bset\s+(?:a|an)\s+(?:timer|reminder|alarm)\b|\blook\s+(?:it|that|him|her)\s+up\b",
+    re.I,
+)
+
+# talking to her about the conversation itself - thanks, a correction, feedback - is
+# never a story, whatever verbs it has ("No, that's not what I asked for", "That's the
+# old one. I said report.pdf.", "Thank you, honestly you've made this week easier")
+_ABOUT_US = re.compile(
+    r"^\W*(?:(?:ok(?:ay)?|oh|aw+)\W+)?(?:thanks|thank\s+you|thx|ty|cheers|much\s+appreciated)\b"
+    r"|^\W*(?:no|nope|nah|wrong|not\s+quite)\b(?!\s+way\b)(?=\W+(?:i|that|this|it'?s|it\s+is|not|the|you)\b)"
+    r"|\bthat'?s\s+(?:not\s+(?:right|it|what)|wrong|incorrect|the\s+(?:old|wrong|other)\s+one)\b|\bthat\s+isn'?t\s+(?:right|it|what)\b"
+    r"|\bwhat\s+i\s+(?:asked|said|meant|wanted)\b|\bi\s+meant\b|\bi\s+(?:said|asked\s+for)\s+\S+\.\w{2,4}\b"
+    r"|\byou\s+(?:got|have)\s+(?:that|it|this)\s+wrong\b|\btry\s+again\b"
+    r"|\byou(?:'ve|’ve|\s+have)\s+(?:made|been|done|saved|helped)\b|\b(?:good|great|nice)\s+(?:job|work)\b",
     re.I,
 )
 
@@ -175,6 +203,14 @@ _ABSURD = re.compile(
     re.I,
 )
 
+# something wondrous he saw: she is in awe with him ("I saw the northern lights last
+# night, the whole sky was green and pink!" was a "go on" listening face)
+_AWE = re.compile(
+    r"\b(?:northern\s+lights|aurora|the\s+whole\s+sky|shooting\s+stars?|meteor\s+shower|milky\s+way|double\s+rainbow|"
+    r"breathtaking|so\s+beautiful|gorgeous|stunning|magical|unreal|incredible\s+view|the\s+view\s+was)\b",
+    re.I,
+)
+
 # the beat -> the reactions it calls for, best first (cues.json names)
 BEAT_CUES: dict[str, tuple[str, ...]] = {
     "wronged": ("fuming", "headShake", "shocked"),
@@ -182,6 +218,7 @@ BEAT_CUES: dict[str, tuple[str, ...]] = {
     "shock": ("shocked", "surprised", "starryEyed"),
     "sad": ("sad", "concerned"),
     "delight": ("excitedBounce", "starryEyed", "happy"),
+    "awe": ("starryEyed", "surprised", "love"),
     "absurd": ("giggle", "amused", "dizzy"),
     "following": ("listenClose", "thinking", "curious", "headTilt"),
 }
@@ -202,6 +239,7 @@ BEAT_GUIDANCE: dict[str, str] = {
     "shock": "A twist. Jaw on the floor - react to the twist itself (\"no WAY\", \"wait, back up\").",
     "sad": "This one stings. Soften: a quiet, warm line that you're sorry, no silver lining, then gently ask.",
     "delight": "Good stuff happened. Be thrilled with him - big, genuine, then ask for the best part.",
+    "awe": "He saw something wondrous. Be in awe with him - hushed and starry, not loud - then ask what it was like.",
     "absurd": "It's absurd. Laugh with him ([laugh] fits), then ask what happened next.",
     "following": "You're following along. Keep him going: a tiny reaction and a question about what happened.",
 }
@@ -426,6 +464,8 @@ def _beat(text: str) -> str:
         return "absurd"
     if _DELIGHT.search(text):
         return "delight"
+    if _AWE.search(text):
+        return "awe"
     return "following"
 
 
@@ -436,12 +476,23 @@ def is_story(text: str) -> bool:
         return False
     if _REQUEST.search(said) and not _STORY_OPENER.search(said):
         return False
-    if _ASKS_WORK.search(said) or _QUESTION.match(said):
+    if _ASKS_WORK.search(said) or _QUESTION.match(said) or _ABOUT_US.search(said) or _ends_asking(said):
         return False
-    narrative = len(_NARRATIVE.findall(said))
+    found = [m.group(0) for m in _NARRATIVE.finditer(said)]
     opener = bool(_STORY_OPENER.search(said))
-    # one clear "she said/he did" plus anything story-like, or two of them, or an opener
-    return opener or narrative >= 2 or (narrative >= 1 and (len(said.split()) >= 7 or _beat(said) != "following"))
+    # someone else did something - not just him ("I lost three games", "I got
+    # accepted!" is news, and gets the plain emotional read, not a listening friend)
+    others = any(not re.match(r"(?:i|we)\b", m, re.I) for m in found)
+    # an opener, or two things that happened, or one with a beat to it, or someone
+    # else's doing told at some length
+    return opener or len(found) >= 2 or (len(found) >= 1 and (_beat(said) != "following" or (others and len(said.split()) >= 7)))
+
+
+def _ends_asking(said: str) -> bool:
+    """It ends on a question for her about something ("...tenouchi. What's that?") -
+    not his advice question, not "right?" or "who does that?"."""
+    last = re.split(r"(?<=[.!?…])\s+", said.strip())[-1]
+    return bool(_QUESTION.match(last)) and not _ADVICE_ASKED.search(last) and not _CONTINUE.search(last)
 
 
 def read(text: str, earlier: list[str] | None = None) -> Tale | None:
@@ -455,7 +506,10 @@ def read(text: str, earlier: list[str] | None = None) -> Tale | None:
     if not story:
         recent = earlier[-2:]
         told = any(is_story(m) for m in recent)
-        if told and not ((_REQUEST.search(said) or _ASKS_WORK.search(said)) and not advice) and (
+        # the story goes on - unless he has turned to her: a request, thanks, a
+        # correction, a question about something else
+        turned = (_REQUEST.search(said) or _ASKS_WORK.search(said) or _ABOUT_US.search(said) or _ends_asking(said)) and not advice
+        if told and not turned and (
             _CONTINUE.search(said) or advice or bool(_NARRATIVE.search(said)) or bool(_beat(said) != "following")
         ):
             story = continuing = True
@@ -490,6 +544,7 @@ FALLBACKS: dict[str, tuple[str, ...]] = {
     "shock": ("No WAY. Wait - back up.", "Shut up! What happened next?", "Wait, what?! Then what?"),
     "sad": ("Oh no... I'm sorry. How are you feeling about it?", "That really stings. What happened after?"),
     "delight": ("Stop it! Tell me everything.", "Yes! What was the best part?"),
+    "awe": ("Oh, wow... What was it like?", "No way. I'd have loved to see that. What was it like?"),
     "absurd": ("[laugh] No! Then what?", "Okay that's actually insane. Keep going."),
     "following": ("Mm-hm. And then?", "Wait, who's that?", "Okay... then what happened?"),
 }
@@ -545,6 +600,7 @@ FOLLOW_UPS: dict[str, tuple[str, ...]] = {
     "shock": ("Then what?", "How did everyone react?", "Wait, how did you find out?", "What happened next?"),
     "sad": ("How are you feeling about it now?", "What happened after?", "Did anyone say anything?"),
     "delight": ("What was the best part?", "Then what?", "How did you feel?", "Tell me everything - what happened next?"),
+    "awe": ("What was it like?", "How long did it last?", "Did you get a picture?"),
     "absurd": ("Then what happened?", "Did anyone see?", "How did it end?", "What did everyone do?"),
     "following": ("And then?", "What happened next?", "Who was that?", "How did that go?"),
 }

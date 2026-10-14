@@ -1,0 +1,30 @@
+# Lecture capture (core/irene/lecture.py): what the PC plays - a lecture, a meeting -
+# heard through WASAPI loopback and written down as it goes. Off until he starts it
+# ("Irene, listen to this lecture" or Ctrl+Alt+Shift+L); never automatic.
+#
+# A separate pipeline from his microphone, end to end: no speaker check (the lecturer
+# is not him - the gate would throw the whole lecture away), no wake phrases, no
+# echo canceller. It shares only the Whisper model, through its queue.
+#
+# Kept: transcript text only (core/data/lectures/<session>/transcript.jsonl, one line
+# per chunk, flushed to disk as it goes). No audio is ever written.
+
+# the output device to listen to: "default" (whatever Windows plays through), or
+# part of a device's name ("Speakers", "ONIKUMA")
+device: default
+# audio is cut into chunks at a pause between these lengths (seconds)
+chunk_min_s: 18
+chunk_max_s: 30
+# a chunk quieter than this (RMS) is silence: nothing is transcribed
+silence_rms: 0.004
+# Whisper for a lecture: wider beam than his short commands need, his vocabulary off
+beam_size: 3
+# her own voice comes out of the same speakers: what plays while she speaks, and this
+# long after, is not the lecture (zeroed out, so the timeline stays true)
+her_voice_tail_s: 0.4
+# the language model leaves VRAM while a lecture is captured and comes back for the
+# summary; a question meanwhile loads it, and it leaves again after this much quiet
+unload_llm: true
+reload_idle_s: 120
+# summaries: transcript windows of about this many words go to the model at once
+map_window_words: 1800

@@ -14,6 +14,9 @@ import re
 from .react import act_out
 
 MAX_WORDS = 10
+# tools whose result carries outside content but which write their own spoken reply
+# from it (brain.py speaks it as is - the turn ends there, nothing acts on it)
+OWN_SPEECH = {"lecture_summary"}
 _MORE = re.compile(r"\b(and|then|also|but|why|explain|tell me|what about)\b", re.I)
 _RESUME = re.compile(r"\b(resume|unpause|play|continue|start|back on)\b", re.I)
 
@@ -143,7 +146,26 @@ def _screens(args: dict, result: str, said: str):
                   "Going dark - just call me."]), _pick(["lightsOut", "yawn", "pillowHands"])
 
 
+def _lecture_started(args: dict, result: str, said: str):
+    if result.startswith("already listening"):
+        return "I'm already listening - " + result.split(" - ", 1)[-1] + ".", "headTilt"
+    return _pick(["Listening! I'll write it all down.", "On it - I'm taking notes from here.",
+                  "Got it. Every word, written down - just tell me when it's over."]), "takeNotes"
+
+
+def _lecture_stopped(args: dict, result: str, said: str):
+    m = re.search(r"stopped: ([\d:]+) listened, ([\d,]+) words", result)
+    if m:
+        return _pick([f"Stopped. {m.group(1)} of lecture, {m.group(2)} words. Want the summary?",
+                      f"Done listening - {m.group(2)} words in {m.group(1)}. Shall I summarise it?"]), _pick(["satisfied", "headTilt"])
+    if result.startswith("not listening"):
+        return "I wasn't listening to anything, sir.", "shrug"
+    return "Stopped - but I didn't catch any speech in it.", "concerned"
+
+
 TEMPLATES = {
+    "lecture_start": _lecture_started,
+    "lecture_stop": _lecture_stopped,
     "screens_off": _screens,
     "open_file": _opened,
     "save_panel_pdf": _saved,
@@ -267,6 +289,149 @@ def _everyday(said: str) -> str | None:
     return None
 
 
+# ---- timers: a request with an explicit length (routing evals: "Give me 90 seconds"
+# became 1 minute, "tell me when 7 minutes are up" got no timer at all). No length ->
+# nothing here; the model asks how long.
+_NUMBER_WORDS = {
+    "a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+    "ten": 10, "eleven": 11, "twelve": 12, "fifteen": 15, "twenty": 20, "twenty-five": 25, "thirty": 30, "forty": 40,
+    "forty-five": 45, "fifty": 50, "sixty": 60, "ninety": 90,
+}
+_UNIT = r"(hours?|hrs?|minutes?|mins?|seconds?|secs?)"
+_AMOUNT = re.compile(r"\b(\d+(?:\.\d+)?|" + "|".join(sorted(map(re.escape, _NUMBER_WORDS), key=len, reverse=True)) + r")[\s-]+" + _UNIT + r"\b", re.I)
+
+
+def duration_minutes(text: str) -> float | None:
+    """The length he said, in minutes: "90 seconds" 1.5, "an hour and a half" 90,
+    "quarter of an hour" 15, "1 hour 30 minutes" 90 - or None if he gave none."""
+    t = text.lower()
+    if re.search(r"\b(?:an?|one) hour and a half\b|\bhour and a half\b", t):
+        return 90.0
+    if re.search(r"\bhalf (?:an|a) hour\b", t):
+        return 30.0
+    if re.search(r"\bquarter (?:of )?(?:an )?hour\b", t):
+        return 15.0
+    total = 0.0
+    for amount, unit in _AMOUNT.findall(t):
+        n = float(amount) if amount[0].isdigit() else float(_NUMBER_WORDS[amount.lower()])
+        total += n * 60 if unit.startswith(("h",)) else n / 60 if unit.startswith("s") else n
+    return round(total, 2) if total > 0 else None
+
+
+_TIMER_ASK = re.compile(
+    r"\b(?:timer|pomodoro|countdown)\b|\bremind me (?:in|after)\b|\bwake me (?:up )?in\b|\b(?:tell|let) me (?:know )?when\b.*\b(?:are|is) up\b"
+    r"|\bping me in\b|^\W*give me \d",
+    re.I,
+)
+# talk about a timer, not a request for one: "my kitchen timer broke", a story
+_TIMER_TALK = re.compile(r"\b(?:broke|broken|died|was|were|did|had|yesterday|he|she|they|his|her)\b", re.I)
+
+
+def _timer(said: str) -> str | None:
+    text = said.strip()
+    if len(text.split()) > 16 or not _TIMER_ASK.search(text) or _TIMER_TALK.search(text):
+        return None
+    minutes = duration_minutes(text)
+    if minutes is None:
+        return None
+    args: dict = {"minutes": int(minutes) if minutes == int(minutes) else minutes}
+    label = re.search(r"\bfor (?:the |my )?([a-z][a-z ]{1,24}?)\s*[.!?]*$", text, re.I)
+    noun = re.match(r"^\W*([a-z]+) timer\b", text, re.I)
+    if label and duration_minutes(label.group(1)) is None:
+        args["label"] = label.group(1).strip()
+    elif noun and noun.group(1).lower() not in ("set", "start", "a", "the", "my", "new"):
+        args["label"] = noun.group(1).lower()
+    return _call("set_timer", args)
+
+
+# "how many days until New Year's": the date is fixed - the model once counted to 31 December
+_HOLIDAYS = {"new year": "01-01", "new year's": "01-01", "new years": "01-01", "christmas": "12-25", "christmas eve": "12-24",
+             "halloween": "10-31", "valentine's day": "02-14", "valentines day": "02-14", "valentine's": "02-14", "new year's eve": "12-31"}
+_UNTIL_HOLIDAY = re.compile(r"\b(?:how (?:many|long)|days?)\b.*\b(?:until|till|til|to|before)\s+(?:the\s+)?(" + "|".join(
+    sorted(map(re.escape, _HOLIDAYS), key=len, reverse=True)) + r")(?:\s+day)?\b", re.I)
+
+
+def _holiday(said: str) -> str | None:
+    m = _UNTIL_HOLIDAY.search(said)
+    return _call("get_time", {"until": _HOLIDAYS[m.group(1).lower()]}) if m else None
+
+
+# a file he names with its extension, in Desktop or Downloads, asked about: read it
+_NAMED_FILE = re.compile(
+    r"^\W*(?:what does|what do(?:es)?|what's in|what is in|summari[sz]e|read|give me the gist of|what's)\s+(?:the\s+|my\s+)?"
+    r"(.{2,80}?\.(?:pdf|docx?|txt|md|pptx?))\s+(?:in|on|from)\s+(?:my\s+|the\s+)?(downloads|desktop)\b(?:\s+(?:cover|say|about|contain|mean))?\s*[.!?]*$",
+    re.I,
+)
+
+
+# "open the picture cat.jpg in my downloads" (the model once put the name in `saved`,
+# which is only for files she saved herself)
+_OPEN_NAMED = re.compile(
+    r"^\W*(?:(?:can|could) you\s+|please\s+)?open\s+(?:the\s+|my\s+)?(?:picture|photo|image|file|document|pdf|video|song|spreadsheet)?\s*"
+    r"(.{2,80}?\.(?:pdf|docx?|txt|md|pptx?|xlsx?|csv|jpe?g|png|gif|webp|mp4|mkv|mp3|wav|zip))\s+(?:in|on|from)\s+(?:my\s+|the\s+)?(downloads|desktop)\b"
+    r"(?:\s+(?:please|for me))?\s*[.!?]*$", re.I)
+# "what's inside the Games folder on my desktop?"
+_LIST_FOLDER = re.compile(
+    r"^\W*(?:(?:can|could) you\s+|please\s+)?(?:what'?s|what is|show me what'?s|list what'?s|tell me what'?s)\s+(?:inside|in)\s+(?:the|my)\s+"
+    r"(.{1,40}?)\s+folder\s+(?:on|in)\s+(?:my\s+|the\s+)?(downloads|desktop)\b\s*[.!?]*$", re.I)
+
+
+def _named_file(said: str) -> str | None:
+    text = said.strip()
+    if m := _NAMED_FILE.match(text):
+        return _call("read_and_summarize", {"root": m.group(2).lower(), "path": m.group(1)})
+    if m := _OPEN_NAMED.match(text):
+        return _call("open_file", {"root": m.group(2).lower(), "path": m.group(1)})
+    if m := _LIST_FOLDER.match(text):
+        return _call("list_files", {"root": m.group(2).lower(), "path": m.group(1)})
+    return None
+
+
+# "summarise this window", "what's on my screen": a look at it
+_LOOK = re.compile(r"^\W*(?:(?:can|could) you\s+|please\s+)?(?:summari[sz]e|read|explain|describe|what'?s (?:in|on)|what is (?:in|on)|look at)\s+"
+                   r"(?:this|my|the current|the)\s+(window|tab|app|screen)\b(?:\s+(?:for me|please))?\s*[.!?]*$", re.I)
+
+
+def _look(said: str) -> str | None:
+    m = _LOOK.match(said.strip())
+    if not m:
+        return None
+    return _call("capture_screen", {"target": "full" if m.group(1).lower() == "screen" else "active_window"})
+
+
+# "play a video of X", "open YouTube and play some lofi", "play X on YouTube"
+_YT = re.compile(r"^\W*(?:(?:can|could) you\s+|please\s+)?(?:(?:open|go to)\s+youtube\s+and\s+)?play\s+(?:me\s+)?(?:a|the|some)?\s*"
+                 r"(?:(?:video|clip)s?\s+(?:of|about|on)\s+)?(.{2,80}?)(?:\s+on\s+youtube)?(?:\s+(?:please|for me))?\s*[.!?]*$", re.I)
+
+
+def _youtube(said: str) -> str | None:
+    text = said.strip()
+    if not re.search(r"\byoutube\b|\b(?:video|clip)s?\b", text, re.I):
+        return None  # "play" alone is his media (resume), never a search
+    m = _YT.match(text)
+    return _call("youtube_play", {"query": m.group(1).strip()}) if m else None
+
+
+# "open the last news story on my second screen", "open the weather from the dashboard"
+_ORD = {"first": 1, "top": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "fifth": 5, "last": -1, "bottom": -1}
+_DASH_ITEM = re.compile(
+    r"^\W*(?:irene\W+)?(?:(?:can|could) you\s+|please\s+)?(?:open|show(?: me)?|pull up)\s+the\s+(?:(first|top|1st|second|2nd|third|3rd|fourth|fifth|last|bottom)\s+)?"
+    r"(news|story|headline|weather|forecast|stock|market|quote)(?:\s+(?:story|item|one|headline|card))?"
+    r"(?:\s+(?:on|from|in)\s+(?:my\s+|the\s+)?(?:dashboard|second screen|panel|other screen))?\s*[.!?]*$", re.I)
+_DASH_SECTION = {"news": "news", "story": "news", "headline": "news", "weather": "weather", "forecast": "weather", "stock": "stocks",
+                 "market": "stocks", "quote": "stocks"}
+
+
+def _dashboard(said: str) -> str | None:
+    m = _DASH_ITEM.match(said.strip())
+    if not m or not (m.group(1) or re.search(r"\b(?:dashboard|second screen|panel|other screen)\b", said, re.I)):
+        return None
+    args: dict = {"section": _DASH_SECTION[m.group(2).lower()]}
+    if m.group(1):
+        args["number"] = _ORD[m.group(1).lower()]
+    return _call("open_dashboard_item", args)
+
+
 # the weather, the sunset: always a search (the model once invented a sunset time,
 # and New York's weather), in his city unless he names another (home.py)
 _ASK_WEATHER = re.compile(
@@ -276,6 +441,9 @@ _ASK_WEATHER = re.compile(
 
 
 def _weather(said: str) -> str | None:
+    # the weather CARD on his dashboard is not a forecast question (routing eval dash-weather)
+    if re.search(r"\b(?:dashboard|second screen|panel|card)\b", said, re.I):
+        return None
     if not _ASK_WEATHER.search(said) or _MORE.search(said) or len(said.split()) > 16:
         return None
     from .home import HOME
@@ -313,7 +481,9 @@ _VOLATILE = re.compile(
     r"|\b(?:come out|coming out|release date|released|launch(?:es|ed|ing)?|premieres?)\b"
     r"|\bpopulation\b|\bhow many people live\b|\bwhat'?s new (?:in|with|about)\b"
     r"|\b(?:ceo|president|prime minister|chairman|head coach|leader) of\b|\bwho (?:runs|leads|owns|heads|is in charge of|coaches)\b"
-    r"|\b(?:rules|requirements|regulations|criteria)\b|\bwhat do i need (?:for|to)\b",
+    r"|\b(?:rules|requirements|regulations|criteria)\b|\bwhat do i need (?:for|to)\b"
+    # a product's specs: past her training for anything new (the RTX 5090 was answered from memory)
+    r"|\b(?:specs?|specifications|benchmarks?)\b",
     re.I,
 )
 # a question at all - and not about her, him, or his own things
@@ -335,6 +505,9 @@ def _chess_opening(said: str) -> str | None:
     System the Italian's moves)."""
     text = said.strip()
     if len(text.split()) > 20 or not _QUESTION.search(text + "?") or _PERSONAL.search(text):
+        return None
+    # "open the Queen's Gambit PDF": his file, named after an opening - not a question about it
+    if re.search(r"\b(?:pdf|file|document|docx?|saved|download(?:ed|s)?)\b|^\W*(?:open|play|show me the)\b", text, re.I):
         return None
     if not _OPENING.search(text) or not (re.search(r"\bchess\b", text, re.I) or re.search(r"\b(?:sicilian|ruy lopez|najdorf|caro|nimzo|gr[uü]nfeld|catalan|indian|benoni|pirc|alekhine|scandinavian|italian game|london system|scotch|vienna|fried liver|gambit)\b", text, re.I)):
         return None
@@ -394,12 +567,87 @@ def _briefing(said: str, recent_tools=()) -> str | None:
     return None
 
 
+# lecture capture (tools/lecture.py): start, stop and the summary, said plainly -
+# the whole message, so "the lecture was boring" or "I have a lecture tomorrow" never match
+_LEC_LEAD = r"^\W*(?:(?:hey|ok(?:ay)?|so|alright|right|irene|hey irene)\W+)*(?:(?:can|could|would) you\s+|you can\s+|please\s+|i want you to\s+|go ahead and\s+)*"
+_LEC_THING = r"(?:the\s+|this\s+|my\s+|that\s+)?(?:lecture|class|lesson|seminar|talk|meeting|webinar)"
+_LEC_TAIL = r"(?:\s+(?:for me|please|now|irene|sir))*\s*[.!?]*\s*$"
+_LEC_START = re.compile(_LEC_LEAD + r"(?:(?:start\s+)?listen(?:ing)?\s+(?:in\s+)?(?:to|on)|(?:start\s+)?(?:transcrib(?:e|ing)|record(?:ing)?|captur(?:e|ing))|(?:start\s+)?tak(?:e|ing)\s+notes\s+(?:on|of|for|during))\s+" + _LEC_THING + r"(?:\s+(?:that'?s|that is|which is)\s+(?:on|playing))?" + _LEC_TAIL, re.I)
+_LEC_STOP_NAMED = re.compile(_LEC_LEAD + r"(?:stop\s+(?:listening|transcribing|recording|capturing|taking\s+notes)\s+(?:to|on|of)\s+" + _LEC_THING
+                             + r"|" + _LEC_THING + r"(?:'s|\s+is)\s+(?:over|done|finished)(?:[,.;!]?\s+(?:so\s+|you can\s+)?stop\s+(?:listening|transcribing|recording|taking\s+notes))?)"
+                             + _LEC_TAIL, re.I)
+# bare "stop listening" is the lecture only while one is being captured (else it
+# may mean "stop listening to me")
+_LEC_STOP_BARE = re.compile(_LEC_LEAD + r"stop\s+(?:listening|transcribing|recording|taking\s+notes)" + _LEC_TAIL, re.I)
+_LEC_SUM = re.compile(_LEC_LEAD + r"(?:summari[sz]e|sum\s+up|give\s+me\s+(?:a\s+|the\s+)?(?:quick\s+|short\s+)?(?:summary|rundown|recap)\s+of|recap|what\s+was)\s+" + _LEC_THING
+                      + r"(?:\s+(?:actually|really|even|all))?(?:\s+about)?" + _LEC_TAIL, re.I)
+# after a summary: "more on the second topic", "tell me more about section three"
+_LEC_ORDINAL = r"(first|second|third|fourth|fifth|sixth|seventh|eighth|last|1st|2nd|3rd|4th|5th|one|two|three|four|five|six|seven|eight|[1-8])"
+_LEC_EXPAND = re.compile(r"^\W*(?:(?:ok(?:ay)?|so|and|alright|irene)\W+)*(?:(?:can|could) you\s+|please\s+)*(?:tell\s+me\s+)?(?:a\s+bit\s+|a\s+little\s+)?more\s+(?:about|on)\s+"
+                         r"(?:the\s+)?(?:" + _LEC_ORDINAL + r"\s+(?:topic|section|part|one)|(?:topic|section|part)\s+(?:number\s+)?" + _LEC_ORDINAL + r")" + _LEC_TAIL, re.I)
+_LEC_WORDS = {"first": "1", "one": "1", "1st": "1", "second": "2", "two": "2", "2nd": "2", "third": "3", "three": "3", "3rd": "3", "fourth": "4",
+              "four": "4", "4th": "4", "fifth": "5", "five": "5", "5th": "5", "sixth": "6", "six": "6", "seventh": "7", "seven": "7", "eighth": "8",
+              "eight": "8", "last": "last"}
+# a question about what was said: "what did the professor say about X", "... in that lecture?"
+_LEC_ASK = re.compile(r"^\W*(?:(?:so|and|ok(?:ay)?|irene|hey irene)\W+)*(?:what|did|does|when|how|why|was|were|is|which|who)\b.*"
+                      r"(?:\bthe\s+(?:professor|lecturer|instructor|speaker)\s+(?:say|said|mention|explain|talk|cover|bring)"
+                      r"|\b(?:in|during|from)\s+(?:the|that|this|today'?s)\s+(?:lecture|class|seminar|webinar)\b)", re.I)
+
+
+def _capturing() -> bool:
+    from tools import lecture as lecture_tool
+
+    return bool(lecture_tool.LECTURES is not None and lecture_tool.LECTURES.active)
+
+
+def _lecture(said: str, recent_tools=()) -> str | None:
+    text = said.strip()
+    if _LEC_STOP_NAMED.match(text) or (_LEC_STOP_BARE.match(text) and _capturing()):
+        return _call("lecture_stop")
+    if _LEC_START.match(text):
+        return _call("lecture_start")
+    if _LEC_SUM.match(text):
+        return _call("lecture_summary")
+    if "lecture_summary" in recent_tools and (m := _LEC_EXPAND.match(text)):
+        which = (m.group(1) or m.group(2) or "").lower()
+        return _call("lecture_summary", {"expand": _LEC_WORDS.get(which, which)})
+    if _LEC_ASK.match(text) and len(text.split()) >= 5:
+        return _call("lecture_ask", {"question": text})
+    return None
+
+
+_FORGET_ABOUT = re.compile(
+    r"^\W*(?:(?:hey\s+)?irene\W+)?(?:please\s+)?(?:forget|erase|delete|remove|wipe)\s+"
+    r"(?:(?:what|everything|anything|all)(?:\s+(?:that|which))?\s+(?:i\s+(?:told|said\s+to)\s+you|i\s+said|you\s+(?:know|remember|kept|have))|"
+    r"the\s+(?:stuff|things?|bits?|part)|your\s+memor(?:y|ies)\s+of)\s+(?:about|regarding|of|on)\s+([^,.;!?]+)",
+    re.I,
+)
+
+
+def _forget_about(said: str) -> str | None:
+    """"Forget what I told you about Trác": forget_memory, never only words - live, the
+    model once said "consider it forgotten" and called nothing. Her research is
+    clear_research's, and "what we talked about" (no topic) is the conversation's."""
+    m = _FORGET_ABOUT.match(said)
+    if m is None or re.search(r"\bresearch", said, re.I):
+        return None
+    about = m.group(1).strip()
+    return _call("forget_memory", {"about": about}) if about else None
+
+
 def direct_call(said: str, recent_tools=()) -> str | None:
     """A tool call written for the model, for a command that needs no model to
     understand it - or None. `recent_tools`: what ran in the last turns (a
     follow-up on the briefing just given)."""
     if _SCREENS_OFF.match(said.replace(",", "")):
         return _call("screens_off")
+    if (forget := _forget_about(said)) is not None:
+        return forget
+    if (lec := _lecture(said, recent_tools)) is not None:
+        return lec
+    for route in (_dashboard, _timer, _holiday, _named_file, _look, _youtube):
+        if (call := route(said)) is not None:
+            return call
     if (brief := _briefing(said, recent_tools)) is not None:
         return brief
     if (weather := _weather(said)) is not None:
@@ -465,6 +713,33 @@ def briefing_reply(result: str) -> str | None:
     return f"<speak>{' '.join(parts)}</speak>"
 
 
+def lecture_reply(result: str) -> str | None:
+    """The lecture summary, spoken: the sentences lecture_summary.speech() wrote from
+    the summary itself (an exam hint flagged with a raised eyebrow, not a guess)."""
+    from tools import lecture as lecture_tool
+
+    lectures = lecture_tool.LECTURES
+    spoken = getattr(lectures, "spoken", None)
+    if not spoken or not result.startswith("lecture summarised"):
+        return None
+    parts = []
+    for k, sentence in enumerate(spoken):
+        if k == 0:
+            cue = "takeNotes"
+        elif sentence.startswith("Heads up"):
+            cue = _pick(["concerned", "lookout"])
+        elif sentence.startswith("Note:"):
+            cue = "focused"
+        elif sentence.startswith("The main topics"):
+            cue = "presentBoard"
+        elif sentence.startswith(("Fair warning", "I couldn't")):
+            cue = "sheepish"
+        else:
+            cue = _pick(["proud", "happy"])
+        parts.append(f"<cue>{cue}</cue>{sentence}")
+    return f"<speak>{' '.join(parts)}</speak>"
+
+
 def expansion_reply(result: str) -> str | None:
     """More on one item of the briefing, in her words from tools/briefing.py."""
     from tools import briefing
@@ -479,6 +754,8 @@ def reply(name: str, args: dict, result: str, said: str) -> str | None:
     """The finished reply (model format) for a simple command, or None to ask the model."""
     if name == "daily_briefing":
         return expansion_reply(result) if args.get("expand") else briefing_reply(result)
+    if name == "lecture_summary" and not args.get("expand"):
+        return lecture_reply(result)
     fn = TEMPLATES.get(name)
     if fn is None or len(said.split()) > MAX_WORDS or _MORE.search(said):
         return None

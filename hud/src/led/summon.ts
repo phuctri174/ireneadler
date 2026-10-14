@@ -22,6 +22,10 @@ export interface SummonTimes {
   start: number;
   /** When summon/part2 arrived, once it has. */
   part2: number | null;
+  /** How long the revealed eye holds (ms) - a skit line's own; the summon's is HOLD_MS. */
+  hold?: number;
+  /** A skit line's speech bubble, snapping in on the reveal (led/bubble.ts). */
+  bubble?: string;
 }
 
 const BAND_IN_MS = 380;
@@ -31,8 +35,14 @@ const HOOK_IN_MS = 220;
 const LIFT_MS = 450;
 const HOLD_MS = 1500;
 const FADE_MS = 500;
-/** After part2, how long the sequence keeps drawing. */
+/** After part2, how long the summon's sequence keeps drawing. */
 export const SUMMON_TAIL_MS = HOOK_IN_MS + LIFT_MS + HOLD_MS + FADE_MS + 60;
+/** After part2, how long THIS sequence keeps drawing (a skit line holds longer). */
+export function summonTail(times: SummonTimes): number {
+  return HOOK_IN_MS + LIFT_MS + (times.hold ?? HOLD_MS) + FADE_MS + 60;
+}
+/** After part2, when the eye is at full burn: the impact, the speech bubble. */
+export const REVEAL_MS = HOOK_IN_MS + LIFT_MS * 0.75;
 
 // the band: centred on the face, exactly over both eyes with an equal margin each
 // side. Its right end is pinned, so lifting it off the left eye tilts it up and
@@ -62,7 +72,7 @@ function phase(times: SummonTimes, now: number): Phase {
   const t = now - times.part2;
   const hook = easeOutBack(t / HOOK_IN_MS);
   const lift = ease((t - HOOK_IN_MS) / LIFT_MS);
-  const fade = 1 - ease((t - HOOK_IN_MS - LIFT_MS - HOLD_MS) / FADE_MS);
+  const fade = 1 - ease((t - HOOK_IN_MS - LIFT_MS - (times.hold ?? HOLD_MS)) / FADE_MS);
   return { across, hook, lift, fade };
 }
 
@@ -174,6 +184,35 @@ function iceEye(frame: Frame, glow: number, now: number): void {
     const level = (0.06 + on * 0.2) * glow;
     frame.lighten(Math.round(cx + Math.cos(angle) * reach), Math.round(cy + Math.sin(angle) * reach), level, INK.iceRing, FADE.fast);
   }
+  // the iris: six bright spokes turning slowly through the ring - the eye is alive
+  const turn = now / 650;
+  for (let k = 0; k < 6; k += 1) {
+    const a = turn + (k / 6) * Math.PI * 2;
+    for (let d = radius * 0.6; d <= radius * 0.95; d += 0.5) {
+      frame.lighten(Math.round(cx - 0.5 + Math.cos(a) * d), Math.round(cy - 0.5 + Math.sin(a) * d), 0.9 * glow, INK.iceCore, FADE.fast);
+    }
+  }
+  // a halo ring breathing just outside it, and three sparks orbiting the halo
+  const halo = radius + 3;
+  const breathe = 0.35 + 0.25 * Math.sin(now / 280);
+  for (let a = 0; a < 96; a += 1) {
+    const ang = (a / 96) * Math.PI * 2;
+    frame.lighten(Math.round(cx - 0.5 + Math.cos(ang) * halo), Math.round(cy - 0.5 + Math.sin(ang) * halo), breathe * glow, INK.iceRing, FADE.fast);
+  }
+  for (let k = 0; k < 3; k += 1) {
+    const ang = now / 420 + (k / 3) * Math.PI * 2;
+    const sx = Math.round(cx - 0.5 + Math.cos(ang) * (halo + 1.5));
+    const sy = Math.round(cy - 0.5 + Math.sin(ang) * (halo + 1.5));
+    frame.lighten(sx, sy, glow, INK.white, FADE.fast);
+    frame.lighten(sx + 1, sy, 0.5 * glow, INK.iceCore, FADE.fast);
+  }
+  // a lens-flare streak through the eye, flaring at the reveal and then glinting
+  const streak = (0.35 + 0.3 * Math.max(0, Math.sin(now / 520))) * glow;
+  for (let d = radius + 1; d < radius + 16; d += 1) {
+    const fall = 1 - (d - radius) / 16;
+    frame.lighten(Math.round(cx - 0.5 + d), Math.round(cy - 0.5), streak * fall, INK.iceCore, FADE.fast);
+    frame.lighten(Math.round(cx - 0.5 - d), Math.round(cy - 0.5), streak * fall, INK.iceCore, FADE.fast);
+  }
 }
 
 export function drawSummon(frame: Frame, times: SummonTimes, now: number): void {
@@ -271,15 +310,24 @@ function drawBlackHole(frame: Frame, times: SummonTimes, now: number): void {
       // behind her head: the ring shows above and round it, its lower half hidden
       // behind her face (it dissolves away below her eyes)
       const behind = 1 - ease((y - 42) / 18);
-      const level = (ring * (1 - eaten * 0.9) * 0.75 + halo * (1 - eaten * 0.6) + inner) * k * behind;
+      // the accretion disk: spiral arms wound into the ring, turning with it
+      const arm = Math.cos(2 * ang - 6 * Math.log(Math.max(d, 1) / r) - spin * 5);
+      const disk = d > r * 0.45 && d < r * 1.35 ? clamp01((arm - 0.55) / 0.45) * 0.32 * Math.exp(-(((d - r) / (r * 0.4)) ** 2)) : 0;
+      // a hot spot racing round the photon ring
+      const hot = ring > 0.4 ? Math.max(0, Math.cos(ang - spin * 3.2)) ** 6 * 0.55 : 0;
+      // gravitational lensing: faint ripples rolling outward from the ring
+      const wave = ((t / 1500) % 1) * 30;
+      const ripple = d > r ? Math.exp(-(((d - r - wave) / 1.2) ** 2)) * 0.16 * (1 - wave / 30) : 0;
+      const level = (ring * (1 - eaten * 0.9) * 0.75 + halo * (1 - eaten * 0.6) + inner + disk + hot + ripple) * k * behind;
       if (level < 0.02) continue;
-      frame.lighten(x, y, level, ring > 0.5 && eaten < 0.3 ? INK.white : INK.violet, FADE.fast);
+      frame.lighten(x, y, level, (ring > 0.5 && eaten < 0.3) || hot > 0.25 ? INK.white : INK.violet, FADE.fast);
     }
   }
-  // violet specks drifting slowly outward round the ring (continuous: no twinkle)
+  // violet specks spiralling IN to the ring - the hole is eating them (continuous: no twinkle)
   for (let i = 0; i < 46; i += 1) {
-    const a = hash(i + 7) * Math.PI * 2 + spin * 0.6;
-    const out = r + 3 + ((hash(i * 3 + 1) * 28 + t * 0.004) % 28);
+    const fall = (hash(i * 3 + 1) * 28 + t * 0.006) % 28;
+    const a = hash(i + 7) * Math.PI * 2 + spin * 0.6 + fall * 0.09;
+    const out = r + 3 + (28 - fall);
     const sx = HOLE.x + Math.cos(a) * out * 1.15;
     const sy = HOLE.y + Math.sin(a) * out * 0.8;
     const level = k * (0.25 + 0.2 * Math.sin(t / 700 + i));
@@ -429,5 +477,5 @@ export function drawSummonBurst(frame: Frame, times: SummonTimes, now: number): 
 /** True while the sequence still has something on screen. */
 export function summonActive(times: SummonTimes, now: number): boolean {
   if (times.part2 === null) return true;
-  return now - times.part2 < SUMMON_TAIL_MS;
+  return now - times.part2 < summonTail(times);
 }

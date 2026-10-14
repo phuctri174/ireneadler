@@ -50,7 +50,7 @@ def _research_thumb(found) -> str:
 class Dashboard:
     def __init__(self, core: "Core"):
         self.core = core
-        self.state: dict = {"news": [], "weather": None, "stocks": [], "system": {}, "timers": [], "research": [], "stale": {}}
+        self.state: dict = {"news": [], "weather": None, "stocks": [], "system": {}, "timers": [], "research": [], "stale": {}, "lecture": None}
         # the research files the "research" list was read from (re-read when they change)
         self._research_names: list[str] = []
         self._sent = ""
@@ -87,6 +87,9 @@ class Dashboard:
                 await asyncio.to_thread(research_tool.expire)
             self._research_list()
             self.state["timers"] = [{"label": t["label"], "ends": t["ends"], "total": t["minutes"] * 60} for t in basic.ACTIVE]
+            # a lecture being captured: the indicator (how long, how many words)
+            lectures = getattr(self.core, "lectures", None)
+            self.state["lecture"] = lectures.status() if lectures is not None else None
             await self.push()
             await asyncio.sleep(1.0)
 
@@ -152,7 +155,7 @@ class Dashboard:
         if not bridge.hud_connected:
             self._sent = self._sent_fast = ""
             return
-        fast_keys = ("system", "timers")
+        fast_keys = ("system", "timers", "lecture")
         slow = {k: v for k, v in self.state.items() if k not in fast_keys}
         fast = {k: self.state[k] for k in fast_keys}
         body = json.dumps(slow, sort_keys=True, default=str)

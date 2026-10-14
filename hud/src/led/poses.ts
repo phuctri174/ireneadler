@@ -63,6 +63,53 @@ const PAPERS = sprite([
   "########################",
 ]);
 
+// takeNotes: a small spiral notepad, held low - rings along the top, ruled lines,
+// the top line already written on (brighter dashes)
+const NOTEPAD = sprite([
+  ".#.#.#.#.#.#.#.#.",
+  "#################",
+  "#+++++++++++++++#",
+  "#+##+###+##+++++#",
+  "#+++++++++++++++#",
+  "#+-------------+#",
+  "#+++++++++++++++#",
+  "#+-------------+#",
+  "#+++++++++++++++#",
+  "#+-------------+#",
+  "#+++++++++++++++#",
+  "#################",
+]);
+
+// emptyPage: the same notepad held up to him with nothing on it - rings, the edge,
+// no lines at all: she honestly has nothing on file about it
+const BLANK_PAGE = sprite([
+  ".#.#.#.#.#.#.#.#.#.",
+  "###################",
+  "#+++++++++++++++++#",
+  "#+++++++++++++++++#",
+  "#+++++++++++++++++#",
+  "#+++++++++++++++++#",
+  "#+++++++++++++++++#",
+  "#+++++++++++++++++#",
+  "#+++++++++++++++++#",
+  "#+++++++++++++++++#",
+  "#+++++++++++++++++#",
+  "#+++++++++++++++++#",
+  "#+++++++++++++++++#",
+  "#+++++++++++++++++#",
+  "#+++++++++++++++++#",
+  "#+++++++++++++++++#",
+  "###################",
+]);
+
+/** takeNotes: the pen's path - quick little strokes left to right along a line,
+ *  then a hop back to the start of the next (a writing rhythm, ~1.6 s a line). */
+function scribble(t: number): { dx: number; dy: number; drot: number } {
+  const line = (t % 1600) / 1600;
+  const across = line < 0.85 ? line / 0.85 : 1 - (line - 0.85) / 0.15;
+  return { dx: 10 * across, dy: 1.2 * Math.sin(t / 55), drot: 6 * Math.sin(t / 70) };
+}
+
 /** newsDesk: how far the notes are lifted (LEDs) - two taps on the desk, then still. */
 function deskTap(t: number): number {
   if (t >= 900) return 0;
@@ -81,6 +128,8 @@ const HEART_OUTLINE = sprite([
 ]);
 
 const SMALL_HEART = sprite([".#.#.", "#####", ".###.", "..#.."]);
+// tapTemple: a memory surfacing - a little four-point spark
+const SPARK = sprite(["..#..", ".###.", "##.##", ".###.", "..#.."]);
 
 // cheek blush: a soft oval of pink under each eye
 const BLUSH = sprite([".-+++-.", "-+++++-", ".-+++-."]);
@@ -324,6 +373,73 @@ export const POSES = {
     expression: { emotion: "curious", mouth: "smile", gazeX: -2, gazeY: 2 },
     hands: [{ hand: "point", x: LEFT + 6, y: 46, rot: -20, scale: 1.1, wiggle: (t) => ({ dx: 3 * Math.cos(t / 190), dy: 2 * Math.sin(t / 190), drot: 4 * Math.sin(t / 380) }) }],
     motion: (t) => ({ tilt: 1.2 * settle(400)(t), dx: -2 * settle(400)(t) }),
+  },
+  // "let me write that down": a little notepad held low, a pen hand scribbling
+  // across it line by line, eyes down on the page, a small focused smile - she is
+  // taking notes for him (a lecture, something to remember)
+  takeNotes: {
+    expression: { emotion: "focused", mouth: "flat", gazeX: 1, gazeY: 3 },
+    hands: [
+      { hand: "flat", x: 80, y: 66, rot: 100, scale: 0.9 },
+      { hand: "point", x: 48, y: 50, rot: 145, scale: 0.95, wiggle: scribble },
+    ],
+    props: (frame, _t, alpha) => {
+      blit(frame, NOTEPAD, 52, 57, { alpha, ink: INK.white, cover: true });
+    },
+    motion: (t) => ({ dy: 1.5 * settle(400)(t), tilt: 1 * settle(400)(t) }),
+  },
+  // "so-so": a flat hand held level beside her face, palm down, rocking slowly side
+  // to side - weighing it, matter-of-fact, no attitude; eyes level, mouth flat
+  soSo: {
+    expression: { emotion: "neutral", mouth: "flat", gazeX: 1 },
+    hands: [{ hand: "flat", x: RIGHT + 4, y: 46, rot: -90, scale: 1.15, wiggle: shake(1.1, 11) }],
+    motion: (t) => ({ tilt: Math.sin((t / 1000) * 1.1 * Math.PI * 2) * 0.8 }),
+  },
+  // "nothing on file": she lifts a blank page beside her face and turns it to him with
+  // a little tilt - see, nothing written there - eyes on him, mouth level: honest,
+  // not sorry (the memory guard's "I don't remember", irene/provenance.py)
+  emptyPage: {
+    expression: { emotion: "neutral", mouth: "flat", gazeX: -1, gazeY: 0 },
+    hands: [{ hand: "flat", x: RIGHT + 12, y: 50, rot: -100, scale: 1.0 }],
+    props: (frame, t, alpha) => {
+      const lift = 6 * settle(380)(t);
+      // one slow tilt to show both ways that it's empty, then still
+      const sway = t < 1400 ? Math.round(1.5 * Math.sin((t / 1400) * Math.PI * 2)) : 0;
+      blit(frame, BLANK_PAGE, RIGHT + 1 + sway, 30 - lift, { alpha, ink: INK.white, cover: true });
+    },
+    motion: (t) => ({ tilt: -0.8 * settle(420)(t) }),
+  },
+  // "oh - you told me!": a fingertip tapping her temple twice, eyes up and to the side
+  // as a memory surfaces - a small amber spark lifting off where she taps
+  tapTemple: {
+    expression: { emotion: "curious", mouth: "smile", gazeX: -2, gazeY: -3 },
+    hands: [],
+    props: (frame, t, alpha) => {
+      // two taps, then held: each a quick press in toward the temple
+      const press = t < 900 ? 1.8 * Math.max(0, Math.sin(((t % 450) / 450) * Math.PI)) : 0;
+      // below and outside her right eye, the finger up and in to the temple; a tap
+      // moves along the finger
+      drawHand(frame, HANDS.point, { x: RIGHT + 9 - press, y: 22 - press * 0.8, rot: -34, scale: 1.1, alpha });
+      const rise = clamp01((t - 300) / 900);
+      if (rise > 0) {
+        const a = alpha * clamp01(rise * 4) * (1 - 0.6 * rise);
+        blit(frame, SPARK, RIGHT - 6, 4 - rise * 8, { ink: INK.amber, alpha: a, cover: false });
+      }
+    },
+    motion: (t) => ({ tilt: 1.2 * settle(380)(t), dy: -0.6 * settle(380)(t) }),
+  },
+  // "one, two, three": a hand raised beside her face counting off on its fingers - one
+  // finger, two, three, each a little tap up - eyes on the hand, as she lists things
+  countOff: {
+    expression: { emotion: "focused", mouth: "smile", gazeX: 2, gazeY: -1 },
+    hands: [],
+    props: (frame, t, alpha) => {
+      const step = Math.min(2, Math.floor(t / 520));
+      const name = (["point", "peace", "three"] as const)[step];
+      const tap = 1.6 * Math.max(0, Math.sin(Math.min(1, (t % 520) / 180) * Math.PI));
+      drawHand(frame, HANDS[name], { x: RIGHT + 8, y: 38 - tap, rot: 8, scale: 1.1, alpha });
+    },
+    motion: (t) => ({ tilt: -1.2 * settle(350)(t), dx: 2 * settle(350)(t) }),
   },
   // "showtime!": both open hands beside her cheeks, shimmering fast - the big
   // entrance, the curtain going up

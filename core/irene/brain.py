@@ -25,14 +25,15 @@ from typing import Protocol
 from tools import REGISTRY, ToolError, ToolResult
 from tools.registry import ToolContext, validate
 
-from . import board, compose, drawing, fast, home, illustrate, sentiment, story
+from . import board, compose, drawing, fast, home, illustrate, provenance, recall, sentiment, story
 from .grounding import Grounder
 from .llm import Ollama
 from .prompt import system_prompt
 from .react import React, act_out, of_family, resolve
 from .reply import MAX_SPOKEN_WORDS, Reply, admits_ignorance, drop_apologies, drop_promise, for_display, is_apology, parse_reply, promises_action, spoken, unnest
 from .router import groups_for, tools_block
-from .memory import SessionNotes, recall_hint
+from .memory import _CORRECTION, SessionNotes, recall_hint
+from .provenance import Evidence, LastAnswer, MemoryGuard
 from .terms import key_terms, short_topic
 
 log = logging.getLogger("irene.brain")
@@ -58,6 +59,21 @@ _ASKED_DOING = re.compile(
     re.I,
 )
 MAX_TOOL_ROUNDS = 4
+# not offered when he asks about an earlier session: that is memory, not a new search
+# (taking every tool away was worse - the model called research unlisted, 15 -> 13/22)
+RECALL_NOT = ("research", "read_and_summarize", "lecture_summary", "lecture_ask")
+FROM_MEMORY = (
+    "not run: he is asking about an earlier session - answer him now from 'From your memory' in your context, "
+    "or say plainly you don't remember it. No tool, and don't mention this note or apologise: just answer."
+)
+# what a question about his past may not run: the lookups gemma reaches for instead of
+# her memory (evals: read_page_text on a made-up URL, search_files for "concert") -
+# a denylist, so the panel, media and timers he asks for in the same breath still run
+RECALL_LOOKUPS = ("research", "read_and_summarize", "lecture_summary", "lecture_ask", "search_files", "list_files", "read_page_text")
+NOT_ON_FILE = (
+    "not run: nothing he has told you says that - answer him now: say plainly you don't remember it. "
+    "No tool, and don't mention this note or apologise."
+)
 # what follows every tool result: keeps the reply format anchored, which a long
 # history of tool calls otherwise erodes (untagged replies, cut-off calls)
 AFTER_TOOL = (
@@ -160,6 +176,7 @@ PANEL_OFFERS = [
 
 # words that make a request about his monitors (screens_off runs only with one)
 _SCREEN_WORDS = re.compile(r"\b(screens?|monitors?|displays?)\b|lights out", re.I)
+_LISTEN_WORDS = re.compile(r"\b(lectures?|class|lesson|seminar|webinar|meeting|talk|podcast|listen(ing)?|transcrib\w*|notes?|record(ing)?)\b", re.I)
 
 
 def _tokens(messages: list[dict]) -> int:
@@ -338,8 +355,12 @@ class StreamingReply:
         avoid: str | tuple[str, ...] | None = None,
         tale: story.Tale | None = None,
         stale: tuple[str, ...] = (),
+        memory: MemoryGuard | None = None,
     ) -> None:
         self.raw = ""
+        # what she says about him, his people or his past: only what a retrieved
+        # memory or this conversation says (provenance.py) - the rest is never spoken
+        self.memory = memory
         # he is telling her a story (story.py): she reacts, short, and never advises
         # unless he asked - a sentence that tells him what to do is dropped unsaid
         self._tale = tale
@@ -455,6 +476,9 @@ class StreamingReply:
             support = " ".join(w.text for w in self.grounder.windows if w.source in sources)
             if text and support:
                 terms = key_terms(text, support, self.grounder.research.question, self._terms)
+        if text and self.memory is not None and self.memory.check(text) is None:
+            self.edited = True
+            return []
         if not text or self._words >= self._max_words:
             return []
         if self.grounder is not None and len(text.split()) >= 4:
@@ -524,7 +548,7 @@ class StreamingReply:
             # the very first thing she says goes to the voice as soon as it's a phrase:
             # "Hmm, good one," plays while the rest of the sentence is still coming
             m = _OPENING.match(content)
-            if m and not _SENTENCE.search(content):
+            if m and not _SENTENCE.search(content) and (self.memory is None or self.memory.early_ok(m.group(1))):
                 lines += self._emit(m.group(1))
                 self._spoken = m.end()
         for m in _SENTENCE.finditer(content, self._spoken):
@@ -649,6 +673,13 @@ class Conversation:
         # his corrections, preferences and requirements, and what she looked up:
         # in front of every message for the whole session (memory.py)
         self.notes = SessionNotes()
+        # her long-term memory (recall.py): this session's id - what it keeps is
+        # recalled in later sessions, never in this one (it is in the history) - and
+        # what was recalled for the message being answered
+        self.session = recall.new_session()
+        self._recalled = recall.Recalled()
+        # what her last reply was built on (provenance.py), for "where's that from?"
+        self.last_answer: LastAnswer | None = None
         # the reply being streamed now, and his message it answers (cut_off)
         self._live: StreamingReply | None = None
         self._turn_text = ""
@@ -679,9 +710,13 @@ class Conversation:
         """What changes per message, sent right before it: the tools it may need (the
         router's pick), the clock, how he said it, and any hints."""
         recent = self.recent_tools if recent_tools is None else recent_tools
-        # a story he is telling needs no tool: none is offered in detail
+        # what she remembers from earlier sessions that bears on it (recall.py)
+        self._recalled = remembered = recall.recall(text, self.session)
+        # a story he is telling needs no tool: none is offered in detail; a question
+        # about an earlier session is answered from memory, never researched anew
         tale = self.tale(text, history)
-        parts = [tools_block("" if tale else text, [] if tale else recent, self.tool_names), now_section(text)]
+        tools = [t for t in self.tool_names if not (remembered.past and t in RECALL_NOT)]
+        parts = [tools_block("" if tale else text, [] if tale else recent, tools), now_section(text)]
         doing = self.entrance_section(text)
         if doing:
             parts.append(doing)
@@ -699,6 +734,8 @@ class Conversation:
         session = self.notes.section()
         if session:
             parts.append(session)
+        if remembered.section:
+            parts.append(remembered.section)
         game = getattr(self, "game", None)
         if game is not None and game.active:
             parts.append(game.section())
@@ -708,18 +745,72 @@ class Conversation:
         around = [line for line in (media_tool.now_playing_line(), files_tool.saved_line()) if line]
         if around:
             parts.append("\n".join(around))
-        recall = recall_hint(text)
-        if recall and self.history:
-            parts.append(recall)
+        asked_back = recall_hint(text)
+        if asked_back and self.history:
+            parts.append(asked_back)
         parts.append(SHAPE_REMINDER)
         return "\n\n".join(parts)
 
-    def prompt(self, text: str, history: list[dict], start: int, recent_tools: list[str] | None = None) -> list[dict]:
-        """System prompt, the history before this message, the per-message context,
-        then this message and anything since (tool calls and results). For a
-        one-off prompt (the evals); a live turn stores its context (begin())."""
-        context = {"role": "system", "content": self.context(text, recent_tools, history[:start])}
-        return [{"role": "system", "content": self.system()}, *history[:start], context, *history[start:]]
+    def restore(self, history: list[dict]) -> None:
+        """A recorded conversation as this one's past (the evals' case histories):
+        the history, and everything respond() keeps about each turn of it - his notes,
+        the tools recent turns used, the cues her last reply showed, the panel offer -
+        kept by the same code respond() uses. There is no other way to build a prompt:
+        an eval turn is respond() on top of this (tests/test_eval_parity.py)."""
+        self.reset()
+        turn: list[dict] | None = None
+
+        def settle() -> None:
+            if turn is None:
+                return
+            calls = [c for c in (tool_call(m["content"]) for m in turn if m["role"] == "assistant") if c]
+            said = next((m["content"] for m in reversed(turn) if m["role"] == "assistant" and "<speak>" in m["content"]), "")
+            cues = [r.name for r in map(resolve, _CUE.findall(said)) if r]
+            question = next((str(a.get("question") or turn[0]["content"]) for n, a in calls if n == "research"), "")
+            speak = parse_reply(said).speak if said else ""
+            self._settle([n for n, _ in calls], cues, question, speak)
+            self._panel_offer = bool(question) and any(offer in speak for offer in PANEL_OFFERS)
+
+        for message in history:
+            if message["role"] == "user" and not message["content"].startswith("["):
+                settle()
+                self._hear(message["content"])
+                turn = []
+            self.history.append(dict(message))
+            if turn is not None:
+                turn.append(message)
+        settle()
+        self.compact()
+
+    def _evidence(self) -> Evidence:
+        """What she may say about him and his past this turn: the memories recalled
+        for his message, and this conversation before it - his words, her replies, the
+        notes, and any tool result since."""
+        start = self._turn_start
+        before = [m for m in self.history[:start] if m["role"] == "user"]
+        said = [parse_reply(m["content"]).speak for m in self.history[:start] if m["role"] == "assistant" and "<speak>" in m["content"]]
+        since = [m["content"] for m in self.history[start + 1 :] if m["role"] == "user"]
+        notes = self.notes.section()
+        return Evidence(list(self._recalled.items), [m["content"] for m in before] + said + since + ([notes] if notes else []))
+
+    def _hear(self, text: str):
+        """His message, before she answers: noted if it corrects her or should hold."""
+        previous_user = next((m["content"] for m in reversed(self.history) if m["role"] == "user" and not m["content"].startswith("[")), "")
+        previous_answer = next((parse_reply(m["content"]).speak for m in reversed(self.history) if m["role"] == "assistant" and "<speak>" in m["content"]), "")
+        noted = self.notes.hear(text, previous_user, previous_answer)
+        if noted:
+            log.info("session note (%s): %r", noted.kind, noted.said[:80])
+        return noted
+
+    def _settle(self, tools_used: list[str], cues: list[str], research_question: str, speak: str) -> None:
+        """A turn is over: what the next one needs to know about it."""
+        if cues:
+            self.last_cues = tuple(cues)
+            self.last_cue = self.last_cues[-1]
+        if research_question:
+            self.notes.looked_up(research_question, speak)
+        self.recent_tools = [*self._last_tools, *tools_used]
+        self._last_tools = list(tools_used)
 
     def begin(self, text: str) -> list[dict]:
         """Open a turn: his message into the history, and the prompt for it - the
@@ -836,6 +927,17 @@ class Conversation:
         self.notes.clear()
         self.recent_tools = []
         self._last_tools = []
+        self.last_answer = None
+        # what comes next is a new session: this one's memories become recallable
+        self.session = recall.new_session()
+
+    def forget_session(self) -> int:
+        """"Forget this conversation": the history, and what her memory kept of it."""
+        recall.flush()
+        store = recall.current()
+        forgotten = recall.forget(store.session_items(self.session), store)["deleted"]
+        self.reset()
+        return forgotten
 
     def entered(self, entry: dict, now: float | None = None) -> None:
         """He summoned her and she arrived mid-entrance. Recorded as the entrance
@@ -922,12 +1024,13 @@ class Conversation:
             log.info("idle for over %ds - starting a fresh conversation", IDLE_RESET_S)
             self.reset()
         self.last_active = time.monotonic()
-        # a correction or something that should hold: noted before she answers
-        previous_user = next((m["content"] for m in reversed(self.history) if m["role"] == "user" and not m["content"].startswith("[")), "")
-        previous_answer = next((parse_reply(m["content"]).speak for m in reversed(self.history) if m["role"] == "assistant" and "<speak>" in m["content"]), "")
-        noted = self.notes.hear(text, previous_user, previous_answer)
-        if noted:
-            log.info("session note (%s): %r", noted.kind, noted.said[:80])
+        # a correction or something that should hold: noted before she answers - and
+        # what he tells her about himself is kept for later sessions too
+        noted = self._hear(text)
+        # (a question is never a fact: "When's my birthday? I told you last week." was
+        # once kept as one, from "my birthday")
+        if (noted is not None and noted.kind == "lasting" and not recall.asks(text)) or recall.about_him(text):
+            recall.remember_fact(text, self.session)
         self._turn_text = text
         self.begin(text)
         research_question = ""
@@ -952,6 +1055,26 @@ class Conversation:
         if direct is None and self._panel_offer and _YES.match(text):
             direct = '<tool_call>{"name": "show_panel", "arguments": {"what": "last research"}}</tool_call>'
         self._panel_offer = False
+        # "where did you get that?": from the record of what her last reply was built
+        # on (provenance.py), never the model's account of it
+        sourced = direct is None and provenance.asks_source(text) and len(self.history) > 1
+        if sourced:
+            cue = "thinking" if self.last_cue == "tapTemple" else "tapTemple"
+            direct = f"<speak><cue>{cue}</cue>{provenance.where_from(self.last_answer)}</speak>"
+            log.info("provenance: %s", direct)
+        # an answer about the past is held to what was retrieved, all of it; any other
+        # reply only in what it claims about his people and what he told her
+        # (only a question about his past: "what year is it again?" or "remind me in half
+        # an hour" are in-session phrasings, and strict there dropped "It's 2026" and
+        # refused the timer - routing eval)
+        strict = bool(recall.asks_past(text) and recall.asks(text))
+        recall_question = text
+        before = self.last_answer
+        if not strict and before is not None and before.strict and _CORRECTION.search(text):
+            # "No, that's not what I asked" right after one: still that question, held
+            # to the same record (live: it got "Right, sorry. Mr. <a made-up name>, then.")
+            strict, recall_question = True, f"{before.asked} {text}"
+        guard: MemoryGuard | None = None
         # a research answer (or a follow-up on the last one) is grounded in its pages
         grounder: Grounder | None = None
         may_research = any(g.name == "research" for g in groups_for(text, self.recent_tools))
@@ -967,6 +1090,11 @@ class Conversation:
         if tale is not None:
             log.info("story mode: %s%s%s, cast %s", tale.beat, " (continuing)" if tale.continuing else "", " - advice asked" if tale.advice_asked else "", [p.name for p in tale.cast])
             mood = tale.cues
+            may_research = False
+        # about an earlier session: her memory answers, or she says she doesn't remember
+        # - "I don't remember" is the true answer then, never a reason to search
+        from_memory = self._recalled.past
+        if from_memory:
             may_research = False
         while True:
             await host.thinking()
@@ -1001,6 +1129,7 @@ class Conversation:
             if plan is not None and canned_board is not None and hasattr(sink, "adopt"):
                 sink.adopt(canned_board)
                 plan.adopted, canned_board = True, None
+            guard = MemoryGuard(self._evidence(), strict, recall_question) if canned is None else None
             stream = self._live = StreamingReply(
                 act_out(text) if _round == 0 else None,
                 grounder if canned is None else None,
@@ -1010,6 +1139,7 @@ class Conversation:
                 no_apology=bool(recall_hint(text)) and bool(self.history),
                 tale=tale if canned is None else None,
                 stale=tuple(self.openers(self.history[: self._turn_start])) if tale is not None else (),
+                memory=guard,
             )
             messages = self.messages()
             if retried:
@@ -1040,7 +1170,7 @@ class Conversation:
             # that admits it is dropped unsaid (it was held) and she looks it up
             ignorant = (
                 canned is None and not tools_used and not stream.is_tool_call and "tool_call" not in stream.raw
-                and "research" in self.tool_names and _round < MAX_TOOL_ROUNDS and (may_research or bool(illustrate._ASKS.search(text)))
+                and "research" in self.tool_names and _round < MAX_TOOL_ROUNDS and not from_memory and (may_research or bool(illustrate._ASKS.search(text)))
                 and admits_ignorance(parse_reply(stream.raw).speak)
             )
             if ignorant:
@@ -1058,6 +1188,20 @@ class Conversation:
                     if cue is not None:
                         stream.cues.append(cue)
                     stream._words = len(said.split())
+                if (guard is not None and not stream.is_tool_call and "tool_call" not in stream.raw and not any(provenance.refuses(s) for s in stream.said)
+                        and not guard.sources and (guard.strict or (guard.dropped and not stream.spoke))):
+                    # an answer about the past with nothing in it from any memory - made
+                    # up and dropped, or just "Oh, right!" / "Which one?" (live evals) -
+                    # and no "I don't know": the true answer is that she doesn't remember
+                    said = provenance.dont_remember()
+                    cue = resolve(next((c for c in ("emptyPage", "shrug", "thinking") if c != self.last_cue and not any(x.name == c for x in stream.cues)), "curious"))
+                    log.info("memory guard: nothing true left to say - %r", said)
+                    sink.line(Line(said, cue))
+                    stream.said.append(said)
+                    if cue is not None:
+                        stream.cues.append(cue)
+                    stream._words += len(said.split())
+                    stream.edited = True
                 if tale is not None and canned is None and not tale.advice_asked and stream.spoke and not story.asks_back(stream.said):
                     # a friend wants the rest of the story: a question back, always
                     asked = story.follow_up(tale.beat)
@@ -1124,9 +1268,16 @@ class Conversation:
                 if stream._no_apology:
                     # the history too: an apology kept there is copied next time
                     raw = re.sub(r"(<speak>)(.*?)(</speak>)", lambda m: m.group(1) + drop_apologies(m.group(2)) + m.group(3), raw, flags=re.S)
+                if guard is not None and "<display>" in raw:
+                    # what she shows is held to the same record as what she says
+                    raw = re.sub(r"(<display>)(.*?)(</display>)", lambda m: m.group(1) + guard.filter(m.group(2)) + m.group(3), raw, flags=re.S)
                 self.history.append({"role": "assistant", "content": raw})
                 self._drop_images()
                 reply = parse_reply(raw)
+                if guard is not None:
+                    self.last_answer = LastAnswer(guard.strict, list(guard.sources), list(guard.dropped), recall_question)
+                elif not sourced:
+                    self.last_answer = None
                 # nothing could perform what she promised: say less rather than
                 # claim work that never happened
                 if not tools_used and promises_action(reply.speak):
@@ -1151,15 +1302,15 @@ class Conversation:
                 if hasattr(sink, "close_board"):
                     sink.close_board()
                 await sink.finish(reply)
-                if stream.cues or shown:
-                    self.last_cues = tuple(c.name for c in stream.cues) or (shown.name,)
-                    self.last_cue = self.last_cues[-1]
+                cues = [c.name for c in stream.cues] or ([shown.name] if shown else [])
                 self.last_active = time.monotonic()
                 ended = is_goodbye(text)
+                self._settle(tools_used, cues, research_question, reply.speak)
+                # kept for later sessions (recall.py), off the turn: the exchange, and a
+                # research answer under its question
+                recall.remember_turn(text, reply.speak, self.session)
                 if research_question:
-                    self.notes.looked_up(research_question, reply.speak)
-                self.recent_tools = [*self._last_tools, *tools_used]
-                self._last_tools = tools_used
+                    recall.remember_research(research_question, reply.speak, self.session)
                 # a goodbye ends the listening, not the session: nothing is forgotten
                 self.compact()
                 self.warm_cache()
@@ -1198,6 +1349,23 @@ class Conversation:
                 # off the lights in my room, I'm going to sleep" -> screens_off)
                 log.warning("refused %s: he said nothing about his screens (%r)", name, text[:80])
                 result = "not run: he said nothing about his screens or monitors - answer him without a tool"
+            elif (name in ("research", "read_and_summarize", "lecture_summary", "lecture_ask") and from_memory) or (strict and name in RECALL_LOOKUPS):
+                # (a question about his past, answered strictly from memory: no lookup)
+                # about an earlier session: her memory answers, not a new search or the
+                # latest lecture (recall evals: each happened unlisted or unasked)
+                log.warning("refused %s: he asked about an earlier session (%r)", name, text[:80])
+                result = FROM_MEMORY
+            elif guard is not None and (made_up := guard.unsupported(args)):
+                # a date or a name nothing on file says, put into a call (live eval: "when
+                # is my cousin's wedding?" -> get_time until 2026-11-23)
+                log.warning("refused %s: its arguments carry what no memory says: %s", name, made_up)
+                result = NOT_ON_FILE
+            elif name == "lecture_start" and not _LISTEN_WORDS.search(text):
+                # a capture parks the model and listens for hours: only when his words are
+                # about listening to something (eval: "what can you do about my slow
+                # computer?" -> lecture_start, once)
+                log.warning("refused lecture_start: he said nothing about listening to anything (%r)", text[:80])
+                result = "not run: he didn't ask you to listen to a lecture or meeting - answer him without a tool"
             else:
                 started = time.perf_counter()
                 result = await self._run_tool(name, args, host)
@@ -1206,7 +1374,10 @@ class Conversation:
             if name == "research" and isinstance(result, ToolResult):
                 grounder = _grounder_for_last()
             outcome = result.text if isinstance(result, ToolResult) else result
-            if _round == 0 and not isinstance(result, ToolResult):
+            # a tool that wrote its own sentences (the lecture summary) is spoken as it
+            # wrote them even though it carries outside content: speaking ends the turn,
+            # so nothing can act on that content afterwards
+            if _round == 0 and (not isinstance(result, ToolResult) or (name in fast.OWN_SPEECH and not args.get("expand"))):
                 canned = fast.reply(name, args, outcome, text)
                 if canned is not None and name == "daily_briefing":
                     canned_board = illustrate.briefing_board(str(args.get("expand") or ""))
@@ -1352,12 +1523,24 @@ class Conversation:
             if message.pop("images", None) is not None:
                 message["content"] += "\n[the screenshot is no longer available; take a new one if he asks again]"
 
-    async def _run_tool(self, name: str, args: dict, host: Host) -> str | ToolResult:
+    def check_tool(self, name: str, args: dict) -> tuple[object, dict] | str:
+        """(tool, its checked arguments), or the error the model is answered with: no
+        such tool, or arguments its schema refuses. Nothing has run either way."""
         tool = REGISTRY.get(name)
         if tool is None or name not in self.tool_names:
             return f"error: no tool named {name!r}. Available: {', '.join(self.tool_names)}"
         try:
-            kwargs = validate(tool, args)
+            return tool, validate(tool, args)
+        except ToolError as error:
+            log.info("tool %s refused its arguments: %s", name, error)
+            return f"error: {error}"
+
+    async def _run_tool(self, name: str, args: dict, host: Host) -> str | ToolResult:
+        checked = self.check_tool(name, args)
+        if isinstance(checked, str):
+            return checked
+        tool, kwargs = checked
+        try:
             # confirm tools work out what they would do first (a dry-run plan)
             prepared = await tool.prepare(host, **kwargs) if tool.prepare else None
         except ToolError as error:

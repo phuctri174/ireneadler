@@ -42,6 +42,8 @@ config/home.yaml
 config/pronunciation.yaml
 config/vocabulary.yaml
 config/summon_music.yaml
+# the publish scan's patterns are his name and his home (core/scripts/publish.py)
+config/publish.yaml
 # frames of his own hand and body (cut from core/calibration/): the trainers write
 # them; the parity tests skip without them (hud/tests/run.mjs)
 hud/tests/zoom.golden.json

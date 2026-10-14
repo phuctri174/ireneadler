@@ -346,11 +346,13 @@ def test_voice_tags_are_spoken_but_never_shown():
     assert "[laugh]" not in parse_reply("<speak>Ha, that's a good one. [laugh] Really.</speak>").speak
 
 
-def test_a_simple_command_answers_from_its_template_with_one_llm_call():
+def test_a_simple_command_answers_from_its_template_with_no_llm_call():
+    # a timer with its length said is routed in code (fast._timer) and answered from its
+    # template: the model is never asked (it once turned "90 seconds" into 1 minute)
     llm = FakeLLM(['<tool_call>{"name": "set_timer", "arguments": {"minutes": 10, "label": "tea"}}</tool_call>'])
     host = FakeHost()
     turn = run(Conversation(llm), "tea timer, 10 minutes", host)
-    assert len(llm.seen) == 1  # no second call
+    assert len(llm.seen) == 0
     assert "10 minutes" in turn.reply.speak and turn.reply.react is not None
 
 
@@ -417,8 +419,10 @@ def test_direct_calls_only_for_clear_panel_commands():
     assert '"what": "that"' in direct_call("Put that on the screen.")
     assert '"what": "close"' in direct_call("Close the panel please.")
     assert '"what": "videos"' in direct_call("Can you show me the videos you found?")
-    for text in ["What's on my screen?", "Show me how to tie a tie.", "The solar panel is dirty.", "show me the sources of the Nile"]:
+    for text in ["Show me how to tie a tie.", "The solar panel is dirty.", "show me the sources of the Nile"]:
         assert direct_call(text) is None, text
+    # his screen is not the panel: a look at it (fast._look), never show_panel
+    assert '"name": "capture_screen"' in direct_call("What's on my screen?")
 
 
 def test_an_emotional_moment_opens_with_its_reaction():

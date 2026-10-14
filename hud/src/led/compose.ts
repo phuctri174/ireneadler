@@ -27,7 +27,8 @@ import { drawBoard } from "../board/board";
 import type { Prepared } from "../board/board";
 import { drawEntrance, entranceActive, entranceLook } from "./entrances";
 import type { EntranceName } from "./entrances";
-import { drawDomainHair, drawSummon, drawSummonBurst, domainShift, summonActive, summonLook } from "./summon";
+import { REVEAL_MS, drawDomainHair, drawSummon, drawSummonBurst, domainShift, summonActive, summonLook } from "./summon";
+import { drawBubble } from "./bubble";
 import type { SummonTimes } from "./summon";
 
 export interface Stage {
@@ -179,6 +180,8 @@ export function compose(frame: Frame, given: Stage): void {
     // to make room above it - and her white hair goes in on top
     shiftDown(frame, domainShift(summon, now));
     drawDomainHair(frame, summon, now);
+    // a skit line's speech bubble, on top of it all, snapping in on the reveal
+    if (summon.bubble && summon.part2 !== null) drawBubble(frame, summon.bubble, now - summon.part2 - REVEAL_MS, summon.hold ?? 3000);
   }
   if (voiceShown(stage.voice) && !entrance && !summon) drawListening(frame, stage.voice, now);
   if (stage.muted) drawMuted(frame);

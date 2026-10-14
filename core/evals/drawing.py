@@ -14,7 +14,7 @@ from pathlib import Path
 
 import chess
 
-from harness import Conversation, _messages, load, parse_tool_call, parse_reply, timed_reply
+from harness import conversation_for, live_turn, load, parse_reply
 from irene import board, drawing, illustrate
 from irene.brain import drawn_as_tool
 
@@ -94,15 +94,30 @@ class DrawReport:
 
 
 async def run_drawing(llm, report: DrawReport, timing=None, repeat: int = 1) -> None:
-    conv = Conversation(llm)
     for case in load("drawing.jsonl"):
         for _ in range(repeat):
-            t = await timed_reply(llm, _messages(conv, case))
+            # the live turn, board and all: a reply with no drawing is asked once more
+            conv = conversation_for(llm, case)
+            asked: list = []
+            ask = conv._ask_for_drawing
+
+            async def follow_up(*args, ask=ask, asked=asked):
+                spec = await ask(*args)
+                asked.append(spec)
+                return spec
+
+            conv._ask_for_drawing = follow_up
+            t = await live_turn(llm, case, conv, boards=True)
             if timing:
                 timing(t)
-            call = parse_tool_call(t.raw)
+            call = t.called
             reply = parse_reply(t.raw)
             meant = drawn_as_tool(t.raw)
+            again = ""
+            if reply.draw is None and meant is None and asked and asked[-1] is not None:
+                # the follow-up drawing the app asked for: what the board got
+                reply = type(reply)(reply.speak, reply.display, reply.react, reply.cues, board.Draw(asked[-1]))
+                again = "  (drawn on the follow-up)"
             if reply.draw is None and meant is not None:
                 # a template 'called' as a tool: the conversation draws it all the same
                 why = board.check(meant)
@@ -133,6 +148,7 @@ async def run_drawing(llm, report: DrawReport, timing=None, repeat: int = 1) -> 
             else:
                 got = reply.draw.spec.get("template", "shapes")
                 report.specs.append((case["id"], reply.draw.spec))
+            note += again
             if "<draw" in t.raw.lower():
                 report.tags += 1
                 report.valid += bool(reply.draw and reply.draw.spec)

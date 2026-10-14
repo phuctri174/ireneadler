@@ -16,6 +16,46 @@ import pytest
 os.environ["IRENE_EXAMPLE_CONFIG"] = "1"
 
 
+class BagEmbedder:
+    """Stands in for her embedding model in tests (no 130 MB model, no threads
+    importing transformers): a hashed bag of words, normalised."""
+
+    ready = True
+
+    def load(self):
+        pass
+
+    def encode(self, texts, query=False):
+        import hashlib
+
+        import numpy as np
+
+        from irene import recall
+
+        out = np.zeros((len(texts), 384), np.float32)
+        for row, text in enumerate(texts):
+            for w in recall.words(text):
+                out[row, int(hashlib.md5(w.encode()).hexdigest(), 16) % 384] += 1
+        norms = np.linalg.norm(out, axis=1, keepdims=True)
+        return out / np.where(norms == 0, 1, norms)
+
+
+@pytest.fixture(autouse=True)
+def _memory_never_his(monkeypatch, tmp_path):
+    """Her long-term memory in a test is a fresh one in a temp folder: a test never
+    reads or writes his (or the dev run's) memories."""
+    from irene import recall
+
+    embedder = BagEmbedder()
+    store = recall.Store(tmp_path / "memory" / "memory.sqlite", embedder)
+    monkeypatch.setattr(recall, "EMBEDDER", embedder)
+    monkeypatch.setattr(recall, "HIS", store)
+    monkeypatch.setattr(recall, "DEV", store)
+    yield
+    recall.flush()
+    store.close()
+
+
 @pytest.fixture(autouse=True)
 def _research_fixtures_never_expire(monkeypatch):
     """Research expires after a day (tools/research.py EXPIRE_S); the fixtures carry

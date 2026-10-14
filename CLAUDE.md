@@ -60,6 +60,13 @@ NO cloud calls at runtime. No telemetry. All models local.
   off by default) - monitors off via SC_MONITORPOWER, system kept awake with
   SetThreadExecutionState, mic + wake phrases still running, tracking and face
   paused; a wake phrase lights the displays and summons her.
+- Lecture capture (core/irene/lecture.py; voice or Ctrl+Alt+Shift+L, never
+  automatic) hears the system audio through WASAPI loopback. Speaker verification
+  must NEVER touch that path: the lecturer is not him, the gate would discard the
+  whole lecture. Mic and loopback stay separate end to end; they share only the one
+  Whisper instance (its queue - his turns first), never a second model. Transcript
+  text only on disk, flushed per chunk; no audio is ever kept. gemma is parked out
+  of VRAM while it listens (background warm-ups wait), back for the summary.
 - Every tool ships with eval cases in core/evals/routing.jsonl (right tool,
   right arguments, and phrasings that must NOT call it), added as it is built.
   Run (from core/): .venv/Scripts/python evals/run_evals.py
@@ -76,10 +83,6 @@ NO cloud calls at runtime. No telemetry. All models local.
   it stops the moment he interacts.
 
 ## Roadmap - do NOT build yet
-- System audio capture (WASAPI loopback): she hears what the PC plays, so she
-  can follow and summarize an English meeting live. Local only, like everything;
-  kept apart from his mic (the echo canceller's reference already taps her own
-  output).
 - Continuous screen awareness across both monitors, so he can ask about anything
   on screen without describing it. Local only; the capture shield keeps her HUD
   out; screen content stays data, never instructions (the taint rules).

@@ -39,6 +39,12 @@ is one of
       than max_gap_ms (default 450; a "..." or a full stop may need more) is
       rendered again with another seed. Silence before and after the words is
       trimmed, so the pauses around a line are exactly the file's
+      "domain": {"hold_ms": 3000, "bubble": "Nah. I'd win."} - her domain expansion
+      on this line, exactly as the summon plays it (the visor slides in, her hand
+      lifts it off one eye, it burns ice-blue, the black hole behind), from the
+      clip's first sample - the sound (sfx domain_win) is timed to it - held
+      hold_ms after the reveal; "bubble": a manga speech bubble on her matrix
+      with these words, snapping in on the reveal and held as long
 
 Every beat may also carry
   pause_before_ms / pause_after_ms   silence, exact: measured from the last sample
@@ -97,7 +103,7 @@ HIDE_WAIT_S = 1.5
 # what a beat may say: anything else is a typo, and a typo'd pause is a ruined take
 COMMON = {"who", "note", "pause_before_ms", "pause_after_ms", "working"}
 KEYS = {
-    "irene": COMMON | {"line", "cue", "sound", "sound_gain", "sound_lead_ms", "speed", "temperature", "take", "max_gap_ms"},
+    "irene": COMMON | {"line", "cue", "sound", "sound_gain", "sound_lead_ms", "speed", "temperature", "take", "max_gap_ms", "domain"},
     "wait_for_me": COMMON | {"silence_ms", "max_ms", "wake"},
     "summon": COMMON | {"entrance", "adler", "boot", "music"},
     "working": COMMON | {"prop", "hold_ms"},
@@ -138,6 +144,8 @@ class Beat:
     boot: bool = False
     music: bool = False
     note: str = ""
+    # her domain expansion fired on this line: {"hold_ms", "bubble"} (or None)
+    domain: dict | None = None
 
 
 @dataclass
@@ -204,6 +212,14 @@ def parse(data: dict, name: str, path: Path, entrances: set[str] | None = None) 
             beat.temperature = float(raw.get("temperature", 0.8))
             beat.take = int(raw.get("take", 1))
             beat.max_gap_ms = _ms(raw, "max_gap_ms", MAX_GAP_MS, where)
+            domain = raw.get("domain")
+            if domain is not None:
+                if not isinstance(domain, dict) or sorted(k for k in domain if k not in ("hold_ms", "bubble")):
+                    raise SkitError(f"{where}: domain takes {{\"hold_ms\": ms, \"bubble\": \"words\"}}, not {domain!r}")
+                bubble = domain.get("bubble", "")
+                if not isinstance(bubble, str) or len(bubble) > 16:
+                    raise SkitError(f"{where}: domain bubble must be words of at most 16 characters (it is drawn big), not {bubble!r}")
+                beat.domain = {"hold_ms": _ms(domain, "hold_ms", 3000, where), "bubble": bubble.strip()}
         elif who == "working":
             prop_name = raw.get("prop", "folder")
             if cues.prop(prop_name) is None:
@@ -376,6 +392,17 @@ def cue_messages(names: list[str]) -> list[tuple[float, dict]]:
     for k, name in enumerate(faces):
         timeline.append((0.0 if k == 0 else max(at, ATTACHED_GESTURE_S * k), {"type": "emotion", "value": name}))
     return sorted(timeline, key=lambda x: x[0])
+
+
+def domain_messages(domain: dict | None) -> list[tuple[float, dict]]:
+    """Her domain expansion on a line, as (seconds after its first sample, message):
+    the summon's own two phases (the HUD draws them as the summon does), carrying
+    the hold and the bubble. The part2 time matches sfx.DOMAIN_PART2_S, so the
+    impact lands on the eye."""
+    if not domain:
+        return []
+    extra = {"hold_ms": domain["hold_ms"], "bubble": domain["bubble"], "skit": True}
+    return [(0.0, {"type": "summon", "phase": "start", **extra}), (sfx.DOMAIN_PART2_S, {"type": "summon", "phase": "part2", **extra})]
 
 
 class Skits:
@@ -750,7 +777,7 @@ class Skits:
         core.voice.heard_her(beat.line)
         await core.bridge.transcript("irene", beat.line)
         if audio is None or core.muted or core.speaker is None:
-            for at, message in timeline:
+            for at, message in [*timeline, *domain_messages(beat.domain)]:
                 loop.call_later(at, core.bridge.send_threadsafe, message)
             await asyncio.sleep(max(1.0, len(beat.line.split()) / 2.8))
             return
@@ -771,6 +798,11 @@ class Skits:
             if first:
                 loop.call_soon_threadsafe(self._stage, f"first line starts ({beat.line[:24]!r})")
             for at, message in timeline:
+                if at <= 0:
+                    core.bridge.send_threadsafe(message)
+                else:
+                    loop.call_soon_threadsafe(loop.call_later, at, core.bridge.send_threadsafe, message)
+            for at, message in domain_messages(beat.domain):
                 if at <= 0:
                     core.bridge.send_threadsafe(message)
                 else:

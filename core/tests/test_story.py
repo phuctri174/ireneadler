@@ -38,6 +38,41 @@ def test_the_beat_fits_the_story():
     assert story.read("The projector died right when he started presenting my slides lol").beat != "sad"
 
 
+def test_thanks_corrections_and_questions_are_not_stories():
+    # each was a story once (eval parity: 13/49 reaction cases claimed): a capitalised
+    # "anyone did anything" matched every word under re.I
+    for said in (
+        "Thank you, Irene. Honestly, you've made this week so much easier.",
+        "That's the old one. I said report.pdf.",
+        "No, that's not what I asked for.",
+        "That's wrong - it's a strike to the opponent's left dou.",
+        "The backup script failed again last night.",
+        "I've got kendo practice tonight, working on my men strikes.",
+        "Anyway - my teacher told me to improve my tenouchi. What's that?",
+        # his own news, one thing that happened: the plain emotional read
+        "I lost three chess games in a row today. My openings are terrible.",
+        "I just got accepted into my dream university!",
+    ):
+        assert story.read(said) is None, said
+    told = ["So my manager yelled at me in the hallway today because HE forgot to send the invoice."]
+    for said in ("Thanks, that helps.", "No, I meant the other manager.", "Anyway, what's the weather tomorrow?"):
+        assert story.read(said, told) is None, said
+
+
+def test_a_story_is_still_a_story():
+    for said in (
+        "So this girl I was talking to for two weeks just ghosted me. Like completely, no reply.",
+        "So my best friend Duy and his girlfriend broke up today, out of nowhere, in the middle of dinner.",
+        "My boss stopped by my desk today and said my report was the best one this quarter.",
+        "My sister deleted all our group photos from the shared folder and then said it was an accident.",
+        "Okay so I kind of yelled at my roommate because she ate my leftovers.",
+        "My keiko was brutal tonight, sensei had us doing kakari geiko.",
+    ):
+        assert story.read(said) is not None, said
+    told = ["So today at work my coworker Trác took credit for my slides in front of the whole team."]
+    assert story.read("What should I do about him?", told).advice_asked
+
+
 def test_a_continuation_keeps_the_story_and_its_beat():
     told = ["So my manager yelled at me in the hallway today because HE forgot to send the invoice."]
     tale = story.read("And then he acted like nothing happened in the meeting after.", told)
@@ -123,3 +158,12 @@ def test_no_question_back_gets_one():
     assert story.asks_back(["What did he say?"])
     assert story.asks_back(["No way!", "Then what?"])
     assert story.follow_up("wronged").endswith("?")
+
+
+def test_forgetting_is_a_command_not_a_story():
+    """Live 2026-10-13: "Forget what I told you about Trác" was taken as a story about
+    Trác - no tool offered, and she only said "consider it forgotten"."""
+    for said in ("Forget what I told you about Trác.", "Erase what you know about my kendo grading.",
+                 "Remember that my locker code is 4412."):
+        assert story.read(said) is None, said
+    assert story.read("My younger brother Trác just started university in Hanoi.") is not None

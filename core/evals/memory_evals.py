@@ -109,8 +109,8 @@ async def run_case(llm: Ollama, case: dict) -> tuple[bool, str]:
         return canned.get(name, f"done: {name} ran")
 
     conv._run_tool = run_tool
-    for role, content in case.get("history", []):
-        conv.history.append({"role": role, "content": content})
+    # its past, kept as respond() keeps it (notes, recent tools, cues)
+    conv.restore([{"role": role, "content": content} for role, content in case.get("history", [])])
     host = Host()
     for said in case["turns"]:
         await conv.respond(said, host)
