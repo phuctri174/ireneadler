@@ -3,6 +3,18 @@
 He plays by voice; Stockfish plays her moves; the language model never chooses,
 names or judges a move.
 
+**Problem.** An LLM narrating chess will say a piece is hanging when it isn't, and a 12B
+model can't reliably track a position. A chess partner who lies about the board is
+worse than none.
+
+**Mechanism.** Every chess fact comes from code or the engine. The model only voices
+facts it was handed. That turns "is her commentary true?" into something that can be
+checked, and it is: a separate engine instance re-scores every claim ([Measured](#measured)).
+
+**Cost.** Her lines are selected from pools, not generated, so a moment with no pool
+line gets no comment. Her strength is limited by what Stockfish's own limiter can do
+([below](#her-strength)).
+
 ## The split
 
 | Who | Does |
@@ -37,7 +49,11 @@ mate coming?" - "No no no no. My king has nowhere to go. Nowhere!" - "...It's ma
 move. I can see it. Please don't see it." - and at mate: "Checkmate. Okay. Okay. I'm
 fine. I'm completely fine. Set them up again. Right now."
 
-**Her strength** (2026-10-19). Everything is in `config/chess.yaml`:
+## Her strength
+
+**Problem.** Her strength was configured, yet it had to be measured and lowered
+(commit `a87b851`, 2026-10-19), and the first question was whether the engine was
+honouring the setting at all. Everything is in `config/chess.yaml`:
 
 - `elo` (1350; Stockfish's floor is 1320, and anything lower is clamped up)
 - `think_ms` (300) and `max_depth` (6): her search stops at whichever comes first
@@ -51,7 +67,17 @@ How the options reach the engine (traced with python-chess's UCI log):
 
 UCI has no per-option acknowledgement, so each of her moves logs the engine's own top line next to the move it played. A different move means the limiter chose it. Live, 2 of her first 4 engine moves differed.
 
-**The hash leak.** The full-strength look at a position ran just before her search of that same position. Her weakened search then read the deep analysis out of the hash table. Her search now starts from an empty hash.
+**The hash leak.** The settings above reached the engine and were acknowledged; that
+wasn't the problem. The full-strength look at a position ran just before her search of
+that same position, on the same process. Her weakened search then read the deep
+analysis out of the shared hash table. Her search now starts from an empty hash.
+[Lesson 9](lessons.md#9-the-chess-strength-that-was-applied-and-still-didnt-hold):
+a setting the engine accepts isn't the same as a setting that takes effect, so the
+effect is what gets logged and measured.
+
+**Considered: a lower Elo.** 1320 is Stockfish's floor. Even there it makes small slips
+more than real blunders (below). A human-like error model (Maia-style) would be the next
+step, not a lower number. It's not built.
 
 **The book is perfect theory** whatever the Elo, so she plays best in the opening:
 
@@ -81,11 +107,10 @@ blunder, and an accuracy per side using lichess's win-percentage formula. She na
 what it found; the panel shows the evaluation graph and key positions, and saves as a
 PDF.
 
-## Why this design
-
-An LLM narrating chess will say a piece is hanging when it isn't, and a 12B model
-cannot reliably track a position. Making the engine the only source of chess facts
-turns "is her commentary true?" into something that can be checked.
+**Entering and leaving.** "Let's play chess", "let's have a chess match", or a book
+opening finished in [study mode](modes.md#study-mode). While a game is on, the
+[mode lock](modes.md#the-mode-lock) keeps the board; his exit ends it any time. The
+guard ends a game idle for 20 minutes.
 
 ## Measured
 

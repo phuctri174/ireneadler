@@ -2,7 +2,7 @@
 // Copyright (C) 2026 phuctri174
 // Shiai's block, beside the strike event (strikeEvent.ts, untouched): both wrists up,
 // HELD - and a dev probe of what the body did. No strike types: every strike of his is
-// a men (2026-10-18). No tsuki: depth from one camera is unusable (docs/gestures.md).
+// a men (2026-10-18). No tsuki: depth from one camera is unusable (docs/kendo.md).
 //
 // BlockDetector both wrists up, HELD: a men strike passes through that pose on its
 //               way up, then comes down fast; a block stays. Held holdMs, with

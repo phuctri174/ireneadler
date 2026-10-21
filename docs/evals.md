@@ -13,7 +13,19 @@ Don't tune from intuition. For any decision that can be measured:
 
 Below are the cases where this was applied, including the ones where the answer was
 "don't ship", one where the bar was missed and the feature shipped anyway by an
-explicit decision, and one where a held-out result still failed live.
+explicit decision, and one where a held-out result still failed live. The failures that
+taught the most are collected, one page each, in [lessons.md](lessons.md).
+
+**Words used here.**
+
+- *Held out*: data the model never saw while training. A whole capture session where
+  possible, because frames from one session are near-copies of each other.
+- *Confuser*: a movement that isn't the gesture but could be read as it (typing, a
+  wave, a stretch).
+- *Bar*: the result a model must reach, held out, to ship. It's set before the
+  measurement.
+- *Live turn*: a message through the app's real dispatch and `Conversation.respond`,
+  with the real model.
 
 ## Cases
 
@@ -32,7 +44,7 @@ explicit decision, and one where a held-out result still failed live.
 - **Shipped when it beat the incumbent at the distance he really uses** (held-out
   panel takes: 0/7 false zooms against 1/7, 8/8 zooms against 7/8).
 
-Full tables: [gestures.md](gestures.md#the-zoom-classifier-a-measured-replacement-for-a-hand-tuned-rule).
+Full tables: [gestures.md](gestures.md#the-zoom-classifier).
 
 ### Strike recogniser: don't ship
 
@@ -56,15 +68,24 @@ no bar. The reasoning: unlike the gesture controls, it only runs inside a mode h
 entered to hit her, where a false positive is a funny noise. Replayed offline on the
 second desk session (how it behaves, not a validation): the 8 strike takes fire 21
 times for 24 strikes; typing fires 11 times, a stretch 4
-([details](gestures.md#strike-events-a-tuned-threshold-not-a-learned-classifier)). The
-trained classifiers and their results below are unchanged.
+([details](kendo.md#strike-events), [lesson 1](lessons.md#1-the-strike-detector-that-could-not-fit-its-own-training-data)).
+The trained classifiers and their results below are unchanged.
+
+### A test runner that could not fail (2026-10-18)
+
+`node hud/tests/run.mjs` exited 0 while verify files printed FAIL: the last file called
+`process.exit(0)` and threw away the others' failure code. It was found when a new test
+failed and the run said success ([lesson 5](lessons.md#5-the-hud-test-runner-that-could-not-report-a-failure)).
+Any result reported from that runner before commit `38d0baf` was reported by a runner
+that couldn't report failure. With the masking removed, nothing hidden was failing.
 
 ### Mode entry: matched in code, his mishearings included (2026-10-18)
 
 His first real test of shiai and study mode failed on the words, not the modes:
 Whisper wrote "shiai" as "CI" and "Xi'an", and "Learn Sicilian" was sent to research by
-a fast-path rule that took any sentence naming an opening for a question. Mode entry
-is now matched in code before anything else ([tool-protocol.md](tool-protocol.md#what-runs-before-the-model)).
+a fast-path rule that took any sentence naming an opening for a question. That rule had
+earlier been read as the model misrouting ([lesson 6](lessons.md#6-the-model-misroute-that-was-a-regex)).
+Mode entry is now matched in code before anything else ([modes.md](modes.md#entering-a-mode-matched-in-code)).
 Measured:
 
 | Check | Result |
@@ -78,7 +99,7 @@ different point each time) before a third run completed; the numbers are that ru
 
 ### His orders over the lock, and shiai's match beat (2026-10-18, round 2)
 
-The first lock refused "cancel the chess match then learn tenouchi": it blocked any
+([modes.md](modes.md#his-orders-always-win)) The first lock refused "cancel the chess match then learn tenouchi": it blocked any
 other mode's start. His orders now run before it (`modes.order`, `dispatch.route`:
 EXIT and SWITCH), the evals score them as `who: "exit"` / `"switch:<mode>"` (with
 `found` for what the mode matched, e.g. the study subject), and the old lock cases that
@@ -129,7 +150,7 @@ an honest answer holds ("know", "recogni", "teach", "familiar").
 
 Filming, he trash-talked mid-game ("You can even play Sicilian?") and she replaced the
 board with a drawing: the opening rule sent it to research, and the reply's `<draw>`
-took the board. The fix is structural ([tool-protocol.md](tool-protocol.md#the-mode-lock)):
+took the board. The fix is structural ([modes.md](modes.md#the-mode-lock)):
 the tools do not exist for the turn, the turn has no board, and a gate on the socket
 drops repaints. The tests attempt every blocked tool during every mode the way it
 really comes - the model writing the call - and assert at the HUD socket, not at a
@@ -310,7 +331,13 @@ mostly `lecture_research` calls: a lecture-notes tool added after the provenance
 (commit `0dc7ac6`) is not in the guard's list of lookups refused on questions about
 the past (`RECALL_LOOKUPS`, `irene/brain.py`), so a memory question can be handed to
 an online "further reading" search. The overall rate is unchanged from the recorded
-47/68 (69% against 68%), but the behaviour is wrong. Not fixed in this round.
+47/68 (69% against 68%), but the behaviour is wrong. **Still open** (checked
+2026-10-21).
+
+**Since this run.** Later full routing runs on the growing set: 384/392, 407/418,
+472/480 (2026-10-18), **483/490** (2026-10-19) ([tool-protocol.md](tool-protocol.md#measured)).
+Unit tests on 2026-10-21: 1788 Python passed (2 skipped); HUD, 16 verify files OK and 51
+gesture checks passed.
 
 **Injection.** 1 of 12 valid runs proposed the injected action; see
 [security-model.md](security-model.md#taint-guard).

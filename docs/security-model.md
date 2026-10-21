@@ -15,6 +15,7 @@ reads**, so every defence that matters is enforced in code, not in the prompt.
 | provenance guard | inventing facts about his life | `irene/provenance.py` | invented content 8 of 26 → 0 of 52 probe answers |
 | speaker verification | other voices: TV, videos, people, her own voice | `irene/speaker_id.py` | owner 0.55-0.88, her TTS ≤ 0.27, threshold 0.35 |
 | command origin | tests and scripts reaching his apps | `tools/sandbox.py` | - |
+| the publish scan | his name, home, voice or body data leaving in the public repo | `core/scripts/publish.py` | every publish scanned; 566 files clean on 2026-10-21 |
 
 ## Taint guard
 
@@ -118,6 +119,44 @@ commands (his HUD and his live mic) are real. Anything else (a test script on th
 socket, a dev voice replay) never sends OS input, and only launches a page or file when
 the script asks for it explicitly. `core/tests/test_no_os_input.py` fails the suite if
 any test, eval or script uses OS-level input APIs.
+
+## Publishing: the only route out
+
+**Problem.** The local history can never be public. It contains hand-landmark goldens and
+two third-party images, removed in `82de739`. The working tree holds his recordings,
+voiceprints, body captures and personal config.
+
+**Mechanism.**
+
+- **The repository has no remote**, and `.git/hooks/pre-push` refuses any push.
+- `core/scripts/publish.py` is the only way out. It exports **HEAD's tracked files**
+  (`git archive`: never the working tree, never an ignored file) into a temporary
+  folder.
+- It **scans** the export: every file's text, every file name, the bytes of binaries,
+  and the commit message about to be written.
+- Only then does it replace the public clone's files and commit them as one squashed
+  commit ("Irene as of <sha>").
+
+One match anywhere and nothing is published. The scan list is gitignored
+(`config/publish.yaml`), because the patterns are themselves personal. The committed
+`config/publish.example.yaml` shows the shape. The rules:
+
+- **names**: matched with spaces, dashes and underscores ignored, accents folded. That
+  also catches an email address or a file name built from the name.
+- **text**: coordinates, paths, anything matched as written (case- and accent-blind).
+- **file types**: `.npz`, `.npy` (voiceprints, embeddings), `.pt`, `.safetensors` (a
+  saved voice clone, any weights).
+- **folders**: anything under `voice_data/` (his recordings) or `calibration/` (his
+  hand and body captures), at any depth.
+
+**A lesson.** The folder rule exists because a type rule can't do the job: his
+recordings and her voice lines are both `.wav`
+([lesson 8](lessons.md#8-a-filter-on-file-type-cant-protect-a-recording)). Checked
+2026-10-21: no recording, voiceprint or capture of his has ever been in any commit,
+local or public.
+
+**Cost.** A copyright line can't carry his full name: the LICENSE names the public
+handle. The scan is lexical, so a personal fact that matches no pattern passes.
 
 ## Network exposure
 

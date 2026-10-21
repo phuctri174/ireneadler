@@ -2,7 +2,7 @@
 // Copyright (C) 2026 phuctri174
 // That he struck at her - from his upper body - and, in shiai, how he moved.
 //
-// A tuned threshold, not a learned classifier (docs/gestures.md says why): he is in
+// A tuned threshold, not a learned classifier (docs/kendo.md says why): he is in
 // a mode, holding a shinai, to hit her, and a false positive is a funny noise.
 //
 // A strike: one wrist's SIGNED downward speed (shoulder-widths per second, measured
@@ -19,7 +19,7 @@
 // Shiai also reads his feet, from the shoulders: their width growing or shrinking
 // over `windowMs` is him advancing or retreating, their midpoint moving sideways is
 // a step to the side - and the new width (or place) must HOLD past the threshold for
-// `holdMs`, dips under `graceMs` forgiven: the hold-grace pattern (docs/gestures.md).
+// `holdMs`, dips under `graceMs` forgiven: the hold-grace pattern (docs/lessons.md).
 // In kamae his hands cover his shoulders and their width jitters ~7% within a second
 // (measured 2026-10-18): a flicker past 8% is not a step. And it can change for a
 // second or longer with him not moving at all (the gate, 2026-10-18: -8% held, and a

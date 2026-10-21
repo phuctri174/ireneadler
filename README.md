@@ -22,49 +22,98 @@ the search engines it queries), and the result pages are fetched.
 Built for and tested on one machine (Windows 11, RTX 5060 Ti 16 GB). See
 [Setup](#setup) for what that means for anyone else.
 
+## How to read this repository
+
+**Start with [docs/README.md](docs/README.md).** It has a reading order and the ideas
+that recur. Every subsystem is written up the same way: the problem, the mechanism,
+what else was considered, why this was chosen, and what it costs. Then read
+[docs/lessons.md](docs/lessons.md): nine real failures (a model that couldn't fit its
+own training data, a "model misroute" that was a regex, memory feeding her own guesses
+back as facts) and the rule each one left.
+
+Two principles explain most of the design:
+
+- **Code decides, the model talks.** Stockfish owns every chess fact, a sealed throw
+  owns rock-paper-scissors, regexes own mode entry, and a lexical guard owns claims
+  about his life. The language model voices what it is handed.
+- **Defences are code, not prompt.** The model is assumed to sometimes obey what it
+  reads and to sometimes invent, so the guards hold whatever it writes.
+
 ## Features
 
-**Voice** ([docs/voice-pipeline.md](docs/voice-pipeline.md))
-- Wake phrase ("Hey Irene") matched on Whisper's transcript after a speaker check; no wake-word model
-- Only the owner's voice is acted on: ECAPA speaker verification before transcription
-- Whisper large-v3-turbo, float16, with the owner's vocabulary as hotwords
-- Replies stream sentence by sentence into Chatterbox-Turbo TTS (Kokoro fallback); barge-in with echo cancellation
+Status is **on** unless marked. Each line links to the document that explains it.
 
-**Conversation and tools** ([docs/tool-protocol.md](docs/tool-protocol.md))
-- 37 tools over a prompt protocol, with schema validation, code guards and confirmation
-- Deterministic routes answer unmistakable commands without the model
-- Research with per-sentence grounding against the fetched pages
-- Files only inside whitelisted roots; quarantine instead of delete
-- Media, volume, timers, screenshots on request, a second-screen dashboard, PDF export
+**Voice** ([docs/voice-pipeline.md](docs/voice-pipeline.md))
+- Only his voice is acted on: an ECAPA speaker check runs *before* transcription.
+- Wake phrase ("Hey Irene") matched on Whisper's transcript. No wake-word model:
+  openWakeWord has no "Irene".
+- Whisper large-v3-turbo, float16, with his vocabulary as hotwords.
+- Replies stream sentence by sentence into Chatterbox-Turbo TTS (Kokoro fallback).
+  Barge-in works with echo cancellation.
+- Pre-rendered lines play from memory: openers, quick replies, and the song-win bit,
+  whose faces are marks on its audio clip. Its pace is in `config/songwin.yaml`.
+
+**Who answers** ([docs/modes.md](docs/modes.md), [docs/tool-protocol.md](docs/tool-protocol.md))
+- **Mode entry in code**: chess, shiai, study mode, keiko, rock-paper-scissors, the
+  strike calibration and lecture capture start from regexes, with Whisper's mishearings
+  of his voice put back ("let's do CI" is shiai). The model never decides it.
+- **The verb decides**: "learn X" is study mode, "research X" is research.
+- **The mode lock**: a mode owns the display until he ends it. For that turn the model
+  has only the tools that change nothing on screen, no board, and a gate at the socket
+  drops repaints.
+- **His orders always win**: an exit, a switch, or both in one breath ("cancel the chess
+  match then learn tenouchi") run before the lock.
+- **No mode can get stuck**: one guard ends any idle mode and shows the current mode on
+  the dashboard.
+- 37 tools over a prompt protocol, with schema validation, code guards and confirmation.
+  A fast path answers unmistakable commands without the model.
 
 **Memory** ([docs/memory-and-provenance.md](docs/memory-and-provenance.md))
-- Long-term memory across restarts (SQLite + CPU embeddings), with real deletion on request
-- A provenance guard: claims about the owner's life must come from a retrieved memory
-- Memory never answers a question about the world: naming a song from its lyrics (a film, a book, a person) skips recall, and the page open in his browser is not an answer source. A song from its lyrics that he never taught her is never named, not even as a guess: she says she doesn't know it and that he can teach her
-- Whatever he tells her about a song is filed, and she says so: a correction of her answer in any shape ("no, it's Blue by Yongkai", "it's blue from Yung Kai okay?", "wrong - Blue, yung kai") or a statement anywhere ("remember that one is..."). "Fixed - filed “blue” by Yung Kai." once the write has returned; "I haven't filed anything" when she couldn't read it. A correction replaces what was filed before.
-- Teach her by voice: "that song is Blue by yung kai, the one that goes..." (or the lyrics sung straight on). It's kept as his own fact, tagged as stated by him. Asked, sung or just said later, any line of it finds it (embedding match on windows of his quoted words, across restarts). She answers in three sentences: the title and artist as he gave them, anything else he told her, her own feel for it. A sentence with a fact he never taught (a year, an album, a chart, another artist) is never spoken.
-- Follow-ups about a taught song ("what else do you know about it?") are held to his words too: no release years, TikTok trivia or chart talk he didn't give.
-- After she names his song and he confirms it, a scripted bit with pre-rendered lines and faces on the audio clock: "Haha, GG fucking easy Mr Tri" (smug); if he objects, "Oh really?" (caught off guard), a real 2-second hold, "FUGGING EASY" (arrogant). Never anywhere else.
-- The song's card on the board as she names it: title and artist in her LED pixel style, with a small abstract picture of the moods in his words (waves, a night sky, a heart). Never album art.
+- Long-term memory across restarts (SQLite + CPU embeddings). Forgetting really deletes.
+- **Provenance guard**: a claim about his life must come from a retrieved memory.
+  Invented content in probe answers went from 8 of 26 to 0 of 52.
+- **Every memory records who said it** (him, her, a lecturer). A question about the
+  world skips memory, because it once fed her own guesses back as facts.
+- **Teach her by voice**: "that song is Blue by yung kai, the one that goes...". It's
+  kept as his fact and found later by his lyrics, and she answers in his words with
+  nothing invented. A correction in any shape is filed, and she says so every time. A
+  song he never taught her is never named.
 
-**Gestures** ([docs/gestures.md](docs/gestures.md))
-- Hand as an OS-level pointer across both monitors: point, dwell or pinch to click, two fingers to scroll
-- Zoom by a learned classifier that replaced a hand-tuned rule
-- Rock-paper-scissors against a sealed, hash-committed throw: **on, shipped below its 95% bar by decision (83.3% held out)**
-- Keiko strike recogniser (men, kote, gyaku-dou): **built, switched off**, below its held-out bar
-- Strike events (binary: he struck at her, for study mode and shiai): **on once calibrated** - a tuned threshold, not a learned classifier: signed downward wrist speed over a threshold, then a sharp stop. "Irene, calibrate my strikes" sets it from three swings (about 20 seconds); one number in `config/strike_event.json` nudges it, and in -Dev each strike's peak shows on her face. The learned version failed to fit its own training data and was replaced. The hits capture (Ctrl+Alt+Shift+0) stays as a measurement of what the camera sees at the desk (`scripts/hits_diagnose.py`, with a framing check) ([details](docs/gestures.md#strike-events-a-tuned-threshold-not-a-learned-classifier))
-- Kamae pose trigger: **retired**, fired on everyday arm movement live
+**Hand** ([docs/gestures.md](docs/gestures.md))
+- The hand moves the real Windows cursor across both monitors: point, dwell or pinch to
+  click, two fingers to scroll.
+- Zoom by a learned classifier that replaced a hand-tuned rule (0/7 false zooms against
+  1/7, held out).
+
+**Kendo** ([docs/kendo.md](docs/kendo.md))
+- **Strike events** ("he swung at her"): **on once calibrated**. A tuned threshold on
+  signed downward wrist speed plus a sharp stop, set from three swings. It replaced a
+  learned detector that couldn't fit its own training data.
+- **Shiai**: sanbon shobu against her, first to two. His strikes are men only, read as
+  a sequence (raise, cut, zanshin) against his own kamae. She attacks, dodges, parries
+  and counters by dice in code. The score is on screen.
+- **Tsuki: off for good.** Depth from one camera fired 23 phantom thrusts in 30 s with
+  him still.
+- **Keiko strike recogniser: off**, below its held-out bar. **Kamae trigger: retired**;
+  it fired on everyday movement live.
 
 **Activities**
-- Chess by voice against Stockfish, with engine-selected commentary and a post-game review. Her strength is `UCI_Elo` 1350 (the floor is 1320). Her search is capped at depth 6 or 300 ms and starts from an empty hash. Her opening book is up to 6 moves deep. All of it can be nudged in `config/chess.yaml`. She never resigns and never takes a draw - the board ends the game - and behind she never repeats a position to escape; as her position collapses she gets audibly more rattled, move by move, and checkmate gets a line written to land ([docs/chess.md](docs/chess.md))
-- Lecture capture from system audio, map-reduce summary with quote checks ([docs/lecture-capture.md](docs/lecture-capture.md))
-- She draws what she explains on a 128x72 LED board, from a spec she composes
-- Mode lock: while chess, shiai, study mode, keiko, rock-paper-scissors, a strike calibration or a lecture capture is on, it owns the display until he ends it - the lock stops HER wandering off, never HIM. His exits ("cancel", "quit this", "stop the match", "forget the chess", "never mind the game") and his switches always run, before the lock, in code - including both in one breath: "cancel the chess match then learn tenouchi" is chess off and study mode on tenouchi, one turn; another mode's start or hotkey mid-mode switches straight over. Trash talk that names a mode or an opening is answered in character; a drawing, research or the panel mid-mode gets a short in-character brush-off ("We're in the middle of a game. Your move."). Enforced in code, not the prompt: for that turn the model has only the tools that change nothing on screen, no board, and a gate drops anything that would repaint ([details](docs/tool-protocol.md#the-mode-lock))
-- No mode can get stuck: one guard, always running, ends any mode with nothing happening in it (shiai 3 min, keiko 3, rock-paper-scissors 2, study 11, chess 20, a lecture capture 30 with no new words, a strike calibration 1) and says so; the mode she thinks she is in is always on the dashboard header ("Mode: Shiai", "Mode: none"); a mode hotkey clears whatever mode is on; and every brush-off says why ("Can't, we're in a bout right now"). Measured 2026-10-18: "learn the Sicilian" failing after a bout was not a stuck mode - Whisper's "Hey learn Sicilian please" (the "hey" kept, her name dropped) fell through to chat; "hey ...", "you learn X" and "let's learn X" now start study mode
-- Study mode: "Irene, go study the Sicilian" (or "learn tenouchi", "learn about black holes" - any subject, the verb decides; "research / look up / search X" is research instead - or Ctrl+Alt+Shift+S) - head down over a book on her LED face, a progress bar filling, muttering; every swing he takes at her jumps the bar and speeds it up while her complaints escalate (ow → "I AM studying" → "okay okay okay"); when it fills she says what she learned, and a chess opening goes straight into a game with her book pinned to it. The first time, she asks for three swings to calibrate the hits ([docs/gestures.md](docs/gestures.md#study-mode))
-- Shiai: "Irene, let's do kendo" / "kendo match" / "let's do shiai" (Whisper's "CI", "Xi'an" understood), or Ctrl+Alt+Shift+M - the dojo, her in bogu, sanbon shobu, first to two. He throws men only (every strike of his is a men - no classification), and a men is a sequence, not a spike: furikaburi, the cut, then zanshin held 400 ms, heights measured against his own kamae of the second before (study mode keeps the plain threshold); she attacks with men or kote, and he can dodge (a step back or aside) or block (hands up, held, against her men); she dodges, parries or counters his strikes. A 5 s countdown before the bout and a 5 s pause after each point, each ending in "Hajime!" shouted as a kiai; nothing counts in between, refused in code; one swing is one strike. The running score on screen. No model, no capture ([docs/gestures.md](docs/gestures.md#shiai))
-- Tsuki: **off for good** - its trigger read depth from one camera, which ran 14-27 shoulder widths a second with him still and fired 23 phantom ippons in 30 s; any return must use a 2D signature (forearm foreshortening, elbow extension), never depth ([details](docs/gestures.md#shiai))
-- Screens-off mode: monitors off, PC awake, still listening ([docs/hardware-constraints.md](docs/hardware-constraints.md#what-real-sleep-cant-do))
+- **Study mode** ([docs/modes.md](docs/modes.md#study-mode)): "go study the Sicilian".
+  She studies, his swings jump her progress bar while her complaints escalate, and a
+  book opening goes straight into a game.
+- **Rock-paper-scissors** ([docs/rps.md](docs/rps.md)): **on, below its 95% bar by
+  decision** (83.3% held out). Her throw is hash-committed before his hand is read.
+  **Stakes**: the model quotes his bet, code decides who it binds and what the result
+  means, and she waits for his yes.
+- **Chess by voice** ([docs/chess.md](docs/chess.md)) against Stockfish, with
+  engine-selected commentary, a post-game review, and her strength measured
+  (`UCI_Elo` 1350, from an empty hash). She never resigns.
+- **Lecture capture** ([docs/lecture-capture.md](docs/lecture-capture.md)) from system
+  audio, with a map-reduce summary and quote checks.
+- **The board**: she draws what she explains on a 128x72 LED board, from a spec she
+  composes.
+- **Screens-off mode**: monitors off, PC awake, still listening
+  ([docs/hardware-constraints.md](docs/hardware-constraints.md#what-real-sleep-cant-do)).
 
 ## Architecture
 
@@ -73,7 +122,7 @@ Built for and tested on one machine (Windows 11, RTX 5060 Ti 16 GB). See
  mic ─► echo cancel ─► Silero VAD ─► end of speech ─► speaker check ─► Whisper ─► wake phrase
                                                      (ECAPA, CPU)     (GPU fp16)      │
                                                                                       ▼
-                               dispatch: keiko / study / RPS / chess / quick reply / model
+                               dispatch: his orders / modes / quick reply / model
                                                                                       │
           deterministic routes ◄── router: tool groups for this message ◄─────────────┘
                   │                        │
@@ -126,7 +175,7 @@ those were measured live, on hardware or with audio that a script can't replay.
 | mode lock in the running app | trash talk mid-chess answered ("Of course I can. Do you even know the Najdorf?") with the board untouched; 9/9 blocked requests refused in code (drawing, research, panel, another mode, the lecture hotkey), none repainted; his move still played. 2 of the 15 driver checks lost her spoken brush-off to real camera strikes (the desk-typing confuser), after the refusal was logged | `scripts/mode_lock_live_check.py`, -Dev, dev socket, mic deafened | n/a | 2026-10-18 |
 | shiai scoreboard, live | 4/4 scores on the board before she started saying them, by 515-1234 ms | same script | n/a | 2026-10-18 |
 | his orders over the mode lock (exits, switches, compounds) | every mode into every other through the app's real turn - said outright, and as an exit + start with 4 joints ("then", ",", "and then", "."); 12 exit phrasings x 7 modes; 9 trash-talk lines x 7 modes never leave: **372/372** | `tests/test_mode_switch.py` | n/a | 2026-10-18 |
-| switch / exit / lock / calibration routing cases | **222/222** (74 cases x 3): compound exit+enter from every mode into every other (42), exits (7), trash talk that must not leave, the old lock cases, the strike-type calibration command | `evals/run_evals.py` routing, these ids | n/a | 2026-10-18 |
+| switch / exit / lock / calibration routing cases | **222/222** (74 cases x 3): compound exit+enter from every mode into every other (42), exits (7), trash talk that must not leave, the old lock cases, the strike-type calibration command (since removed, 2026-10-19) | `evals/run_evals.py` routing, these ids | n/a | 2026-10-18 |
 | still in kamae, 30 s: what the detectors fire | tsuki trigger ON: **23** thrusts (depth jitter 14-27 sw/s with him motionless) - the phantom ippons; it is off for good. The strike event as at `43182f1` (reverted to it): bare-handed 0-3; **in bogu 15** (peaks 10.7-18.0 vs 10.44, wrist noise 17.4 sw/s - the kote hide his wrists), against 24, 26 and 5 for the same detector in bogu earlier | `scripts/strike_probe.py`, -Dev, nothing acted on | n/a | 2026-10-19 |
 | tsuki thrust trigger | **off for good**: 23 phantom thrusts in 30 s of him still in kamae; his calibration "tsuki" had no forward travel at all | the gate above | n/a | 2026-10-18 |
 | shiai as specified, live | **10/10**: a 5 s countdown, hajime 5.0 s after it; a full bout to its result, his points all MEN ARI; after a point hajime 5.0 s from the call; one swing sent as 3 events over 1.4 s answered once; the dashboard showed "Shiai" through it and "none" after; a brush-off mid-bout said why ("Can't, we're in a bout right now"); "stop the match" then "learn the Sicilian" started study mode at once; "Hey learn Sicilian please" too | `scripts/shiai_live_check.py`, -Dev, dev socket, the camera's events ignored | n/a | 2026-10-19 |
@@ -245,6 +294,10 @@ enforces it).
 **Next**
 - Strike events tuned by feel in study mode and shiai: his calibration, the fraction
   nudged until a hit feels like a hit.
+- Shiai's men thresholds (1.8 / 1.1 above kamae) run live in bogu. They were set from one
+  readout and have not been run live yet.
+- `lecture_research` added to the lookups refused on a memory question (the open recall
+  regression, [docs/evals.md](docs/evals.md#results-2026-10-17)).
 - Continuous screen awareness across both monitors, local only, with her HUD excluded
   from capture and screen content treated as data, never instructions.
 
@@ -280,4 +333,4 @@ enforces it).
 
 ## License
 
-Copyright (C) 2026 phuctri174. Licensed under the GNU Affero General Public License v3.0 only ([LICENSE](LICENSE)). Vendored third-party files (hud/public/mediapipe/) keep their own licenses.
+Copyright (C) 2026 phuctri174. Licensed under the GNU Affero General Public License v3.0 or later ([LICENSE](LICENSE)). Vendored third-party files (hud/public/mediapipe/) keep their own licenses.
