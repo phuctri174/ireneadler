@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Her voice (voice.py: Chatterbox-Turbo, Kokoro as the fallback) with streaming
 playback and a ~20 Hz RMS level for the HUD mouth.
 

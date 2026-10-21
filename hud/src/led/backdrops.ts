@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Where each entrance happens, as a place with depth and light rather than a flat
 // picture: a gas-lit street, a dojo, a study under one lamp, a theatre stage, open
 // ground at dusk. Each is laid out in the same space as her figure (heads, y up from

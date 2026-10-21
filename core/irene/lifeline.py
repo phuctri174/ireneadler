@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Why core stopped, written down - so a death in the night can be read the next day.
 
 Round 13: core and the HUD both closed 17 minutes into a lecture capture with no

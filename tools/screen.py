@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Screen vision: one screenshot, on request, straight to the model - never to disk.
 
 capture_screen(target) grabs the primary screen or the window he was using, scales

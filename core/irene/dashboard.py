@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """The second screen: keeps the dashboard's readings fresh and sends them to the HUD.
 
 Each source refreshes on its own clock (config/dashboard.yaml); a source that
@@ -24,8 +26,8 @@ if TYPE_CHECKING:
     from .app import Core
 
 log = logging.getLogger("irene.dashboard")
-# research cards on the panel
-RESEARCH_KEPT = 3
+# research cards on the panel (the top card shows the newest three; the centre all)
+RESEARCH_KEPT = 6
 RESEARCH_THUMB_W = 360
 # how often expired research is swept out
 RESEARCH_SWEEP_S = 60.0
@@ -47,10 +49,20 @@ def _research_thumb(found) -> str:
     return ""
 
 
+def _shrink_uri(uri: str) -> str:
+    """A data: picture made small for a card."""
+    import base64
+
+    try:
+        return data._shrink(base64.b64decode(uri.split(",", 1)[1]), width=RESEARCH_THUMB_W)
+    except Exception:  # noqa: BLE001 - no thumbnail: the panel draws one
+        return ""
+
+
 class Dashboard:
     def __init__(self, core: "Core"):
         self.core = core
-        self.state: dict = {"news": [], "weather": None, "stocks": [], "system": {}, "timers": [], "research": [], "stale": {}, "lecture": None}
+        self.state: dict = {"news": [], "weather": None, "stocks": [], "system": {}, "timers": [], "research": [], "stale": {}, "lecture": None, "mode": None}
         # the research files the "research" list was read from (re-read when they change)
         self._research_names: list[str] = []
         self._sent = ""
@@ -116,28 +128,56 @@ class Dashboard:
             log.info("dashboard %s: kept the last reading (%s: %s)", name, type(error).__name__, error)
 
     def _research_list(self) -> None:
-        """Her last RESEARCH_KEPT researches, newest first, as cards: title and time.
-        New research pushes the oldest out; they are her saved research files."""
+        """Her last RESEARCH_KEPT researches and lecture notes, newest first, as cards:
+        title and time. They are her saved research files and the notes kept with each
+        lecture (lecture_note.py) - a lecture note never expires."""
+        from . import lecture_note
+
         store = research_tool.STORE
         names = [p.name for p in reversed(research_tool.live_paths())][:RESEARCH_KEPT]
-        if names == self._research_names:
+        notes = sorted(lecture_note.STORE.glob(f"*/{lecture_note.NOTE}"), reverse=True)[:RESEARCH_KEPT] if lecture_note.STORE.exists() else []
+        try:
+            signature = names + [f"{p.parent.name}:{p.stat().st_mtime_ns}" for p in notes]
+        except OSError:
+            return  # a note being replaced: next second
+        if signature == self._research_names:
             return
-        self._research_names = names
         items = []
         for name in names:
             try:
                 found = research_tool._load(store / name)
             except Exception:  # noqa: BLE001 - a file being written: next second
-                self._research_names = []
                 return
             question = " ".join(found.question.split())
-            items.append({"id": found.id, "title": question[:1].upper() + question[1:90], "at": found.at,
+            items.append({"id": found.id, "kind": "research", "title": question[:1].upper() + question[1:90], "at": found.at,
                           "sources": len(found.sources), "image": _research_thumb(found)})
-        self.state["research"] = items
+        for path in notes:
+            note = lecture_note.load(path.parent.name)
+            if note is None:
+                return
+            item = lecture_note.rail_item(note)
+            if item["image"]:
+                item["image"] = _shrink_uri(item["image"])
+            items.append(item)
+        items.sort(key=lambda i: i["at"], reverse=True)
+        self._research_names = signature
+        self.state["research"] = items[:RESEARCH_KEPT]
 
     async def recall(self, message: dict) -> None:
-        """A research card clicked: that research back on the panel's centre stage."""
+        """A research card clicked: that research (or lecture note) back on the panel's
+        centre stage."""
         rid = str(message.get("id", ""))
+        if rid.startswith("lecture:"):
+            from . import lecture_note
+
+            # only a note that is on the panel's list
+            note = lecture_note.load(rid.split(":", 1)[1]) if any(i.get("id") == rid for i in self.state["research"]) else None
+            if note is None:
+                log.warning("lecture note recall refused: %r is not on the panel", rid)
+                return
+            log.info("lecture note recalled to the panel: %s (%s)", note.title, note.id)
+            await self.core.show_panel(lecture_note.content(note))
+            return
         path = research_tool.STORE / f"{rid}.json"
         # only one of the cards on the panel (its id is a file name there)
         if f"{rid}.json" not in self._research_names or not path.exists():
@@ -155,7 +195,7 @@ class Dashboard:
         if not bridge.hud_connected:
             self._sent = self._sent_fast = ""
             return
-        fast_keys = ("system", "timers", "lecture")
+        fast_keys = ("system", "timers", "lecture", "mode")
         slow = {k: v for k, v in self.state.items() if k not in fast_keys}
         fast = {k: self.state[k] for k in fast_keys}
         body = json.dumps(slow, sort_keys=True, default=str)

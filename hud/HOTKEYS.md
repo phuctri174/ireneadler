@@ -19,6 +19,8 @@ while Irene runs, so each one here was checked two ways:
 | Ctrl+Alt+Esc | hide her | free (Task Manager is Ctrl+**Shift**+Esc) |
 | Ctrl+Alt+D | toggle click-through | free on this PC. Word: insert endnote |
 | Ctrl+Alt+Shift+O | screens-off mode: monitors off, PC awake, she keeps listening (config/power.yaml enables it) | free on this PC |
+| Ctrl+Alt+Shift+S | study mode on/off - no voice needed; studies the last subject, or the Sicilian the first time | free on this PC (probed 2026-10-18). Photoshop (legacy): Save for Web |
+| Ctrl+Alt+Shift+M | shiai on/off - no voice needed ("M" for match) | free on this PC (probed 2026-10-18) |
 | Ctrl+Alt+Shift+L | lecture capture on/off - she transcribes what the PC plays (core/irene/lecture.py); off by default | free on this PC (registered at launch) |
 | Ctrl+Alt+H | hand control on/off - his hand as the system-wide pointer (off = mouse only) | free on this PC. Word: highlight (some builds) |
 | Ctrl+Alt+A | cycle her activity (debug) | free on this PC. QQ/WeChat screenshot while they run |
@@ -36,6 +38,7 @@ while Irene runs, so each one here was checked two ways:
 | Ctrl+Alt+Shift+6..7 | keiko_kamae / keiko_confusers captures | (new) | free on this PC (probed) |
 | Ctrl+Alt+Shift+8 | zoom_panel capture (zoom at the panel's distance) | (new) | free on this PC (probed) |
 | Ctrl+Alt+Shift+9 | keiko_strikes capture: men, kote, gyaku-dou and their confusers (core/scripts/strike_train.py) | (new) | free on this PC (probed 2026-10-12) |
+| Ctrl+Alt+Shift+0 | hits capture: seated chisai men at her and every fast desk movement that isn't one - a measurement of what the camera sees at the desk (core/scripts/hits_diagnose.py); nothing trains on it | (new) | free on this PC (probed 2026-10-17) |
 | Ctrl+Alt+Shift+F6 | cycle state | F6 | browsers: address bar; Office: next pane |
 | Ctrl+Alt+Shift+F7 | panel debug push | F7 | Chrome/Edge: caret browsing; Word: spelling |
 | Ctrl+Alt+Shift+F8 | cycle emotion | F8 | Word: extend selection |

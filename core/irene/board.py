@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """The illustration board, core side: the <draw> tag.
 
 A reply may carry one <draw>{json}</draw>: a drawing she composed (a spec,

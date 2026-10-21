@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """A cheap intent router: which tools a message could need, before the model sees it.
 
 The system prompt stays the same for every request (Ollama reuses its cache of
@@ -213,7 +215,7 @@ GROUPS: tuple[Group, ...] = (
     ),
     Group(
         "lecture",
-        ("lecture_start", "lecture_stop", "lecture_summary", "lecture_ask"),
+        ("lecture_start", "lecture_stop", "lecture_summary", "lecture_ask", "lecture_research"),
         _k(r"\blectures?\b|seminar|webinar|take notes|transcri|listen(ing)? to (this|the|it)\b|stop listening"
            r"|(summari[sz]e|sum up|recap|record|listen to)\b.{0,25}\b(class|lesson|meeting|talk)\b|\b(class|lesson|meeting|talk)\b.{0,20}\b(about|summary|recap|over)\b"
            r"|the (second|third|first|last|next) (topic|section)"),
@@ -226,6 +228,11 @@ GROUPS: tuple[Group, ...] = (
 - lecture_ask: a question about what was SAID in the lecture he had you listen to
   ("what did they say about X", "did the professor mention the exam"). Answer only
   from what it returns, with the time; never fill gaps from your own knowledge.
+- lecture_research: ONLY when he asks you to look up / research / search online for more
+  on a topic of the lecture ("look up more on the second topic", "research the first
+  topic") or says yes to your offer to look things up. topic = its number, title, a
+  concept, or "all". "Tell me more about the second topic" is the LECTURE's words:
+  lecture_summary(expand="2"), not this.
 - Talk about lectures in general ("my lecture was boring", "I have class tomorrow")
   is conversation, not a tool.""",
         _k(r"\b(was|is|were) (so |really |too )?(boring|long|hard|fun|great|awful|cancell?ed)\b|\b(have|got) (a |my )?(lecture|class|meeting|exam) (tomorrow|today|tonight|later|at)\b"),

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Whether a command may reach his apps: real for HIM, never for a test.
 
 Round 6 found the old guard backwards. IRENE_DEV meant "media keys and his Chrome

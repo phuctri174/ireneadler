@@ -3,6 +3,17 @@
   "minHandShare": 0.6,
   "countdownSeconds": 3,
   "profiles": {
+    "rps": {
+      "hotkey": "",
+      "driver": "core",
+      "_about": "Rock-paper-scissors, captured by CORE as the game itself (say 'train rock paper scissors'): she asks for a throw, counts 'rock... paper... scissors... shoot!' with the game's own clip, and the HUD's game-mode buffer sends the frames from 600 ms before to 1400 ms after the shoot instant, each with t relative to it. Same count, same timing as a real round, so the window the trainer picks is the window the game reads. core/scripts/rps_train.py; the newest session is held out.",
+      "steps": [
+        { "label": "rock", "kind": "motion", "seconds": 2, "prompt": "THROW ROCK ON SHOOT", "spoken": "Throw rock." },
+        { "label": "paper", "kind": "motion", "seconds": 2, "prompt": "THROW PAPER ON SHOOT", "spoken": "Throw paper." },
+        { "label": "scissors", "kind": "motion", "seconds": 2, "prompt": "THROW SCISSORS ON SHOOT", "spoken": "Throw scissors." }
+      ],
+      "done": "That's the set."
+    },
     "summon": {
       "hotkey": "ctrl+alt+shift+c",
       "steps": [
@@ -996,6 +1007,187 @@
         }
       ],
       "done": "Keiko strikes done. Record this twice, on different days - the second session is held out to test - then run strike_train.py."
+    },
+    "hits": {
+      "hotkey": "ctrl+alt+shift+0",
+      "distanceM": 0.7,
+      "tracks": "pose",
+      "_about": "A MEASUREMENT capture of the desk, not training data: nothing trains on it. The strike event is a tuned threshold calibrated with three swings (core/irene/strike_tuning.py, config/strike_event.json) - the learned approach failed to fit its own training takes (docs/gestures.md). What this capture still gives: core/scripts/hits_diagnose.py reads what the camera sees of him at the desk - body found, wrists out of frame, blur, occlusion, dropped frames, exposure - and the framing check holds it until his hands are in the picture. Seated chisai men, three per strike take, then every fast desk movement that is not one.",
+      "_diagnosticOnly": "Sessions recorded wrong (framed out), with why: hits_diagnose.py labels them. Nothing trains on any hits session now.",
+      "diagnosticOnly": {
+        "2026-10-17T23-21-11": "his wrists were below the bottom edge of the frame in 34% of strike frames (up to 1.07 of frame height), so those wrist positions are the pose model's guesses at ~0.60 visibility - recaptured with the camera tilted down"
+      },
+      "_framing": "Before the first step, he takes kamae and the run waits until the lower of his wrists is at most wristMaxY of the frame height (0 top, 1 bottom edge). Measured on 2026-10-18: a strike's lowest point sat 0.09 below his kamae (kamae median 0.98, strikes up to 1.07), so 0.85 in kamae keeps a strike's lowest point near 0.94 - inside. Nothing is recorded while it waits.",
+      "framing": {
+        "wristMaxY": 0.85,
+        "prompt": "KAMAE - FRAMING CHECK",
+        "spoken": "Hit capture. Sit where you hit me from when I'm studying, and take kamae. First I'm checking your hands are in the picture - tilt the camera down until it says in frame."
+      },
+      "steps": [
+        {
+          "label": "seated",
+          "kind": "hold",
+          "seconds": 5,
+          "prompt": "SIT AT THE DESK, SHINAI IN HAND, STILL",
+          "spoken": "In frame. Now sit still for a moment, shinai in hand - head, both shoulders and both hands in view the whole time."
+        },
+        {
+          "label": "kamae",
+          "kind": "hold",
+          "seconds": 4,
+          "prompt": "SEATED KAMAE - HOLD IT",
+          "spoken": "Take kamae at me, seated, and hold it."
+        },
+        {
+          "label": "men",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 8,
+          "pace": "natural",
+          "prompt": "THREE CHISAI MEN AT ME",
+          "spoken": "Now chisai men, three per take. On GO, from kamae: three small fast men at me, one after another - short, sharp stop, arms only, back to kamae between each. Eight takes.",
+          "repSpoken": "Kamae. Three more.",
+          "strikes": 3
+        },
+        {
+          "label": "men_stop",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 3,
+          "pace": "natural",
+          "prompt": "START A MEN - AND STOP",
+          "spoken": "Now the ones that must never count. Start a men like you mean it - and stop before it comes down. Three.",
+          "repSpoken": "Start, and stop."
+        },
+        {
+          "label": "punch",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 2,
+          "pace": "natural",
+          "prompt": "A PUNCH TOWARD ME",
+          "spoken": "A punch straight at the screen - gently. Two.",
+          "repSpoken": "Again."
+        },
+        {
+          "label": "reach_screen",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 2,
+          "pace": "natural",
+          "prompt": "REACH OUT AND TOUCH THE SCREEN",
+          "spoken": "Reach out toward the screen like you're touching something on it. Two.",
+          "repSpoken": "Again."
+        },
+        {
+          "label": "lean_in",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 1,
+          "pace": "natural",
+          "prompt": "LEAN IN TO READ, THEN BACK",
+          "spoken": "Lean in to read something small on the screen, then sit back.",
+          "repSpoken": "Again."
+        },
+        {
+          "label": "mouse",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 1,
+          "pace": "natural",
+          "prompt": "GRAB THE MOUSE, MOVE IT",
+          "spoken": "Put the shinai down for a second - grab the mouse and move it around.",
+          "repSpoken": "Again."
+        },
+        {
+          "label": "typing",
+          "kind": "hold",
+          "seconds": 6,
+          "prompt": "TYPE",
+          "spoken": "Type for a bit."
+        },
+        {
+          "label": "drink",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 1,
+          "pace": "natural",
+          "prompt": "TAKE A SIP OF SOMETHING",
+          "spoken": "Pick up a drink, take a sip, put it down.",
+          "repSpoken": "Again."
+        },
+        {
+          "label": "talking",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 1,
+          "pace": "natural",
+          "prompt": "TALK WITH YOUR HANDS",
+          "spoken": "Tell me something and talk with your hands while you do.",
+          "repSpoken": "Again."
+        },
+        {
+          "label": "stretch",
+          "kind": "motion",
+          "seconds": 5,
+          "reps": 1,
+          "pace": "natural",
+          "prompt": "SEATED STRETCH, ARMS UP",
+          "spoken": "A seated stretch, arms up and back down.",
+          "repSpoken": "Again."
+        },
+        {
+          "label": "scratch_head",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 1,
+          "pace": "natural",
+          "prompt": "SCRATCH YOUR HEAD",
+          "spoken": "Scratch your head.",
+          "repSpoken": "Again."
+        },
+        {
+          "label": "wave",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 1,
+          "pace": "natural",
+          "prompt": "WAVE AT ME",
+          "spoken": "Wave at me.",
+          "repSpoken": "Again."
+        },
+        {
+          "label": "point",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 1,
+          "pace": "natural",
+          "prompt": "POINT AT THE SCREEN",
+          "spoken": "Point at something on the screen.",
+          "repSpoken": "Again."
+        },
+        {
+          "label": "phone",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 1,
+          "pace": "natural",
+          "prompt": "PICK UP YOUR PHONE, LOOK, PUT IT DOWN",
+          "spoken": "Pick up your phone, glance at it, put it down.",
+          "repSpoken": "Again."
+        },
+        {
+          "label": "shinai_desk",
+          "kind": "motion",
+          "seconds": 4,
+          "reps": 1,
+          "pace": "natural",
+          "prompt": "PUT THE SHINAI DOWN, PICK IT UP",
+          "spoken": "Lay the shinai on the desk and pick it back up.",
+          "repSpoken": "Again."
+        }
+      ],
+      "done": "Hit capture done. Run hits diagnose to see what the camera saw."
     }
   }
 }

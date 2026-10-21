@@ -1,0 +1,29 @@
+# The song-win bit (core/irene/songwin.py): its pace. Read every time the bit plays -
+# a gap changed here applies the next time, no restart. A speed changed here is
+# re-rendered in the background the next time the bit plays (a few seconds), and is
+# heard from the time after that.
+#
+#   he: "Yes, it's correct"
+#       [beat_before_gloat_ms]  "Haha, GG fucking easy Mr Tri"        (smug)
+#   he: "Hey, don't say that"
+#       [beat_before_really_ms] "Oh really?"                           (caughtOffGuard)
+#       [beat_after_really_ms]  [hold_ms]  [beat_before_fugging_ms]    (still caughtOffGuard)
+#       "FUGGING EASY"                                                  (arrogant)
+#       [face_after_ms] - then she settles
+#
+# Every gap is silence, measured from the LAST sample of the line before it (its
+# whole take, tail included) to the FIRST sample of the next. The faces are marks on
+# the same clip as the audio: whatever the gaps, each face goes on with its line.
+
+# speaking rate per line: 1.0 = as rendered, 0.8 = 20% slower (same pitch - stretched)
+speed_gloat: 0.82      # cocky, unhurried
+speed_really: 0.85     # caught off guard - but taking it in
+speed_fugging: 0.68    # drawn out and savoured
+
+# silence, in milliseconds
+beat_before_gloat_ms: 650      # his confirmation lands first
+beat_before_really_ms: 0       # straight back at him
+beat_after_really_ms: 600      # the surprise registers before the hold
+hold_ms: 2000                  # the hold - the joke
+beat_before_fugging_ms: 400    # so FUGGING EASY arrives as its own thing
+face_after_ms: 1500            # her last face held after the last word

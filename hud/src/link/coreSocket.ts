@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 import type { AssistantState, Emotion } from "../face/faceState";
 import type { PanelContent } from "../ui/content";
 
@@ -23,11 +25,36 @@ export type CoreMessage =
   | { type: "summon"; phase: SummonPhase; hold_ms?: number; bubble?: string }
   | { type: "activity"; value: string | null; loops?: number }
   // keiko (core/irene/keiko.py): start / end, or her answer to his strike
-  | { type: "keiko"; action: "start" | "end" | "block" | "hit" | "strike" | "ippon"; target?: "men" | "kote" | "dou"; flags?: number }
+  // shiai adds her attack (windup -> impact: hit, blocked or dodged) and the point's
+  // beat (ippon with its call, reset to the start lines, hajime)
+  | {
+      type: "keiko";
+      action: "start" | "end" | "block" | "hit" | "strike" | "ippon" | "dodge" | "windup" | "impact" | "reset" | "hajime" | "countdown";
+      target?: "men" | "kote" | "dou" | "tsuki";
+      flags?: number;
+      call?: string;
+      who?: "you" | "her";
+      result?: "hit" | "blocked" | "dodged";
+      ms?: number;
+      label?: string;
+    }
+  // shiai (core/irene/shiai.py): the dojo scene up or down; her answers come as keiko actions
+  | { type: "shiai"; action: "start" | "end" | "score"; you?: number; her?: number }
+  // the strike detector (and shiai's footwork) on with core's tuning, or off
+  | { type: "strike_events"; config: import("../tracking/useHandTracking").StrikeEventsConfig | null }
+  // -Dev: the peak he just produced against the threshold, drawn on her face
+  | { type: "strike_readout"; text: string }
+  // study mode (core/irene/study.py): the bar is `progress` now, rising `rate` a second
+  | { type: "study"; action: "start" | "hit" | "done" | "end"; subject?: string; progress?: number; rate?: number; hits?: number; tier?: string }
   // a summon entrance as heard (config/entrances.json); end: back to listening
   | { type: "entrance"; phase: "start" | "end"; name?: string; ms?: number }
   // the illustration board: a <draw> spec (checked again here), or null to clear it
   | { type: "draw"; value: unknown }
+  // a hand game (core/irene/rps.py): normal gestures suspended for `ms`, or back on
+  | { type: "game_mode"; on: boolean; game?: string; ms?: number }
+  // "shoot!" is being heard NOW: send back his hand from `before` ms before to `after` ms after
+  | { type: "game_shoot"; id: string; before: number; after: number; throw?: "rock" | "paper" | "scissors" }
+  | { type: "game_hand"; glyph: "neutral" | "shrug"; beat?: number }
   // typed conversation
   | { type: "reply"; display: string; speak: string }
   | { type: "confirm"; id: string; prompt: string }
@@ -58,7 +85,9 @@ export type CoreMessage =
   | { type: "board_term"; terms: string[]; title?: string }
   // an illustrated answer (core/irene/illustrate.py): the drawing, then what each
   // sentence adds to it - moves, labels, steps, points, terms - as it is heard
-  | { type: "board_sync"; spec?: Record<string, unknown>; add?: Record<string, Record<string, unknown>[]>; set?: Record<string, unknown> };
+  | { type: "board_sync"; spec?: Record<string, unknown>; add?: Record<string, Record<string, unknown>[]>; set?: Record<string, unknown> }
+  // a lecture topic's drawing, wanted as a picture for its note (core/irene/lecture_board.py)
+  | { type: "board_render"; id: string; spec: Record<string, unknown> };
 
 export type { VoicePhase } from "../led/listening";
 import type { VoicePhase } from "../led/listening";
@@ -92,8 +121,21 @@ export type HudMessage =
   | { type: "kamae"; phase: "start" | "end" }
   // keiko: a strike he made (tracking/strikeFeatures.ts), for core to answer
   | { type: "keiko_strike"; strike: string; p: number; clean: boolean }
+  // a strike event (tracking/strikeEvent.ts): he struck at her - binary, a threshold
+  | { type: "strike_event"; wrist: string; peak: number; stopMs: number }
+  // his mode hotkeys: Ctrl+Alt+Shift+S study mode, +M shiai (core toggles it)
+  | { type: "mode_hotkey"; mode: string }
+  // shiai: his footwork (tracking/strikeEvent.ts MoveDetector)
+  | { type: "shiai_move"; move: "advance" | "retreat" | "side" | "block"; height?: number; rest?: number }
+  // dev probe: a second of body stats while core's strike_probe runs
+  | { type: "probe_stats"; stats: Record<string, number> }
+
   // a step of the voice summon on the HUD side, into core.log
   | { type: "hud_trace"; step: string }
+  // a live chess board the HUD drew, echoed back so core can check it against the game
+  // his hand around "shoot", camera frames only, times relative to the shoot instant
+  | { type: "game_frames"; id: string; frames: { t: number; lm: number[]; handed: string }[]; fps: number }
+  | { type: "chess_shown"; ply: number; fen: string; replayed?: string | null; moves?: number; refused?: string }
   // her window shown or hidden (shown: she listens with no wake word)
   | { type: "visibility"; visible: boolean }
   // where the HUD's time went over the last 10 s (perf.ts)
@@ -116,6 +158,7 @@ export type HudMessage =
   | { type: "dashboard_open"; url: string; how: string }
   | { type: "dashboard_refresh" }
   | { type: "research_recall"; id: string }
+  | { type: "board_rendered"; id: string; png: string }
   | { type: "screens_off" }
   // Ctrl+Alt+Shift+L: lecture capture on/off (core listens to the system audio)
   | { type: "lecture"; action: "toggle" | "start" | "stop" }

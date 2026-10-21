@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """When he talks to her, and what about - kept on disk, so her greeting knows.
 
 A greeting that has been paying attention needs a memory across restarts: how

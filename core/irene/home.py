@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Where he lives (config/home.yaml): in front of every message, like the clock,
 and added to any location-dependent search that names no place of its own.
 

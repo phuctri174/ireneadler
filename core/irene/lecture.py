@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Lecture capture: what the PC plays (a lecture, a meeting), written down as it goes.
 
     loopback (WASAPI, the output device) -> her-voice gate -> Chunker -> queue

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // The LED matrix every face element, hand, prop and scene is drawn into. One
 // target frame is composed per animation frame; the renderer eases each cell
 // toward it at that cell's fade rate, so everything crossfades the same way the

@@ -8,6 +8,7 @@ import { DOMAIN_DROP, SUMMON_TAIL_MS } from "../.verify/led/summon.js";
 import { REACTIONS } from "../.verify/face/reactions.js";
 import { ACTIVITIES, ACTIVITY_LOOP_MS, IDLE_ACTIVITIES } from "../.verify/face/activity.js";
 import { SCENES } from "../.verify/led/scenes.js";
+import { scoreOn } from "../.verify/led/score.js";
 
 let failures = 0;
 const check = (ok, label) => {
@@ -169,6 +170,32 @@ check(COLS === 128 && ROWS === 72, "matrix is 128x72");
   check(diff(both2, frameOf({ entrance: later })) === 0, "one scene: a newer entrance clears the activity under it");
   const summon = { start: NOW - 200, part2: null };
   check(diff(frameOf({ activity: scene, entrance, summon }), frameOf({ summon })) === 0, "one scene: the summon, newest, is the only one drawn");
+}
+
+// shiai's scoreboard: on the left of the dojo, only in the dojo; the side that just
+// scored is the one that flashes; the bout's end takes it down
+{
+  const dojo = { name: "keiko", at: NOW - 9000 };
+  let s = scoreOn(null, { action: "start" }, NOW - 5000);
+  check(s && s.you === 0 && s.her === 0 && s.scored === null, "shiai start: 0-0");
+  s = scoreOn(s, { action: "score", you: 1, her: 0 }, NOW - 100);
+  check(s.you === 1 && s.her === 0 && s.scored === "you", "his point: 1-0, his side flashes");
+  check(scoreOn(s, { action: "score", you: 1, her: 1 }, NOW).scored === "her", "her point: her side flashes");
+  check(scoreOn(s, { action: "end" }, NOW) === null, "the bout's end takes the score down");
+  const withScore = frameOf({ activity: dojo, score: s });
+  const without = frameOf({ activity: dojo });
+  let left = 0;
+  let right = 0;
+  for (let y = 0; y < ROWS; y += 1) {
+    for (let x = 0; x < COLS; x += 1) {
+      if (Math.abs(withScore.value[y * COLS + x] - without.value[y * COLS + x]) > 0.01) {
+        if (x < 34) left += 1;
+        else right += 1;
+      }
+    }
+  }
+  check(left > 60 && right === 0, `the score draws on the left of the dojo only (${left} left, ${right} elsewhere)`);
+  check(diff(frameOf({ score: s }), frameOf({})) === 0, "no dojo, no scoreboard");
 }
 
 if (failures > 0) {

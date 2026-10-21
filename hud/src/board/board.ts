@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // The illustration board. When Irene explains something visually her face shrinks
 // to the top-right corner (still emoting) and the rest of the matrix becomes a
 // drawing board. A drawing arrives from core as the JSON of a <draw> tag:

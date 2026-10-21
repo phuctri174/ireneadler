@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Keiko with Irene: she suits up and faces him; he strikes, she answers.
 
 Started ONLY by his voice ("Irene, let's do keiko") - the kamae pose trigger is

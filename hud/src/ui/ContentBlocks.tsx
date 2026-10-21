@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 import type { ContentBlock } from "./content";
 import "./ContentBlocks.css";
 import { openLink } from "./panelChannel";
@@ -158,6 +160,16 @@ function Block({ block }: { block: ContentBlock }) {
             </span>
           </span>
         </button>
+      );
+
+    case "box":
+      return (
+        <section className={`cb-box tone-${block.tone.replace(/[^a-z]/g, "")}`}>
+          <div className="cb-box-title">{block.title}</div>
+          {(block.blocks ?? []).map((inner, index) => (
+            <Block key={index} block={inner} />
+          ))}
+        </section>
       );
 
     default:

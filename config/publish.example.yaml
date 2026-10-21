@@ -24,5 +24,9 @@ text:
   - "C:\\Users\\you"
   - "C:\\\\Users\\\\you"
 
-# file types that are never published, whatever their name (recordings, voiceprints)
-extensions: [.npz, .npy]
+# file types that are never published, whatever their name (voiceprints; a saved voice clone or any model weights)
+extensions: [.npz, .npy, .pt, .safetensors]
+
+# folders whose contents are never published, wherever they sit (his recordings,
+# his hand and body measurements). Whole folder names: voice_data.py is not caught
+paths: [voice_data/, calibration/]

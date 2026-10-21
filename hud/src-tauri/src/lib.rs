@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -34,6 +36,8 @@ const EVENT_PANEL_BURST: &str = "irene://panel-burst";
 const EVENT_SCREENS_OFF: &str = "irene://screens-off";
 /// Ctrl+Alt+Shift+L: lecture capture on/off (core listens to the system audio).
 const EVENT_LECTURE: &str = "irene://lecture";
+/// Ctrl+Alt+Shift+S / +M: study mode / shiai on or off, no voice needed (core decides).
+const EVENT_MODE: &str = "irene://mode";
 /// Hand control on/off (Ctrl+Alt+H): the HUD shows it and traces it to core.
 const EVENT_POINTER: &str = "irene://pointer";
 /// WebView2's flags, the same for every window (one browser environment): Tauri's
@@ -112,6 +116,14 @@ fn lecture_shortcut() -> Shortcut {
     Shortcut::new(Some(operator()), Code::KeyL)
 }
 
+fn study_shortcut() -> Shortcut {
+    Shortcut::new(Some(operator()), Code::KeyS)
+}
+
+fn shiai_shortcut() -> Shortcut {
+    Shortcut::new(Some(operator()), Code::KeyM)
+}
+
 fn pointer_shortcut() -> Shortcut {
     Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyH)
 }
@@ -161,7 +173,7 @@ fn capture_shortcut() -> Shortcut {
 // Guided captures on the number row, one profile per key, about three minutes
 // each and run separately. 1-3 are the zoom distances (the digit IS the
 // distance); 4-5 are keiko, which records the upper body instead of a hand.
-const CAPTURE_KEYS: [(Code, &str); 9] = [
+const CAPTURE_KEYS: [(Code, &str); 10] = [
     (Code::Digit1, "zoom_near"),
     (Code::Digit2, "zoom_mid"),
     (Code::Digit3, "zoom_far"),
@@ -175,6 +187,9 @@ const CAPTURE_KEYS: [(Code, &str); 9] = [
     // keiko: the three strikes at real speed and every strike-shaped movement that
     // isn't one (core/scripts/strike_train.py)
     (Code::Digit9, "keiko_strikes"),
+    // a strike happened, yes or no: overhead swings at her and every swing-shaped
+    // movement that isn't one (core/scripts/strike_event_train.py)
+    (Code::Digit0, "hits"),
 ];
 
 fn capture_digit_shortcut(code: Code) -> Shortcut {
@@ -847,6 +862,10 @@ pub fn run() {
                             let _ = app.emit(EVENT_SCREENS_OFF, ());
                         } else if shortcut.matches(operator(), Code::KeyL) {
                             let _ = app.emit(EVENT_LECTURE, ());
+                        } else if shortcut.matches(operator(), Code::KeyS) {
+                            let _ = app.emit(EVENT_MODE, "study");
+                        } else if shortcut.matches(operator(), Code::KeyM) {
+                            let _ = app.emit(EVENT_MODE, "shiai");
                         } else if shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyH) {
                             let on = pointer::toggle(&app);
                             if !SHELL_UP.load(Ordering::Relaxed) {
@@ -971,6 +990,8 @@ pub fn run() {
                 ("ctrl+alt+h", pointer_shortcut()),
                 ("ctrl+alt+shift+o", screens_off_shortcut()),
                 ("ctrl+alt+shift+l", lecture_shortcut()),
+                ("ctrl+alt+shift+s", study_shortcut()),
+                ("ctrl+alt+shift+m", shiai_shortcut()),
                 ("ctrl+alt+d", cursor_shortcut()),
                 ("ctrl+alt+a", activity_shortcut()),
                 ("ctrl+alt+escape", hide_shortcut()),
@@ -990,6 +1011,7 @@ pub fn run() {
                 ("ctrl+alt+shift+7", capture_digit_shortcut(Code::Digit7)),
                 ("ctrl+alt+shift+8", capture_digit_shortcut(Code::Digit8)),
                 ("ctrl+alt+shift+9", capture_digit_shortcut(Code::Digit9)),
+                ("ctrl+alt+shift+0", capture_digit_shortcut(Code::Digit0)),
                 ("ctrl+alt+t", command_bar_alt_shortcut()),
                 ("ctrl+alt+shift+r", corpus_shortcut()),
                 ("ctrl+alt+shift+p", pin_shortcut()),

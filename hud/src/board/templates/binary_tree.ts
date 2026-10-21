@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // A binary tree from its level-order array (null for a missing child), up to 4 levels.
 //
 //   { "template": "binary_tree", "values": [8, 3, 10, 1, 6, null, 14], "highlight"?: [6] }

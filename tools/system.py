@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """His PC's load: CPU, GPU, RAM and VRAM. Read-only, local only (psutil and the
 NVIDIA driver's nvidia-smi); nothing leaves the machine."""
 from __future__ import annotations

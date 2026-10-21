@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Acoustic echo cancellation: her voice taken back out of the microphone.
 
 Over speakers, everything she says comes back into the mic - quieter, delayed,

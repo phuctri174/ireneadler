@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 //! His hand as a system-wide pointer: the real Windows cursor, on every monitor.
 //!
 //! The HUD tracks his hand (MediaPipe, in the main window) and sends each frame's

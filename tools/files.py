@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """File tools, confined to the policy's roots (config/policy.yaml, tools/policy.py).
 
 list_files, search_files, read_and_summarize   read-only

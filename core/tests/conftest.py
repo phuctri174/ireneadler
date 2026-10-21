@@ -84,3 +84,14 @@ def _never_his_apps(monkeypatch):
     # browser.py's own subprocess only: nothing else loses Popen
     monkeypatch.setattr(browser, "subprocess", types.SimpleNamespace(
         Popen=no_launch, DETACHED_PROCESS=subprocess.DETACHED_PROCESS, CREATE_NEW_PROCESS_GROUP=subprocess.CREATE_NEW_PROCESS_GROUP))
+
+
+@pytest.fixture(autouse=True)
+def _lectures_never_his(monkeypatch, tmp_path):
+    """His captured lectures and their notes stay out of every test: the lecture store
+    (and the notes kept in it) is a fresh temp folder."""
+    from irene import lecture, lecture_note
+
+    store = tmp_path / "lectures"
+    monkeypatch.setattr(lecture, "STORE", store)
+    monkeypatch.setattr(lecture_note, "STORE", store)

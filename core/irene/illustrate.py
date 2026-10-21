@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """The board illustrates what she is saying - with the drawing she composes herself.
 
 Round 8: no topic is anticipated. She writes her drawing as a spec after </speak>
@@ -307,6 +309,8 @@ class Live:
         self.inner = None
         self.heard: list[tuple[str, tuple]] = []
         self.adopted = False
+        # the card of a work he taught her (taught.py): her own drawing never replaces it
+        self.card = False
         self.fallback = False
         # why her drawing couldn't be drawn (asked for once more with it)
         self.invalid: str | None = None

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Gesture poses: what a reaction looks like now. Instead of an icon replacing the
 // face, Irene's LED hands make the gesture next to (or over) her face while the
 // face wears a matching expression. Each pose is data plus a small draw function.
@@ -102,6 +104,78 @@ const BLANK_PAGE = sprite([
   "###################",
 ]);
 
+// pinNote: a written page held up, its lines filled in, and a red pushpin pressed into
+// its top edge - a finished note going up on the wall
+const NOTE_PAGE = sprite([
+  "#############",
+  "#+++++++++++#",
+  "#+--------++#",
+  "#+++++++++++#",
+  "#+-------+++#",
+  "#+++++++++++#",
+  "#+---------+#",
+  "#+++++++++++#",
+  "#+------++++#",
+  "#+++++++++++#",
+  "#############",
+]);
+const PUSHPIN = sprite([".###.", "#####", ".###.", "..#..", "..#.."]);
+
+// studyBoard: the game under review - a little chessboard held up, its squares in two
+// tones, and a magnifying glass (a ring on a handle) sweeping over it square by square
+const MINI_BOARD = sprite([
+  "##################",
+  "#++,,++,,++,,++,,#",
+  "#++,,++,,++,,++,,#",
+  "#,,++,,++,,++,,++#",
+  "#,,++,,++,,++,,++#",
+  "#++,,++,,++,,++,,#",
+  "#++,,++,,++,,++,,#",
+  "#,,++,,++,,++,,++#",
+  "#,,++,,++,,++,,++#",
+  "#++,,++,,++,,++,,#",
+  "#++,,++,,++,,++,,#",
+  "#,,++,,++,,++,,++#",
+  "#,,++,,++,,++,,++#",
+  "##################",
+]);
+const LENS = sprite([
+  "..###..",
+  ".#...#.",
+  "#.....#",
+  "#.....#",
+  "#.....#",
+  ".#...#.",
+  "..###.#",
+  "......##",
+  ".......##",
+]);
+
+/** studyBoard: where the lens is over the board - a left-right sweep that steps
+ *  down a row each pass (~0.7 s a pass), the way you read a position. */
+function lensSweep(t: number): { dx: number; dy: number } {
+  const pass = Math.floor(t / 700) % 3;
+  const k = (t % 700) / 700;
+  const across = pass % 2 === 0 ? k : 1 - k;
+  return { dx: Math.round(10 * across), dy: 2 + pass * 3 };
+}
+
+/** dialDown: how far the knob has been turned down (0 high .. 0.8 low), a click
+ *  every ~380 ms from 0.3 s, four clicks. */
+function dialTurn(t: number): number {
+  if (t < 300) return 0;
+  const n = (t - 300) / 380;
+  const whole = Math.floor(n);
+  return 0.2 * Math.min(4, whole + clamp01(((n - whole) * 380) / 90));
+}
+
+/** rpsCount: the fist pumping down on each beat of "rock... paper... scissors"
+ *  (~0.6 s a beat), the way you count a throw in. */
+function pump(t: number): { dx: number; dy: number; drot: number } {
+  const k = (t % 600) / 600;
+  return { dx: 0, dy: 7 * Math.sin(Math.PI * Math.min(1, k * 1.6)), drot: -6 * Math.sin(Math.PI * Math.min(1, k * 1.6)) };
+}
+
 /** takeNotes: the pen's path - quick little strokes left to right along a line,
  *  then a hop back to the start of the next (a writing rhythm, ~1.6 s a line). */
 function scribble(t: number): { dx: number; dy: number; drot: number } {
@@ -128,6 +202,8 @@ const HEART_OUTLINE = sprite([
 ]);
 
 const SMALL_HEART = sprite([".#.#.", "#####", ".###.", "..#.."]);
+// humAlong: a quaver - a filled head, its stem and flag
+const NOTE = sprite(["..##", "..#.#", "..#..", "###..", "###.."]);
 // tapTemple: a memory surfacing - a little four-point spark
 const SPARK = sprite(["..#..", ".###.", "##.##", ".###.", "..#.."]);
 
@@ -159,6 +235,16 @@ function heartsRising(frame: Frame, t: number, alpha: number, x: number, y: numb
       alpha: a,
       cover: false,
     });
+  }
+}
+
+/** humAlong: notes drifting up and away beside her face, one every ~0.55 s, each
+ *  swaying as it rises and fading out at the top. */
+function notesRising(frame: Frame, t: number, alpha: number, x: number, y: number): void {
+  for (let k = 0; k < 3; k += 1) {
+    const phase = ((t + k * 550) % 1650) / 1650;
+    const a = alpha * (1 - phase) * clamp01(phase * 5);
+    blit(frame, NOTE, x + Math.sin(phase * 5 + k * 2) * 4 + k * 3, y - phase * 26, { ink: k === 1 ? INK.amber : INK.cyan, alpha: a, scale: 2, cover: false });
   }
 }
 
@@ -395,6 +481,68 @@ export const POSES = {
     hands: [{ hand: "flat", x: RIGHT + 4, y: 46, rot: -90, scale: 1.15, wiggle: shake(1.1, 11) }],
     motion: (t) => ({ tilt: Math.sin((t / 1000) * 1.1 * Math.PI * 2) * 0.8 }),
   },
+  // "deal?": her hand held out to him to shake on it - thumb up, fingers forward - and
+  // pumped twice, firm, then held out waiting; a level look, a small sure smile
+  shakeOnIt: {
+    expression: { emotion: "focused", mouth: "smile", gazeX: 1 },
+    hands: [{ hand: "flat", x: RIGHT + 2, y: 47, rot: -78, scale: 1.3, wiggle: (t) => ({ dy: t > 250 && t < 1050 ? Math.sin(((t - 250) / 400) * Math.PI * 2) * 2.5 : 0, drot: t < 250 ? -14 * (1 - t / 250) : 0 }) }],
+    motion: (t) => ({ dx: -1.5 * settle(300)(t), dy: t > 250 && t < 1050 ? Math.sin(((t - 250) / 400) * Math.PI * 2) * 0.6 : 0 }),
+  },
+  // rock-paper-scissors: the count - her fist held out beside her face, pumping on
+  // each beat; eyes on his hand, a competitive little smile
+  rpsCount: {
+    expression: { emotion: "focused", mouth: "smile", gazeX: 2, gazeY: 1 },
+    hands: [{ hand: "fist", x: RIGHT + 4, y: 44, rot: -90, scale: 1.7, wiggle: pump }],
+    motion: (t) => ({ dy: 0.6 * Math.sin(Math.PI * ((t % 600) / 600)) }),
+  },
+  // her throw, revealed: rock - the fist thrust forward and held, a confident grin
+  throwRock: {
+    expression: { emotion: "smug", mouth: "smile", gazeX: 1 },
+    hands: [{ hand: "fist", x: RIGHT + 4, y: 46, rot: -90, scale: 1.7, wiggle: (t) => ({ dy: t < 220 ? -6 * (1 - t / 220) : 0 }) }],
+    motion: (t) => ({ dx: -1.5 * settle(220)(t) }),
+  },
+  // paper - the flat open hand thrown out, fingers together, palm to him
+  throwPaper: {
+    expression: { emotion: "happy", mouth: "smile", gazeX: 1 },
+    hands: [{ hand: "open", x: RIGHT + 6, y: 42, rot: -90, scale: 1.25, wiggle: (t) => ({ dy: t < 220 ? -6 * (1 - t / 220) : 0 }) }],
+    motion: (t) => ({ dx: -1.5 * settle(220)(t) }),
+  },
+  // scissors - two fingers out in a V, a little snip
+  throwScissors: {
+    expression: { emotion: "excited", mouth: "smile", gazeX: 1 },
+    hands: [{ hand: "peace", x: RIGHT + 6, y: 42, rot: -90, scale: 1.25, wiggle: (t) => ({ dy: t < 220 ? -6 * (1 - t / 220) : 0, drot: t > 400 && t < 700 ? 6 * Math.sin(((t - 400) / 300) * Math.PI * 2) : 0 }) }],
+    motion: (t) => ({ dx: -1.5 * settle(220)(t) }),
+  },
+  // "let's see what really happened": the game held up small beside her face and
+  // read through a magnifying glass, eyes down on it - focused, a reviewer's frown
+  studyBoard: {
+    expression: { emotion: "focused", mouth: "flat", gazeX: 1, gazeY: 2 },
+    hands: [{ hand: "flat", x: RIGHT + 9, y: 51, rot: -90, scale: 0.9 }],
+    props: (frame, t, alpha) => {
+      const lift = 4 * settle(380)(t);
+      blit(frame, MINI_BOARD, RIGHT, 38 - lift, { alpha, ink: INK.white, cover: true });
+      const at = lensSweep(t);
+      blit(frame, LENS, RIGHT + at.dx, 36 - lift + at.dy, { alpha: alpha * clamp01((t - 250) / 250), ink: INK.amber, cover: false });
+    },
+    motion: (t) => ({ tilt: 0.6 * settle(400)(t), dy: 1 * settle(400)(t) }),
+  },
+  // "written up for you": a finished page lifted beside her face, then the pin goes in -
+  // a little press, a red pushpin landing on its top edge; a pleased, closed-eye smile
+  pinNote: {
+    expression: { emotion: "happy", mouth: "smile", gazeX: -1, gazeY: -1 },
+    hands: [{ hand: "point", x: RIGHT + 17, y: 22, rot: 200, scale: 0.9 }],
+    props: (frame, t, alpha) => {
+      const lift = 5 * settle(360)(t);
+      blit(frame, NOTE_PAGE, RIGHT + 1, 32 - lift, { alpha, ink: INK.white, cover: true });
+      // the pin drops in at ~500 ms and settles with a small bounce
+      const drop = clamp01((t - 450) / 220);
+      if (drop > 0) {
+        const bounce = drop < 1 ? (1 - drop) * 6 : 0;
+        blit(frame, PUSHPIN, RIGHT + 4, 29 - lift - bounce, { alpha: alpha * drop, ink: INK.red, cover: false });
+      }
+    },
+    motion: (t) => ({ tilt: 0.8 * settle(400)(t), dy: t > 450 && t < 700 ? 0.8 : 0 }),
+  },
   // "nothing on file": she lifts a blank page beside her face and turns it to him with
   // a little tilt - see, nothing written there - eyes on him, mouth level: honest,
   // not sorry (the memory guard's "I don't remember", irene/provenance.py)
@@ -472,6 +620,13 @@ export const POSES = {
     hands: [{ hand: "point", x: RIGHT - 4, y: 30, rot: 0, scale: 1.1, wiggle: (t) => ({ dx: 0, dy: 0, drot: 16 * Math.sin(t / 110) }) }],
     motion: (t) => ({ tilt: -1.5 * settle(300)(t) }),
   },
+  // "not now - we're in the middle of something": one palm raised flat toward him like
+  // a stop sign, a small firm push forward, eyes closed, chin up - hold that thought
+  notNow: {
+    expression: { emotion: "smug", mouth: "flat", gazeX: -1 },
+    hands: [{ hand: "flat", x: RIGHT + 10, y: 44, rot: 6, scale: 1.2, wiggle: (t) => ({ dx: 0, dy: t < 260 ? -2 * Math.sin((t / 260) * Math.PI) : 0, drot: 0 }) }],
+    motion: (t) => ({ dx: 1 * settle(260)(t), tilt: 1.5 * settle(300)(t) }),
+  },
   // "lights out": palms pressed together under a tilted cheek, eyes soft - a
   // pillow of hands, as the screens go dark and she settles in to listen
   pillowHands: {
@@ -495,6 +650,154 @@ export const POSES = {
     expression: { emotion: "curious", mouth: "flat", gazeX: -3, gazeY: -1 },
     hands: [{ hand: "flat", x: 70, y: 18, rot: -8, scale: 1.1, wiggle: bob(0.5, 0.6) }],
     motion: (t) => ({ dx: -2 * settle(500)(t), tilt: -1 * settle(500)(t) }),
+  },
+  // "and... action!": a film clapperboard held up beside her face, its striped stick
+  // raised, then snapped shut with a flash - starting a take, he's filming, on cue
+  clapper: {
+    expression: { emotion: "excited", mouth: "grin", gazeX: 2 },
+    hands: [{ hand: "fist", x: 104, y: 60, rot: -6, scale: 1.05 }],
+    props: (frame, t, alpha) => {
+      const body = { x: 104, y: 46 };
+      drawShape(frame, (x, y) => roundBox(x, y, body, 13, 9, 1), { x0: 89, y0: 35, x1: 119, y1: 57 }, INK.white, alpha, FADE.fast, 0.9, 0.15);
+      // the stick, hinged at its left end: open, then shut at 520 ms
+      const shut = clamp01((t - 380) / 140);
+      const angle = (-28 * (1 - shut) * Math.PI) / 180;
+      const hinge = { x: 91, y: 35 };
+      for (let i = 0; i < 28; i += 1) {
+        for (let j = 0; j < 4; j += 1) {
+          const along = i;
+          const across = -j;
+          const x = Math.round(hinge.x + along * Math.cos(angle) - across * Math.sin(angle));
+          const y = Math.round(hinge.y + along * Math.sin(angle) + across * Math.cos(angle));
+          const stripe = Math.floor((i + j) / 4) % 2 === 0;
+          frame.cover(x, y, (stripe ? 1 : 0.25) * alpha, INK.white, FADE.fast);
+        }
+      }
+      // the clap: a flash at the hinge's far end
+      const k = t - 520;
+      if (k > 0 && k < 220) {
+        for (let r = 0; r < 6; r += 1) {
+          for (const [dx, dy] of [[1, -1], [1, 0], [1, 1], [0, -1]]) frame.lighten(118 + dx * (3 + r), 33 + dy * (2 + r), (1 - k / 220) * alpha, INK.amber, FADE.fast);
+        }
+      }
+    },
+    motion: (t) => ({ dy: t > 520 && t < 640 ? 1 : 0 }),
+  },
+  // "this is bad": a fist at her mouth, nibbling a nail, eyes darting side to side -
+  // nerves, a position falling apart, waiting for the blow she can see coming
+  nailBite: {
+    expression: { emotion: "concerned", mouth: "hidden", gazeY: -1 },
+    hands: [{ hand: "fist", x: 70, y: 52, rot: -20, scale: 1.0, wiggle: (t) => ({ dx: 0, dy: Math.sin(t / 70) > 0.6 ? -1 : 0, drot: 3 * Math.sin(t / 70) }) }],
+    motion: (t) => ({ dx: 1.2 * Math.sin(t / 420), dy: 0.5 * settle(300)(t) }),
+  },
+  // a song he loves, the tune in her head: eyes closed, a small hum of a mouth,
+  // swaying slowly side to side while notes drift up beside her face
+  humAlong: {
+    expression: { emotion: "happy", mouth: "o", eyesClosed: true },
+    hands: [],
+    props: (frame, t, alpha) => notesRising(frame, t, alpha, RIGHT - 6, 40),
+    motion: (t) => ({ dx: sway(0.5, 2)(t), tilt: sway(0.5, 0.8)(t) }),
+  },
+  // "I'll go easy on you": a knob beside her face, its ring of ticks lit, turned down
+  // click by click by her fingertips until the pointer sits low - a smug little smirk
+  dialDown: {
+    expression: { emotion: "smug", mouth: "smirk", gazeX: 1 },
+    hands: [{ hand: "fist", x: RIGHT + 6, y: 22, rot: -30, scale: 0.85, wiggle: (t) => ({ drot: -70 * dialTurn(t) }) }],
+    props: (frame, t, alpha) => {
+      const c = { x: RIGHT + 4, y: 32 };
+      const turn = dialTurn(t);
+      for (let k = 0; k <= 6; k += 1) {
+        // ticks from low (lower left) round the top to high (lower right); lit up to the pointer
+        const a = Math.PI * (0.75 + (1.5 * k) / 6);
+        const lit = k / 6 <= 1 - turn + 0.01;
+        frame.cover(Math.round(c.x + 10 * Math.cos(a)), Math.round(c.y + 10 * Math.sin(a)), (lit ? 1 : 0.3) * alpha, INK.amber, FADE.fast);
+      }
+      drawShape(frame, (x, y) => Math.hypot(x - c.x, y - c.y) - 6.5, { x0: c.x - 8, y0: c.y - 8, x1: c.x + 8, y1: c.y + 8 }, INK.white, alpha, FADE.prop);
+      const a = Math.PI * (0.75 + 1.5 * (1 - turn));
+      const tip = { x: c.x + 5 * Math.cos(a), y: c.y + 5 * Math.sin(a) };
+      drawShape(frame, (x, y) => capsule(x, y, c, tip, 0.6), { x0: c.x - 7, y0: c.y - 7, x1: c.x + 7, y1: c.y + 7 }, INK.white, alpha, FADE.fast, 1, 0.9);
+    },
+    motion: (t) => ({ tilt: 0.5 * settle(300)(t), dy: t % 380 < 40 && t > 300 && t < 1600 ? 1 : 0 }),
+  },
+  // "on my mark": a stopwatch held up beside her face, its hand sweeping round and the
+  // crown pressed with a click at the start - a countdown, timing something, "ready...?"
+  stopwatch: {
+    expression: { emotion: "focused", mouth: "flat", gazeX: 2 },
+    hands: [{ hand: "fist", x: 106, y: 58, rot: -8, scale: 1.0 }],
+    props: (frame, t, alpha) => {
+      const c = { x: 106, y: 44 };
+      drawShape(frame, (x, y) => Math.abs(Math.hypot(x - c.x, y - c.y) - 9) - 0.8, { x0: 94, y0: 32, x1: 118, y1: 56 }, INK.white, alpha, FADE.fast, 1, 0.9);
+      // the crown and its button, pressed down at the start
+      const press = t < 180 ? 1 : 0;
+      drawShape(frame, (x, y) => roundBox(x, y, { x: c.x, y: c.y - 11 + press }, 2, 1.2, 0.5), { x0: 102, y0: 30, x1: 110, y1: 36 }, INK.amber, alpha, FADE.fast, 1, 0.9);
+      // the ticks at 12, 3, 6, 9
+      for (const [dx, dy] of [[0, -7], [7, 0], [0, 7], [-7, 0]]) frame.cover(c.x + dx, c.y + dy, alpha, INK.white, FADE.fast);
+      // the sweep hand: once round every two seconds
+      const a = ((t % 2000) / 2000) * Math.PI * 2;
+      for (let r = 0; r <= 6; r += 1) frame.cover(Math.round(c.x + Math.sin(a) * r), Math.round(c.y - Math.cos(a) * r), alpha, INK.red, FADE.fast);
+    },
+    motion: (t) => ({ dy: t < 180 ? 1 : 0, tilt: -1 * settle(300)(t) }),
+  },
+  // "hajime!": one flat hand raised edge-on beside her face, held a beat, then
+  // chopped down between them like a shinpan starting the bout - eyes on him, a grin
+  hajimeCall: {
+    expression: { emotion: "firedUp", mouth: "grin", gazeX: -1 },
+    hands: [{ hand: "flat", x: RIGHT + 2, y: 26, rot: -14, scale: 1.15, wiggle: (t) => ({ dx: -6 * clamp01((t - 320) / 140), dy: 22 * clamp01((t - 320) / 140), drot: -50 * clamp01((t - 320) / 140) }) }],
+    motion: (t) => ({ dy: t > 320 && t < 520 ? 1 : 0, tilt: -1 * settle(300)(t) }),
+  },
+  // "men ari - ippon!": a shinpan's red flag snapped up overhead in her right hand,
+  // waving, eyes bright - calling the point (shiai's score, or anything he nailed)
+  refFlag: {
+    expression: { emotion: "excited", mouth: "o", gazeY: -1 },
+    hands: [{ hand: "fist", x: 114, y: 34, rot: -10, scale: 1.1, wiggle: bob(1.2, 0.6) }],
+    props: (frame, t, alpha) => {
+      const up = easeOutBack(clamp01(t / 260));
+      const base = { x: 116, y: 34 };
+      const top = { x: 119, y: 34 - 30 * up };
+      drawShape(frame, (x, y) => capsule(x, y, base, top, 0.6), { x0: 112, y0: 1, x1: 124, y1: 38 }, INK.white, alpha, FADE.fast, 0.9, 0.8);
+      if (up < 0.5) return;
+      const wave = Math.sin(t / 110) * 1.2;
+      for (let c = 0; c < 12; c += 1) {
+        for (let r = 0; r < 8; r += 1) {
+          const fx = Math.round(top.x - 1 - c);
+          const fy = Math.round(top.y + r + Math.sin(c / 2.5 + t / 140) * wave);
+          frame.cover(fx, fy, (r === 0 || r === 7 || c === 11 ? 1 : 0.85) * alpha, INK.red, FADE.fast);
+        }
+      }
+    },
+    motion: (t) => ({ dy: -1.5 * settle(260)(t) }),
+  },
+  // "about this big": both hands up flat either side of her face, palms facing,
+  // closing in and opening out as she sizes it up - a gap, a distance, how far off
+  measure: {
+    expression: { emotion: "focused", mouth: "flat", gazeX: 1 },
+    hands: [
+      { hand: "flat", x: 20, y: 38, rot: 8, scale: 1.1, mirror: true, wiggle: (t) => ({ dx: 6 * Math.sin((t / 1000) * 0.9 * Math.PI * 2) }) },
+      { hand: "flat", x: 108, y: 38, rot: -8, scale: 1.1, wiggle: (t) => ({ dx: -6 * Math.sin((t / 1000) * 0.9 * Math.PI * 2) }) },
+    ],
+    motion: (t) => ({ tilt: 1 * settle(400)(t) }),
+  },
+  // "where did your hands go?": she sinks to the bottom edge, both hands flat on the
+  // rim, and peers over it, eyes down, glancing one way then the other - looking for
+  // something that dropped out of the picture (his wrists below the camera's frame)
+  peerDown: {
+    expression: { emotion: "curious", mouth: "o", gazeY: 3 },
+    hands: [
+      { hand: "flat", x: 22, y: 60, rot: 24, scale: 1.1, mirror: true, wiggle: bob(0.4, 0.5) },
+      { hand: "flat", x: 106, y: 60, rot: -24, scale: 1.1, wiggle: bob(0.4, 0.5) },
+    ],
+    motion: (t) => ({ dy: 16 * settle(450)(t), dx: 2 * Math.sin((t / 1000) * 0.8 * Math.PI * 2) * settle(700)(t) }),
+  },
+  // "don't you dare": both hands flat over the top of her head, eyes squeezed shut,
+  // ducking with a tremble - bracing for the hit he's winding up (a shinai raised at
+  // her while she studies, a threat to bonk her)
+  flinch: {
+    expression: { emotion: "concerned", mouth: "wavy", eyesClosed: true, shiftY: 2 },
+    hands: [
+      { hand: "flat", x: 46, y: 16, rot: 70, scale: 1.1, wiggle: shake(9, 2.5) },
+      { hand: "flat", x: 82, y: 16, rot: -70, scale: 1.1, mirror: true, wiggle: shake(9, 2.5) },
+    ],
+    motion: (t) => ({ dy: 3 * settle(160)(t), dx: Math.sin((t / 1000) * 9 * Math.PI * 2) * 0.6 }),
   },
   // "you got me!": both open hands raised high beside her head, palms out, a little
   // wobble - caught out, giving in, a playful surrender

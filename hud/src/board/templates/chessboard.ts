@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // A chessboard, accurately: a position from a FEN (checked for legality by chess.js),
 // squares highlighted, arrows for moves, a game stepped through move by move from
 // SAN/PGN. An opening is always its MOVES - there is no table of named openings
@@ -18,6 +20,10 @@
 //                   ["e2", "e4"] lights the move just played, "history" is the game's
 //                   SAN so far for the move list, "status" the line under it
 //                   ("YOUR MOVE"). The HUD keeps a live board up without re-sketching.
+//                   "history" is always the WHOLE game, numbered here from move one.
+//                   "ply" is which position of the game this is: the HUD echoes it back
+//                   with what it drew (liveEcho) and core checks it against the game -
+//                   the HUD never keeps a game of its own, never decides legality.
 
 import { Chess, validateFen } from "chess.js";
 import type { Template } from "../kit";
@@ -66,6 +72,7 @@ interface ChessArgs {
   live: boolean;
   history: string[];
   status: string | null;
+  ply: number | null;
 }
 
 const SYNC_STEP_MS = 700; // moves named in one sentence still play one by one
@@ -186,7 +193,8 @@ export const template: Template<ChessArgs> = {
       return s;
     });
     const status = optStr(a, "status", 22) ?? null;
-    return { positions, title, highlight, arrows, flip: bool(a, "flip"), sync, plies, notes, live, history, status };
+    const ply = live && a.ply !== undefined ? num(a, "ply", { min: 0, max: 1000, def: 0 }) : null;
+    return { positions, title, highlight, arrows, flip: bool(a, "flip"), sync, plies, notes, live, history, status, ply };
   },
 
   render(g, { t }) {
@@ -274,3 +282,39 @@ export const template: Template<ChessArgs> = {
     return out;
   },
 };
+
+/** A drawn position as the first two FEN fields: its pieces and whose move it is. */
+function placementOf(p: Position): string {
+  const rows = p.board.map((row) => {
+    let out = "";
+    let empty = 0;
+    for (const cell of row) {
+      if (!cell) {
+        empty += 1;
+        continue;
+      }
+      if (empty) out += String(empty);
+      empty = 0;
+      out += cell.color === "w" ? cell.type.toUpperCase() : cell.type;
+    }
+    return out + (empty ? String(empty) : "");
+  });
+  return `${rows.join("/")} ${p.turn}`;
+}
+
+/** What a live game board really shows, for core to check against the game: the
+ *  pieces and turn drawn, and where the move list it prints replays to from the
+ *  start (the list is drawn from "history", the pieces from "fen" - they must agree). */
+export function liveEcho(g: ChessArgs): { ply: number; fen: string; replayed: string | null; moves: number } | null {
+  if (!g.live || g.ply === null) return null;
+  const shown = g.positions[g.positions.length - 1];
+  let replayed: string | null = null;
+  try {
+    const game = new Chess();
+    for (const m of g.history) game.move(m);
+    replayed = game.fen().split(" ").slice(0, 2).join(" ");
+  } catch {
+    replayed = "unreplayable";
+  }
+  return { ply: g.ply, fen: placementOf(shown), replayed, moves: g.history.length };
+}

@@ -1,0 +1,8 @@
+{
+  "_about": "Shiai (core/irene/shiai.py), read fresh every time - no restart. startCountdownS: the visible countdown before the bout, then a shouted 'Hajime!'. pauseS: from her calling a point to the next 'Hajime!' (never cutting her line off), counted down on screen; resetAfterS: when, inside it, both go back to the start lines. His men is a sequence measured against his own kamae (the median wrist height over the second before): menRaiseAboveKamae - how far above it both wrists must rise for furikaburi; menZanshinAboveKamae - how far above it they must stay, held 400 ms, after the cut. Shoulder widths. Set 2026-10-19 from a readout in bogu: his men rose 2.34 above kamae and ended its cut 1.62 above; still-kamae jitter rose at most 1.49 (mostly <= 1.03) and ended at most 1.01. Raise them and a men must be bigger; lower them and it can be smaller - and so can jitter.",
+  "startCountdownS": 5,
+  "pauseS": 5,
+  "resetAfterS": 1.5,
+  "menRaiseAboveKamae": 1.8,
+  "menZanshinAboveKamae": 1.1
+}

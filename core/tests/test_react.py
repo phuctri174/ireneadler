@@ -17,9 +17,52 @@ def test_act_out_requests_name_the_action():
     assert react.act_out("Wave at me!") == "wave"
     assert react.act_out("Give me a thumbs up.") == "thumbsUp"
     assert react.act_out("Put your sunglasses on and look cool.") == "cool"
+    assert react.act_out("Irene, flinch!") == "flinch"
+    assert react.act_out("Cover your head!") == "flinch"
+    assert react.act_out("Can you brace yourself?") == "flinch"
+    assert react.act_out("Irene, peer over the edge!") == "peerDown"
+    assert react.act_out("Can you look down?") == "peerDown"
+    assert react.act_out("Peek over the edge for my hands.") == "peerDown"
+    assert react.act_out("Irene, measure it!") == "measure"
+    assert react.act_out("Show me this big with your hands.") == "measure"
+    assert react.act_out("Size it up for me.") == "measure"
+    assert react.act_out("Irene, raise the flag!") == "refFlag"
+    assert react.act_out("Call the point, shinpan.") == "refFlag"
+    assert react.act_out("Irene, lights, camera, action!") == "clapper"
+    assert react.act_out("Roll the camera!") == "clapper"
+    assert react.act_out("Can you show me the clapperboard?") == "clapper"
+    assert react.act_out("Irene, do the talk to the hand!") == "notNow"
+    assert react.act_out("Show me a stop sign with your hand.") == "notNow"
+    assert react.act_out("Irene, can you shout hajime like a shinpan?") == "hajimeCall"
+    assert react.act_out("Do the hajime call!") == "hajimeCall"
+    assert react.act_out("Can you time me?") == "stopwatch"
+    assert react.act_out("Show me your stopwatch!") == "stopwatch"
+    assert react.act_out("Can you bite your nails?") == "nailBite"
+    assert react.act_out("Show me how you look nervous") == "nailBite"
+    assert react.act_out("Can you dial it down a notch?") == "dialDown"
+    assert react.act_out("Can you hum along?") == "humAlong"
+    assert react.act_out("Could you hum it for me?") == "humAlong"
+    assert react.act_out("Can you go easy on me?") == "dialDown"
 
 
 def test_mentions_and_other_requests_are_not_act_outs():
+    assert react.act_out("I'd flinch too if someone swung a shinai at me.") is None
+    assert react.act_out("Cover the news for me.") is None
+    assert react.act_out("Don't look down on me.") is None
+    assert react.act_out("I peered at the logs all night.") is None
+    assert react.act_out("Can you measure my reaction time?") is None
+    assert react.act_out("Can you tell me how big the sun is?") is None
+    assert react.act_out("Raise the volume a bit.") is None
+    assert react.act_out("Call mom later.") is None
+    assert react.act_out("Can you show me the action items?") is None
+    assert react.act_out("Roll back the update.") is None
+    assert react.act_out("Hold that thought, can you check the time?") is None
+    assert react.act_out("What does hajime mean?") is None
+    assert react.act_out("What time is it?") is None
+    assert react.act_out("Are you nervous about the exam?") is None
+    assert react.act_out("Can you turn down the volume?") is None
+    assert react.act_out("What song am I humming?") is None
+    assert react.act_out("Did you go easy on me last game?") is None
     assert react.act_out("I've got kendo practice tonight.") is None
     assert react.act_out("Can you strike that from the list?") is None
     assert react.act_out("Can you play some music?") is None

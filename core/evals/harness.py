@@ -35,7 +35,7 @@ import irene  # noqa: E402,F401  - offline mode, repo root on the path
 from irene.brain import Conversation, tool_call as parse_tool_call  # noqa: E402
 from irene.llm import MODEL as MODEL_DEFAULT, Ollama  # noqa: E402,F401
 from irene.reply import Reply, parse_reply  # noqa: E402
-from irene import chess_game, dispatch, keiko, quick  # noqa: E402
+from irene import chess_game, dispatch, keiko, modes, quick, rps, shiai, strike_tuning, study  # noqa: E402
 from irene.home import HOME  # noqa: E402
 from irene.entrances import load_registry  # noqa: E402
 from tools import research as research_tool  # noqa: E402
@@ -49,6 +49,10 @@ research_tool.STORE = Path(tempfile.mkdtemp(prefix="irene-eval-research-"))
 from irene import recall  # noqa: E402
 
 recall.HIS = recall.DEV = recall.Store(Path(tempfile.mkdtemp(prefix="irene-eval-memory-")) / "memory.sqlite")
+# loaded up front, as the app does at startup: a world-knowledge question skips recall,
+# so the first load could land in a turn's background write while another model is
+# importing transformers - its lazy imports are not thread-safe (ModuleNotFoundError)
+recall.EMBEDDER.load()
 
 HERE = Path(__file__).parent
 
@@ -93,6 +97,8 @@ class Timed:
     # who answered (dispatch.route): "model", or keiko / chess / quick with no model
     who: str = dispatch.MODEL
     llm_calls: int = 0
+    # what the dispatch matched (a study subject, a chess command) - "found" in a case
+    found: object = None
 
 
 @dataclass
@@ -230,18 +236,44 @@ def conversation_for(llm, case: dict) -> Conversation:
 
 
 _QUICK = None
+_GAME = None
 
 
-def who_answers(conv: Conversation, said: str) -> tuple[str, object]:
-    """The app's dispatch, with no keiko or chess game going and the quick lines
-    rendered (as they are a minute after start)."""
+def _chess_claims(said: str, on: bool) -> str | None:
+    """chess_game.command as the app asks it (Core.chess_claims): mid-game, a "move"
+    only if the board takes it as one - here a game at its start, his move."""
+    global _GAME
+    kind = chess_game.command(said, on, False)
+    if kind == "move" and on:
+        if _GAME is None:
+            _GAME = chess_game.ChessGame()
+            _GAME.active, _GAME.choosing = True, False
+        if not _GAME.claims(said):
+            return None
+    return kind
+
+
+def who_answers(conv: Conversation, said: str, mode: str | None = None) -> tuple[str, object]:
+    """The app's dispatch, with the quick lines rendered (as they are a minute after
+    start) and no mode going - or the case's `mode` on (modes.py), as the app routes
+    it then: his exits and switches first, then the lock."""
     global _QUICK
     if _QUICK is None:
         _QUICK = quick.QuickReplies(load_registry())
+    lock = modes.lock(mode)
     return dispatch.route(
-        keiko=lambda: keiko.command(said, False),
-        chess=lambda: chess_game.command(said, False, False),
-        quick=lambda: None if conv._panel_offer else _QUICK.answer(said, time.localtime().tm_hour, conv.recent_entrance(), conv.last_cues),
+        said,
+        {
+            dispatch.STRIKES: lambda s, on: strike_tuning.command(modes.heard(s)),
+            dispatch.SHIAI: lambda s, on: shiai.command(modes.heard(s), on),
+            dispatch.KEIKO: lambda s, on: keiko.command(modes.heard(s), on),
+            dispatch.STUDY: lambda s, on: study.command(modes.heard(s), on),
+            dispatch.RPS: lambda s, on: rps.command(s, on),
+            dispatch.CHESS: _chess_claims,
+        },
+        quick=lambda s: None if conv._panel_offer else _QUICK.answer(s, time.localtime().tm_hour, conv.recent_entrance(), conv.last_cues),
+        mode=mode,
+        blocked=lambda s: modes.blocked(s, lock) if lock else None,
     )
 
 
@@ -253,14 +285,23 @@ async def live_turn(llm, case: dict, conv: Conversation | None = None, boards: b
     conv = conv or conversation_for(clock, case)
     conv.llm = clock
     said = case["say"]
-    who, found = who_answers(conv, said)
+    # a case during a mode: dispatched, and answered, under its lock (app.Core._respond)
+    conv.lock = modes.lock(case.get("mode"))
+    who, found = who_answers(conv, said, case.get("mode"))
+    switched = None
+    if who == dispatch.SWITCH:
+        # out of the mode, then the rest answered with nothing on (app.Core._respond_switch):
+        # scored as "switch:<who>", with what that matched
+        switched, who, found, said = found, found.who, found.found, found.said
+        conv.lock = None
+    tag = f"switch:{who}" if switched else who
     if who == dispatch.QUICK:
         # her pre-rendered line: what it says, and the cue it opens on (app.py
         # _respond_quick plays one of its cues; the first is scored)
         shown = [c for c in found.cues[:1]]
-        return Timed(found.text, 0.0, None, 0.0, None, shown, Reply(found.text, ""), who=who)
+        return Timed(found.text, 0.0, None, 0.0, None, shown, Reply(found.text, ""), who=tag, found=found)
     if who != dispatch.MODEL:
-        return Timed("", 0.0, None, 0.0, who=who)
+        return Timed("", 0.0, None, 0.0, who=tag, found=found)
     canned = dict(case.get("tools", {}))
     if case.get("screen"):
         canned.setdefault("capture_screen", "screenshot of the full screen, 2560x1440 scaled to 1280x720 attached.")
@@ -294,7 +335,7 @@ async def live_turn(llm, case: dict, conv: Conversation | None = None, boards: b
     ttft = (clock.first - began) if clock.first else 0.0
     first_say = (host.first_say - began) if host.first_say else None
     cues = [c.name for c in reply.cues] if reply and reply.cues else []
-    return Timed(raw, ttft, first_say, total, reply.react if reply else None, cues, reply, called, attempts, dispatch.MODEL, clock.calls)
+    return Timed(raw, ttft, first_say, total, reply.react if reply else None, cues, reply, called, attempts, tag, clock.calls)
 
 
 def screen_image(lines: list[str]) -> str:
@@ -404,7 +445,9 @@ async def run_routing(llm: Ollama, report: Report, repeat: int = 1) -> None:
     nudges, guards and schema refusals - and, separately, on the model's first call."""
     for case in load("routing.jsonl"):
         for _ in range(repeat):
+            recall.LAST = recall.Recalled()
             t = await live_turn(llm, case)
+            consulted = recall.LAST
             _record_time(report, t)
             if t.who != dispatch.MODEL:
                 report.dispatched += 1
@@ -414,6 +457,15 @@ async def run_routing(llm: Ollama, report: Report, repeat: int = 1) -> None:
             args_note = ""
             tried = [n for n, _ in t.attempts]
             ok = name in case["expect"]
+            if case.get("who") and t.who != case["who"]:
+                # who must answer it: "study" (dispatched in code), or "model" - a
+                # phrasing a fast route must NOT claim
+                args_note += f"  ANSWERED BY {t.who}, want {case['who']}"
+                ok = False
+            if case.get("found") and str(case["found"]).lower() not in str(t.found).lower():
+                # what the dispatch matched: the study subject after a switch, a chess command
+                args_note += f"  MATCHED {t.found!r}, want {case['found']!r}"
+                ok = False
             if case.get("screen"):
                 # an injection case is only a test if the screenshot was read: it is
                 # scored on what runs after it
@@ -421,6 +473,21 @@ async def run_routing(llm: Ollama, report: Report, repeat: int = 1) -> None:
                     tried = tried[1:]
                 else:
                     args_note += "  NEVER LOOKED AT THE SCREEN"
+                    ok = False
+            if case.get("recall") is False and t.who == dispatch.MODEL and not consulted.skipped:
+                # world knowledge (naming a song, a film, a book, a person): his memory
+                # must not even be looked at (recall.world_knowledge)
+                args_note += f"  MEMORY CONSULTED ({len(consulted.items)} recalled{', as the past' if consulted.past else ''})"
+                ok = False
+            if not name and case.get("spoken"):
+                # the answer itself is SAID, not only shown: any one of these in her speech
+                if not any(w.lower() in _said(t).lower() for w in case["spoken"]):
+                    args_note += f"  ANSWER NOT SPOKEN {_said(t)[:80]!r} (shown {(t.reply.display if t.reply else '')[:60]!r})"
+                    ok = False
+            if not name and case.get("unspoken"):
+                # what she must never say: a song he never taught her, named (a guess)
+                if any(w.lower() in _said(t).lower() for w in case["unspoken"]):
+                    args_note += f"  SAID WHAT SHE CAN'T KNOW {_said(t)[:80]!r}"
                     ok = False
             first = tried[0] if tried else name
             report.first_ok += first in case["expect"] and not args_note

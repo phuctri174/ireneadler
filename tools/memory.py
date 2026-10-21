@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Forgetting, on his word: what she kept about something, deleted for real
 (core/irene/recall.py). She shows exactly what will go and asks first."""
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Irene's own browser, his Chrome, and YouTube.
 
 Two browsers. HIS Chrome (his profile, config/chrome.yaml) gets everything he will

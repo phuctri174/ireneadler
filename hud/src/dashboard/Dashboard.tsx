@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { emitTo, listen } from "@tauri-apps/api/event";
@@ -38,7 +40,7 @@ export interface Stock { title: string; symbol: string; price: number; currency:
 export interface SystemLoad { cpu?: number; gpu?: number; ram?: number; vram?: number; ram_gb?: string; vram_gb?: string }
 export interface Timer { label: string; ends: number; total?: number }
 /** One of her last researches (core/irene/dashboard.py): a card that brings it back. */
-export interface ResearchItem { id: string; title: string; at: string; sources: number; image?: string }
+export interface ResearchItem { id: string; title: string; at: string; sources: number; image?: string; kind?: "research" | "lecture"; length?: string }
 export interface DashboardState {
   news: NewsItem[];
   weather: Weather | null;
@@ -49,6 +51,8 @@ export interface DashboardState {
   stale: Record<string, boolean>;
   /** a lecture being captured (core/irene/lecture.py), else null */
   lecture?: LectureStatus | null;
+  /** the mode she thinks she is in (core's mode guard), or null for none - always shown */
+  mode?: string | null;
 }
 
 
@@ -466,7 +470,7 @@ function ResearchCard({ s, size }: { s: DashboardState; size: Size }) {
   if (!s.research.length) return <div className="dk-empty">No research yet.</div>;
   return (
     <ol className={`dk-research is-${size}`}>
-      {s.research.map((r, i) => (
+      {(size === "mini" ? s.research.slice(0, 3) : s.research).map((r, i) => (
         <li key={r.id} style={{ ["--i" as string]: i }}>
           <button
             className="dk-research-card"
@@ -483,7 +487,15 @@ function ResearchCard({ s, size }: { s: DashboardState; size: Size }) {
             <span className="dk-research-text">
               <b>{r.title}</b>
               <span className="dk-label">
-                {r.at.slice(11) || r.at} &middot; {r.at.slice(0, 10)} &middot; {r.sources} source{r.sources === 1 ? "" : "s"}
+                {r.kind === "lecture" ? (
+                  <>
+                    <span className="dk-tag-lecture">lecture note</span> &middot; {r.at.slice(0, 10)} &middot; {r.length}
+                  </>
+                ) : (
+                  <>
+                    {r.at.slice(11) || r.at} &middot; {r.at.slice(0, 10)} &middot; {r.sources} source{r.sources === 1 ? "" : "s"}
+                  </>
+                )}
               </span>
             </span>
           </button>
@@ -901,7 +913,7 @@ export function Dashboard() {
     <div className={booting ? "dk is-booting" : "dk"} ref={root}>
       <BootLayers run={booting} panel />
       <BootStatus run={booting} />
-      <div className="dk-frame" key={`frame-${bootSeq}`}>
+      <div className={state.lecture ? "dk-frame has-lecture" : "dk-frame"} key={`frame-${bootSeq}`}>
         <Brackets />
         <header className="dk-top">
           <div className="dk-top-side">
@@ -926,7 +938,7 @@ export function Dashboard() {
               <span className="dk-badge-gem" aria-hidden="true" />
             </div>
             <span className="dk-badge-wing is-right" aria-hidden="true" />
-            <div className="dk-badge-sub">Panel &middot; second screen</div>
+            <div className={state.mode ? "dk-badge-sub dk-mode is-on" : "dk-badge-sub dk-mode"}>Mode: {state.mode ?? "none"}</div>
           </div>
           <div className="dk-top-side is-right">
             <span className="dk-label">Load</span>

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """She draws what she explains - a spec she composes herself, laid out here.
 
 Round 8: no picture is anticipated any more. After </speak> she writes one
@@ -39,7 +41,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .compose import ADV, caps, gist, plain, width, wrap2
+from .compose import ADV, caps, fit_title, gist, plain, width, wrap2
 
 log = logging.getLogger("irene.drawing")
 
@@ -459,7 +461,7 @@ class Pen:
         self.drawn = Drawn(kind, title)
         self._n = 0
         if title:
-            self.base(_label(2, 2, caps(title, 96), "white"), "title")
+            self.base(_label(2, 2, fit_title(title, 96), "white"), "title")
 
     def element(self, label: str, needs: tuple[str, ...] = ()) -> Element:
         el = Element(f"e{len(self.drawn.elements)}", label, [], len(self.drawn.elements), needs)
@@ -591,30 +593,30 @@ def _flow(pen: Pen, spec: Spec) -> None:
     n = len(items)
     gap = 7
     longest = max(len(w) for i in items for w in caps(i.label, 10_000).split() or ["?"])
+    # every arrangement (rows, row gap) at the widest labels it fits, scored: whole
+    # words first, then the most characters, then the fewest rows. Taking the first
+    # that fitted put six steps in one row as "EX- EC-", "EM- PI-" (live, a lecture board)
     best = None
-    for whole in (True, False):
-        for rows in (1, 2, 3, 4):
-            per = math.ceil(n / rows)
-            chunks = [items[k : k + per] for k in range(0, n, per)]
-            for chars in range(14, 2, -1):
-                if whole and chars < min(longest, 14):
-                    break
-                sized = [[lines_for(i.label, chars * ADV) for i in row] for row in chunks]
-                widths = [[max(width(ln) for ln in (ls or ["?"])) + 4 for ls in row] for row in sized]
-                if all(sum(ws) + gap * (len(ws) - 1) <= RIGHT - LEFT + 1 for ws in widths):
-                    break
-            else:
-                continue
-            if whole and chars < min(longest, 14):
-                continue
-            heights = [max(6 * len(ls) + 3 for ls in row) for row in sized]
-            if sum(heights) + 7 * (len(heights) - 1) <= BOTTOM - TOP + 1:
-                best = (sized, widths, heights)
+    best_score = None
+    for rows in (1, 2, 3, 4):
+        per = math.ceil(n / rows)
+        chunks = [items[k : k + per] for k in range(0, n, per)]
+        for chars in range(14, 2, -1):
+            sized = [[lines_for(i.label, chars * ADV) for i in row] for row in chunks]
+            widths = [[max(width(ln) for ln in (ls or ["?"])) + 4 for ls in row] for row in sized]
+            if all(sum(ws) + gap * (len(ws) - 1) <= RIGHT - LEFT + 1 for ws in widths):
                 break
-        if best:
-            break
-    sized, widths, heights = best or (sized, widths, heights)
-    total = sum(heights) + 7 * (len(heights) - 1)
+        else:
+            continue
+        heights = [max(6 * len(ls) + 3 for ls in row) for row in sized]
+        row_gap = next((g for g in (7, 5, 4) if sum(heights) + g * (len(heights) - 1) <= BOTTOM - TOP + 1), None)
+        if row_gap is None:
+            continue
+        score = (chars >= min(longest, 14), chars, -rows)
+        if best_score is None or score > best_score:
+            best, best_score = (sized, widths, heights, row_gap), score
+    sized, widths, heights, row_gap = best or (sized, widths, heights, 7)
+    total = sum(heights) + row_gap * (len(heights) - 1)
     y = TOP + (BOTTOM - TOP + 1 - total) / 2
     prev: Box | None = None
     k = 0
@@ -627,14 +629,14 @@ def _flow(pen: Pen, spec: Spec) -> None:
                 pen.add(el, _arrow(prev.right + 1, box.cy, box.x - 1, box.cy))
             elif prev is not None:
                 # down to the next row: from under the last box, across, into this one
-                mid = box.y - 4
+                mid = box.y - max(2, row_gap // 2 + 1)
                 pen.add(el, _line(prev.cx, prev.bottom + 1, prev.cx, mid, "cyan"))
                 pen.add(el, _line(prev.cx, mid, box.cx, mid, "cyan"))
                 pen.add(el, _arrow(box.cx, mid, box.cx, box.y - 1))
             prev = box
             x += w + gap
             k += 1
-        y += h + 7
+        y += h + row_gap
 
 
 def _around(n: int, rx: float, ry: float, cx: float = 64, cy: float = 44) -> list[tuple[float, float]]:
@@ -647,8 +649,10 @@ def _ring(pen: Pen, spec: Spec, center: bool) -> None:
     chars = 12 if n <= 3 else 10 if n <= 4 else 8 if n <= 6 else 6
     longest = max(len(w) for i in items for w in caps(i.label, 10_000).split() or ["?"])
     # a word a little longer than the room still goes on whole
-    chars = max(chars, min(longest, chars + 3))
-    rows = 2 if n <= 6 else 1
+    chars = max(chars, min(longest, chars + 3), min(longest, 11))
+    # two lines for every label: one line cut "Software Engineering" to "SOFTWARE" and
+    # "Programming" to "PROGRAMMI" (live, a radial of seven)
+    rows = 2
     cx, cy = 64, 44
     hub: Box | None = None
     if center:
@@ -1259,8 +1263,34 @@ def _graph(pen: Pen, spec: Spec) -> None:
         cols.setdefault(v, []).append(k)
     order = sorted(cols)
     L = len(order)
-    cw = (RIGHT - LEFT + 1) / L
+    room = RIGHT - LEFT + 1
+    # each column as wide as its longest word needs, when the board has the room (equal
+    # thirds broke "PERFORMANCE" into "PERFORMA-" - live, a lecture board); the rest of
+    # the width shared out evenly
+    word = {k: max(width(w) for w in (caps(nodes[k].label, 10_000).split() or ["?"])) + 7 for k in range(len(nodes))}
+    need = [max(word[k] for k in cols[key]) + 2 for key in order]
     boxes: dict[str, tuple[Element, Box]] = {}
+    # too wide left to right for whole words: top to bottom instead, a layer per row, when
+    # its words fit across and its rows fit down
+    across = all(sum(word[k] for k in cols[key]) + 3 * (len(cols[key]) - 1) <= room for key in order)
+    if sum(need) > room and across and 15 * L + 4 * (L - 1) <= BOTTOM - TOP + 1:
+        ys = spread(L, TOP + 7, BOTTOM - 7)
+        for r, key in enumerate(order):
+            members = cols[key]
+            n = len(members)
+            for i, k in enumerate(members):
+                el = pen.element(nodes[k].label)
+                boxes[nodes[k].label.lower()] = (el, boxed(pen, el, LEFT + room * (i + 0.5) / n, ys[r], lines_for(nodes[k].label, room / n - 7, 2)))
+        for a, b in edges:
+            ea, eb = boxes[nodes[a].label.lower()], boxes[nodes[b].label.lower()]
+            arrow_between(pen, eb[0] if layer[b] > layer[a] else pen.element("", needs=(ea[0].id, eb[0].id)), ea[1], eb[1])
+        return
+    if sum(need) <= room:
+        spare = (room - sum(need)) / L
+        widths = [n + spare for n in need]
+    else:
+        widths = [room / L] * L
+    lefts = [LEFT + sum(widths[:c]) for c in range(L)]
     pos: dict[int, float] = {}
     for c, key in enumerate(order):
         members = cols[key]
@@ -1271,7 +1301,7 @@ def _graph(pen: Pen, spec: Spec) -> None:
         for k, y in zip(members, ys):
             pos[k] = y
             el = pen.element(nodes[k].label)
-            boxes[nodes[k].label.lower()] = (el, boxed(pen, el, LEFT + cw * (c + 0.5), y, lines_for(nodes[k].label, cw - 7, rows)))
+            boxes[nodes[k].label.lower()] = (el, boxed(pen, el, lefts[c] + widths[c] / 2, y, lines_for(nodes[k].label, widths[c] - 7, rows)))
     for a, b in edges:
         ea, eb = boxes[nodes[a].label.lower()], boxes[nodes[b].label.lower()]
         arrow_between(pen, eb[0] if layer[b] > layer[a] else pen.element("", needs=(ea[0].id, eb[0].id)), ea[1], eb[1])

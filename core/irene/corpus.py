@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """The read-aloud voice corpus, recorded in the HUD (Ctrl+Alt+Shift+R).
 
 Same pattern as the gesture captures: a hotkey starts it, Irene guides him by

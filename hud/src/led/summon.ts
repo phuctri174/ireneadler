@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // The domain-expansion sequence, keyed to the summon clip as heard. Core sends
 // summon/start as the clip begins and summon/part2 as "Irene Adler" starts; the
 // HUD stamps each on arrival and this draws from those stamps.

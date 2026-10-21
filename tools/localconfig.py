@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Personal config: config/<name> holds his own data (location, Chrome account,
 music path, names) and is gitignored; config/<stem>.example<suffix> is committed.
 A fresh clone has only the example, so every loader resolves through here and

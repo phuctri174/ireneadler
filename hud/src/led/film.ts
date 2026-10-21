@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // The film grammar of the entrances, shared by all of them: each one is shot like a
 // scene from a film, the way the domain expansion is staged - a build-up, a peak, a
 // settle - rather than a loop.

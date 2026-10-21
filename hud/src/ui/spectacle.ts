@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Her boot-up as a spectacle: a 12 s high-tech title sequence drawn on one canvas
 // over her whole interface, act by act, each bigger than the last:
 //

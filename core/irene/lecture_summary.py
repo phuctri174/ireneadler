@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """A captured lecture, summarised on his command: map-reduce over the transcript.
 
 A two-hour lecture is 15-20k words - past her 16k-token context with the persona
@@ -63,14 +65,20 @@ class Summary:
     quality: dict
     meta: dict
     gaps: list[str] = field(default_factory=list)  # windows the model couldn't summarise
+    # the lecture's subject (the model's name for it, from the topics), its main
+    # takeaways, and the terms the lecturer defined - each with their exact words
+    title: str = ""
+    key_points: list[str] = field(default_factory=list)
+    definitions: list[dict] = field(default_factory=list)  # {term, meaning, quote, at}
 
     def to_json(self) -> dict:
-        return {"overview": self.overview, "sections": self.sections, "alerts": self.alerts, "quality": self.quality,
-                "meta": self.meta, "gaps": self.gaps}
+        return {"title": self.title, "overview": self.overview, "sections": self.sections, "key_points": self.key_points,
+                "definitions": self.definitions, "alerts": self.alerts, "quality": self.quality, "meta": self.meta, "gaps": self.gaps}
 
     @classmethod
     def from_json(cls, d: dict) -> "Summary":
-        return cls(d.get("overview", ""), d.get("sections", []), d.get("alerts", []), d.get("quality", {}), d.get("meta", {}), d.get("gaps", []))
+        return cls(d.get("overview", ""), d.get("sections", []), d.get("alerts", []), d.get("quality", {}), d.get("meta", {}), d.get("gaps", []),
+                   d.get("title", ""), d.get("key_points", []), d.get("definitions", []))
 
 
 # ---- windows and quality ---------------------------------------------------------------------
@@ -170,7 +178,8 @@ Times in [mm:ss] are from the start of the lecture.
 
 Return ONLY a JSON object:
 {{"topics": [{{"title": "<3-7 words>", "start": "<mm:ss where it begins>", "points": ["<one key point, one sentence>", ...]}}],
- "alerts": [{{"kind": "homework" | "deadline" | "exam", "text": "<what to do or know, one short sentence>", "quote": "<the lecturer's exact words, copied from the transcript>"}}]}}
+ "alerts": [{{"kind": "homework" | "deadline" | "exam", "text": "<what to do or know, one short sentence>", "quote": "<the lecturer's exact words, copied from the transcript>"}}],
+ "definitions": [{{"term": "<the term, as the lecturer says it>", "meaning": "<what it means, one sentence>", "quote": "<the lecturer's exact words defining it, copied from the transcript>"}}]}}
 
 Rules:
 - topics: what this part actually covers, in order; 1-4 topics, 2-4 points each. Points are content (definitions, results, examples), not "the lecturer talks about".
@@ -181,6 +190,8 @@ Rules:
   Not alerts: a prerequisite or earlier course, general advice, or what the course covers.
   A deadline names when (a day, a date, "next week"); an exam hint names a quiz/exam or says it will be tested.
   Each needs a quote: the lecturer's exact words, copied from the transcript (10-25 words). Only if this part truly has none: "alerts": [].
+- definitions: a term the lecturer explicitly defines or explains here ("X is...", "we call this X", "X means..."),
+  0-4 of them, each with the lecturer's exact defining words as its quote (10-30 words). None defined: "definitions": [].
 - Use only what is in the transcript. Do not add knowledge of your own.
 
 Transcript part {n}:
@@ -189,12 +200,15 @@ Transcript part {n}:
 REDUCE_PROMPT = """Below are the topics found in each part of one lecture, in order, each with an id.
 Merge them into the lecture's main sections, in order: 3-{max_sections} sections; a section may cover several ids that are
 the same subject. Then write a short overview as Irene would say it out loud to a friend who missed the lecture:
-2-3 sentences, conversational, no lists, no times. Use ONLY the topics and points below - nothing else about the
+2-3 sentences, conversational, no lists, no times. You are NOT the lecturer: say what the lecture covered, in the third
+person ("the lecture went through...", "they showed..."), never "I explained". Use ONLY the topics and points below - nothing else about the
 lecture is known, so add nothing of your own.
 
 Return ONLY a JSON object:
-{{"overview": "<2-3 sentences>",
- "sections": [{{"title": "<3-7 words>", "ids": ["<topic ids it covers>"], "points": ["<the 2-5 most important points, one sentence each>"]}}]}}
+{{"title": "<the lecture's subject, 3-7 words>",
+ "overview": "<2-3 sentences>",
+ "sections": [{{"title": "<3-7 words>", "ids": ["<topic ids it covers>"], "points": ["<the 2-5 most important points, one sentence each>"]}}],
+ "key_points": ["<the 3-6 most important takeaways of the whole lecture, one sentence each, from the points above>"]}}
 
 Topics:
 {topics}"""
@@ -277,6 +291,7 @@ async def summarize(lines: list[dict], meta: dict, chat: Chat, window_words: int
     parts = windows(lines, window_words)
     topics: list[dict] = []
     alerts: list[dict] = []
+    definitions: list[dict] = []
     gaps: list[str] = []
     for w in parts:
         found = None
@@ -289,6 +304,7 @@ async def summarize(lines: list[dict], meta: dict, chat: Chat, window_words: int
             gaps.append(f"{clock(w.start)}-{clock(w.end)}")
             topics.append({"id": f"{w.n}.1", "title": f"Part {w.n}", "start": w.start, "end": w.end, "points": []})
             continue
+        mapped = found  # (the alerts loop below reuses `found` for each quote it looks up)
         ts = [t for t in found["topics"] if isinstance(t, dict) and t.get("title")]
         for k, t in enumerate(ts, 1):
             start = _seconds(t.get("start", ""), w.start, w.end)
@@ -311,22 +327,29 @@ async def summarize(lines: list[dict], meta: dict, chat: Chat, window_words: int
             if kind != a["kind"]:
                 log.info("lecture summary: %s alert kept as %s - no date or time in the lecturer's words: %r", a["kind"], kind, quote[:80])
             alerts.append({"kind": kind, "text": str(a.get("text", "")).strip(), "quote": quote, "at": at})
+        for d in mapped.get("definitions") or []:
+            kept = checked_definition(d, _lines_of(w))
+            if kept is not None:
+                definitions.append(kept)
     # each topic ends where the next begins
     for i, t in enumerate(topics):
         t["end"] = topics[i + 1]["start"] if i + 1 < len(topics) else (lines[-1]["end"] if lines else t["start"])
-    sections, overview = await _reduce(topics, chat)
-    log.info("lecture summary: %d parts -> %d topics -> %d sections, %d alert(s) kept, %d gap(s)", len(parts), len(topics), len(sections), len(alerts), len(gaps))
-    return Summary(overview, sections, _dedupe(alerts), quality(lines, meta), meta, gaps)
+    sections, overview, extra = await _reduce(topics, chat)
+    definitions = _dedupe_terms(definitions)
+    log.info("lecture summary: %d parts -> %d topics -> %d sections, %d alert(s), %d definition(s) kept, %d gap(s)",
+             len(parts), len(topics), len(sections), len(alerts), len(definitions), len(gaps))
+    return Summary(overview, sections, _dedupe(alerts), quality(lines, meta), meta, gaps,
+                   extra.get("title", ""), extra.get("key_points", []), definitions)
 
 
-async def _reduce(topics: list[dict], chat: Chat) -> tuple[list[dict], str]:
+async def _reduce(topics: list[dict], chat: Chat) -> tuple[list[dict], str, dict]:
     # a part the model couldn't read has no content: it never goes to the reduce (live,
     # given only an empty "Part 1", the model invented a whole lecture on the history
     # of AI and she said it). Nothing summarised -> no overview at all.
     real = [t for t in topics if t["points"]]
     if not real:
         log.warning("lecture summary: no part could be summarised - no overview, only the transcript")
-        return [{"title": t["title"] + " (not summarised)", "start": t["start"], "end": t["end"], "points": []} for t in topics[:MAX_SECTIONS]], ""
+        return [{"title": t["title"] + " (not summarised)", "start": t["start"], "end": t["end"], "points": []} for t in topics[:MAX_SECTIONS]], "", {}
     topics = real
     by_id = {t["id"]: t for t in topics}
     listing = "\n".join(f"{t['id']} [{clock(t['start'])}] {t['title']}: " + " ".join(t["points"][:3]) for t in topics)
@@ -352,8 +375,19 @@ async def _reduce(topics: list[dict], chat: Chat) -> tuple[list[dict], str]:
         log.warning("lecture summary: reduce unreadable - using the parts' own topics")
         sections = [{"title": t["title"], "start": t["start"], "end": t["end"], "points": t["points"]} for t in topics[:MAX_SECTIONS]]
     sections.sort(key=lambda s: s["start"])
+    # each section ends where the next begins (a merged section's own end ran over the
+    # next one's: live, "10:30-22:14" then "14:54-22:14")
+    for a, b in zip(sections, sections[1:]):
+        a["end"] = min(a["end"], b["start"])
     overview = str((found or {}).get("overview") or "").strip()
-    return sections, overview
+    found = found or {}
+    title = " ".join(str(found.get("title") or "").split())[:80].strip(" .")
+    # takeaways are drawn from the sections' own points: one naming nothing a section
+    # says (a word in common, beyond the small ones) is the model's, and goes
+    said = {w for s in sections for p in s["points"] for w in _tokens(p)}
+    key_points = [" ".join(str(p).split()) for p in (found.get("key_points") or []) if isinstance(p, str) and str(p).strip()]
+    key_points = [p for p in key_points if len(set(_tokens(p)) & said) >= 2][:6]
+    return sections, overview, {"title": title, "key_points": key_points}
 
 
 # what the lecturer's own words must contain for each kind of alert. A wrong deadline is
@@ -384,6 +418,35 @@ def checked_kind(kind: str, quote: str) -> str | None:
     return None
 
 
+def checked_definition(d: dict, lines: list[dict]) -> dict | None:
+    """A term the lecturer defined, kept only on his own words: the quote must be in
+    the transcript (find_said) and must name the term."""
+    if not isinstance(d, dict):
+        return None
+    term = " ".join(str(d.get("term") or "").split()).strip(" .:")
+    meaning = " ".join(str(d.get("meaning") or "").split())
+    if not term or not meaning or len(term) > 60:
+        return None
+    found = find_said(str(d.get("quote") or "").strip(), lines)
+    if found is None:
+        log.info("lecture summary: definition of %r dropped - its quote isn't in the transcript", term)
+        return None
+    at, quote = found
+    if not set(_tokens(term)) <= set(_tokens(quote)) and _norm(term) not in _norm(quote):
+        log.info("lecture summary: definition of %r dropped - the lecturer's words don't name it: %r", term, quote[:80])
+        return None
+    return {"term": term, "meaning": meaning, "quote": quote, "at": at}
+
+
+def _dedupe_terms(found: list[dict]) -> list[dict]:
+    out: list[dict] = []
+    for d in sorted(found, key=lambda d: d["at"]):
+        if any(_norm(d["term"]) == _norm(o["term"]) for o in out):
+            continue
+        out.append(d)
+    return out[:10]
+
+
 def _dedupe(alerts: list[dict]) -> list[dict]:
     out: list[dict] = []
     for a in sorted(alerts, key=lambda a: a["at"]):
@@ -399,31 +462,63 @@ def _dedupe(alerts: list[dict]) -> list[dict]:
 _KIND = {"homework": "Homework", "deadline": "Deadline", "exam": "Exam hint"}
 
 
-def speech(s: Summary) -> list[str]:
-    """Spoken: the overview, the main topics, then anything to act on - short."""
-    lines = []
+# how she opens each topic as she walks through them (its board comes up with it)
+ORDINAL = ("First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth")
+# a sentence after the topics keeps the last topic's board up
+STAY = -1
+# her offer of further reading (opt-in: "yes" -> lecture_research, all topics)
+OFFER = "Want me to look up more on any of these topics online?"
+
+
+def speech_plan(s: Summary) -> list[tuple[str, int | None]]:
+    """Spoken, sentence by sentence, with the board each belongs to: the overview and
+    the topics' names (None: the board of all the topics), each topic in turn (its
+    index: that topic's drawing comes up as she starts it), then anything to act on
+    (STAY)."""
+    out: list[tuple[str, int | None]] = []
+
+    def say(text: str, board: int | None) -> None:
+        for sentence in re.split(r"(?<=[.!?…])\s+", text.strip()):
+            if sentence:
+                out.append((sentence, board))
+
     if s.overview:
-        lines.append(s.overview)
-    titles = [x["title"] for x in s.sections[:5] if not x["title"].endswith("(not summarised)")]
-    if not titles and not s.overview:
-        return ["I couldn't make a summary of that one - the model kept garbling it. The full transcript's on the panel, "
-                "and you can still ask me what was said about anything in it."]
-    if titles:
-        if len(titles) == 1:
-            lines.append(f"The main topic was {titles[0]}.")
-        else:
-            lines.append(f"The main topics were {', '.join(titles[:-1])} and {titles[-1]}.")
+        say(s.overview, None)
+    real = [(k, x) for k, x in enumerate(s.sections[: len(ORDINAL)]) if not x["title"].endswith("(not summarised)")]
+    if not real and not s.overview:
+        return [("I couldn't make a summary of that one - the model kept garbling it. The full transcript's on the panel, "
+                 "and you can still ask me what was said about anything in it.", None)]
+    titles = [x["title"] for _, x in real]
+    if len(titles) == 1:
+        say(f"The main topic was {titles[0]}.", None)
+    elif titles:
+        say(f"The main topics were {', '.join(titles[:-1])} and {titles[-1]}.", None)
+    if len(real) > 1:
+        for n, (k, x) in enumerate(real):
+            say(f"{ORDINAL[n]}, {x['title']}.", k)
+            if x["points"]:
+                say(x["points"][0], k)
+    elif real:
+        k, x = real[0]
+        say(f"On {x['title']}: {x['points'][0]}" if x["points"] else f"{x['title']}.", k)
     if s.alerts:
         for a in s.alerts[:3]:
-            lines.append(f"{'Heads up' if a['kind'] == 'exam' else 'Note'}: {a['text'].rstrip('.')} - at {clock(a['at'])}.")
+            say(f"{'Heads up' if a['kind'] == 'exam' else 'Note'}: {a['text'].rstrip('.')} - at {clock(a['at'])}.", STAY)
     else:
-        lines.append("I didn't hear anything that sounded like homework, a deadline or an exam hint.")
+        say("I didn't hear anything that sounded like homework, a deadline or an exam hint.", STAY)
     if s.quality.get("grade") == "rough":
-        lines.append("Fair warning: the audio was rough in places, so the transcript has gaps.")
+        say("Fair warning: the audio was rough in places, so the transcript has gaps.", STAY)
     if s.gaps:
-        lines.append(f"I couldn't summarise {len(s.gaps)} stretch{'es' if len(s.gaps) > 1 else ''} of it - the transcript's all there though.")
-    lines.append("It's all on the panel, with the full transcript.")
-    return lines
+        say(f"I couldn't summarise {len(s.gaps)} stretch{'es' if len(s.gaps) > 1 else ''} of it - the transcript's all there though.", STAY)
+    say("I've written it all up as a note - it's on the panel, with the full transcript, and saved as a PDF.", STAY)
+    if real:
+        say(OFFER, STAY)
+    return out
+
+
+def speech(s: Summary) -> list[str]:
+    """Spoken: the overview, each topic in turn, then anything to act on."""
+    return [sentence for sentence, _ in speech_plan(s)]
 
 
 def title(meta: dict) -> str:

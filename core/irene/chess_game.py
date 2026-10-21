@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Chess with Irene: a real engine plays her moves, he plays his by voice.
 
 The language model never chooses a move and never judges one. Here:
@@ -7,23 +9,28 @@ The language model never chooses a move and never judges one. Here:
               Whisper makes of them ("night to F3", "e four"). A move that isn't
               legal is refused with the reason; one that could be two moves asks
               which ("the knight on b1 or the one on f3?")
-  ChessGame   the game: Stockfish (config/chess.yaml) at a modest Skill Level
-              picks her moves; a full-strength look at the position after every
+  ChessGame   the game: her opening book (chess_book.py), then Stockfish limited to
+              a club player's rating (config/chess.yaml: UCI_Elo) picks her moves -
+              ONE position, every change atomic; a full-strength look at the position after every
               move decides what she says about it, so what she says is true -
               "that hangs your knight" only when the engine's best reply takes it
   Beat        what she says and shows, in order: a line, its cue, and the board
               as it should look when she starts saying it
 
-His commands are matched in code (command()): start, resign, takeback, stop.
+His commands are matched in code (command()): start, resign, takeback, stop, review.
+Before move one she asks his colour (colour_choice()); after the game the engine
+reviews every move (chess_review.py) and she narrates what it found.
 Everything else he says mid-game goes to the model as usual, with the game in
 her context (section()) - she can banter, but she never picks or rates a move.
 """
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 import random
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -31,6 +38,7 @@ import chess
 import chess.engine
 import yaml
 
+from . import chess_book, chess_review
 from . import chess_talk as talk
 
 log = logging.getLogger("irene.chess")
@@ -43,7 +51,7 @@ PIECE_WORDS = {
     "knight": chess.KNIGHT, "knights": chess.KNIGHT, "night": chess.KNIGHT, "nite": chess.KNIGHT, "horse": chess.KNIGHT,
     "bishop": chess.BISHOP, "bishops": chess.BISHOP,
     "rook": chess.ROOK, "rooks": chess.ROOK, "rock": chess.ROOK, "brook": chess.ROOK, "rookie": chess.ROOK,
-    "queen": chess.QUEEN, "queens": chess.QUEEN, "queenie": chess.QUEEN,
+    "queen": chess.QUEEN, "queens": chess.QUEEN, "queenie": chess.QUEEN, "quid": chess.QUEEN,
     "king": chess.KING, "kings": chess.KING,
 }
 PIECE_NAME = {chess.PAWN: "pawn", chess.KNIGHT: "knight", chess.BISHOP: "bishop", chess.ROOK: "rook", chess.QUEEN: "queen", chess.KING: "king"}
@@ -288,7 +296,7 @@ def which(board: chess.Board, options: list[chess.Move]) -> str:
 
 _START = re.compile(
     r"^\W*(?:(?:hey\s+)?irene\W+)?(?:(?:let'?s|let\s+us|wanna|do\s+you\s+want\s+to|want\s+to|shall\s+we|can\s+we|could\s+we|"
-    r"how\s+about|fancy|you\s+up\s+for|up\s+for|time\s+for)\s+(?:a\s+)?(?:play\s+)?(?:a\s+)?(?:game\s+of\s+|quick\s+game\s+of\s+|round\s+of\s+)?chess"
+    r"how\s+about|fancy|you\s+up\s+for|up\s+for|time\s+for)\s+(?:a\s+)?(?:play\s+|have\s+(?:a\s+)?|do\s+(?:a\s+)?)?(?:a\s+)?(?:game\s+of\s+|quick\s+game\s+of\s+|round\s+of\s+)?chess"
     r"|(?:play|start)\s+(?:a\s+)?(?:game\s+of\s+)?chess(?:\s+with\s+me)?|i\s+challenge\s+you\s+to\s+(?:a\s+game\s+of\s+)?chess"
     r"|(?:let'?s\s+)?play\s+(?:a\s+game\s+of\s+)?chess)\b",
     re.I,
@@ -304,15 +312,49 @@ _STOP = re.compile(
 )
 
 
+_REVIEW = re.compile(
+    r"\b(?:(?:review|analy[sz]e|go\s+over|go\s+through|look\s+over|break\s+down)\s+(?:the\s+|that\s+|our\s+|this\s+|my\s+)?(?:last\s+)?game"
+    r"|game\s+review|post-?mortem|how\s+did\s+i\s+(?:play|do)|(?:what|where)\s+did\s+i\s+go\s+wrong|my\s+(?:worst|biggest)\s+(?:move|mistake|blunder))\b",
+    re.I,
+)
+
+# his colour, before move one: what HE takes ("white", "I'll be black"), what he gives
+# her ("you be white"), or hers to pick ("you choose", "surprise me")
+_HER_WHITE = re.compile(r"\byou\s+(?:can\s+)?(?:be|play|take|have|get|are|'re)\s+white\b|\byou\s+(?:go|move|start)\s+first\b|\byou\s+start\b", re.I)
+_HER_BLACK = re.compile(r"\byou\s+(?:can\s+)?(?:be|play|take|have|get|are|'re)\s+black\b|\bi(?:'ll|\s+will)?\s+(?:go|move|start)\s+first\b", re.I)
+_RANDOM = re.compile(
+    r"\b(?:you\s+(?:choose|pick|decide)|your\s+(?:choice|call|pick)|surprise\s+me|random(?:ly)?|either(?:\s+one|\s+is\s+fine)?|any(?:\s+colou?r|\s+one)|"
+    r"(?:it\s+)?doesn'?t\s+matter|whatever|i\s+don'?t\s+(?:mind|care)|flip\s+a\s+coin|toss\s+a\s+coin|up\s+to\s+you|dealer'?s\s+choice|you\s+decide)\b",
+    re.I,
+)
+
+
+def colour_choice(text: str) -> str | None:
+    """His answer to "white or black?": "white" / "black" (HIS colour), "random", or None."""
+    said = (text or "").strip()
+    if _HER_WHITE.search(said):
+        return "black"
+    if _HER_BLACK.search(said):
+        return "white"
+    white, black = re.search(r"\bwhite\b", said, re.I), re.search(r"\bblack\b", said, re.I)
+    if white and not black:
+        return "white"
+    if black and not white:
+        return "black"
+    if _RANDOM.search(said) or _SHE_WHITE.search(said):
+        return "black" if _SHE_WHITE.search(said) else "random"
+    return None
+
+
 def command(text: str, active: bool, finished: bool = False) -> str | None:
-    """His words as a chess command: "start", "resign", "takeback", "stop" - or
-    "move" for anything else while a game is on (the parser decides), None when
+    """His words as a chess command: "start", "resign", "takeback", "stop", "review" -
+    or "move" for anything else while a game is on (the parser decides), None when
     it's not chess at all."""
     said = (text or "").strip()
     if _START.search(said) or ((active or finished) and _AGAIN.search(said) and not _STOP.search(said)):
         return "start"
     if not active:
-        return None
+        return "review" if finished and _REVIEW.search(said) else None
     if _STOP.search(said):
         return "stop"
     if _RESIGN.search(said):
@@ -339,9 +381,18 @@ class Beat:
 @dataclass
 class Settings:
     engine: str = r"C:\irene\stockfish\stockfish.exe"
-    skill: int = 4
-    think_ms: int = 500
+    # her strength: Stockfish's own limiter (UCI_LimitStrength + UCI_Elo)
+    elo: int = 1350
+    # her search, capped both ways: whichever comes first
+    think_ms: int = 300
+    max_depth: int = 6
+    # her opening book, in her moves (chess_book.MAX_DEPTH is the longest line)
+    book_moves: int = chess_book.MAX_DEPTH
     analyse_ms: int = 250
+    # the post-game review: ms per position, at full strength
+    review_ms: int = 120
+    # the watchdog: an engine call longer than this is a hung engine
+    engine_timeout_s: float = 10.0
     hotwords: list[str] = field(default_factory=list)
 
 
@@ -351,10 +402,45 @@ def settings(path: Path = CONFIG) -> Settings:
     except FileNotFoundError:
         raw = {}
     s = Settings()
-    for key in ("engine", "skill", "think_ms", "analyse_ms", "hotwords"):
+    for key in ("engine", "elo", "think_ms", "max_depth", "book_moves", "analyse_ms", "review_ms", "engine_timeout_s", "hotwords"):
         if key in raw:
             setattr(s, key, raw[key])
     return s
+
+
+# Stockfish 19's UCI_Elo range
+ELO_MIN, ELO_MAX = 1320, 3190
+# commentary and the review read the position at full strength (it must be true)
+FULL = {"UCI_LimitStrength": False}
+
+
+class EngineDown(Exception):
+    """The engine timed out or died twice running (restarted in between)."""
+
+
+# behind by this much (her side, centipawns): no move of hers repeats a position
+BEHIND_CP = -100
+# her unravelling, from the engine's numbers - each said once, only as it gets worse
+RATTLE = {1: "crumbling", 2: "collapsing", 3: "he_has_mate", 4: "mate_close", 5: "mate_next"}
+
+
+def rattle_level(her_cp: int, mate: int | None) -> int:
+    """How far gone she is: 0 fine, 1 crumbling (-6 pawns), 2 collapsing (-10), 3 he has
+    a mate, 4 it is two or three moves away, 5 his next move mates."""
+    if mate is not None and mate < 0:
+        return 5 if -mate <= 1 else 4 if -mate <= 3 else 3
+    return 2 if her_cp <= -1000 else 1 if her_cp <= -600 else 0
+
+
+def fresh_moves(board: chess.Board) -> list[chess.Move]:
+    """Her legal moves that don't bring back a position the game has already had."""
+    out = []
+    for move in board.legal_moves:
+        board.push(move)
+        if not board.is_repetition(2):
+            out.append(move)
+        board.pop()
+    return out
 
 
 def _score(info: dict, color: chess.Color) -> int:
@@ -362,50 +448,240 @@ def _score(info: dict, color: chess.Color) -> int:
     return info["score"].pov(color).score(mate_score=10000)
 
 
+def placement(fen: str) -> str:
+    """What a board SHOWS: its pieces and whose move it is (the first two FEN fields)."""
+    return " ".join((fen or "").split()[:2])
+
+
+# everything a move changes - put back as one when a move is cut off half-way
+_STATE = ("board", "her", "active", "finished", "choosing", "her_eval", "mood", "opening_said", "pending",
+          "_rattle", "_praised", "book", "unreviewed", "ending")
+
+
 class ChessGame:
-    """One game against him. `engine` may be injected (the tests' fake)."""
+    """One game against him. `engine` may be injected (the tests' fake).
+
+    ONE position: self.board. The engine is handed it for every call (python-chess
+    sends the root and the move list - Stockfish keeps no game of its own), the HUD
+    only draws its FEN (board_spec) and echoes back what it drew (shown()), and his
+    words are checked for legality against it alone (parse()).
+
+    Every change to the game is a transaction (_atomic): it works on the live
+    position and is rolled back whole if it is cut off - his turn superseded, the
+    early start retracted, the engine dead - so his move never lands without her
+    answer (live 2026-10-15: a retracted early turn left Qe2 on the board, Black to
+    move, and nothing ever replied)."""
 
     def __init__(self, cfg: Settings | None = None, engine=None, rng: random.Random | None = None):
         self.cfg = cfg or settings()
+        self.rng = rng or random.Random()
         self.board = chess.Board()
         self.her = chess.BLACK
         self.engine = engine
+        self._transport = None
         self._own_engine = engine is None
         self.active = False
         self.finished = False
-        self.lines = talk.Lines(rng or random.Random())
+        # asked "white or black?" and waiting for his answer
+        self.choosing = False
+        self.lines = talk.Lines(self.rng)
         # what the position was worth to her after her last move (centipawns)
         self.her_eval = 0
         self.mood = "even"  # even | winning | losing
         self.opening_said = False
         self.pending: list[chess.Move] = []
-        # her bad moves in a row (resigns when it's hopeless and stays so)
-        self._hopeless = 0
+        # how far her position has unravelled, as she has said it (0 = not at all): she
+        # never resigns - she plays on to the mate, and gets more rattled on the way
+        self._rattle = 0
         # the ply of her last "nice move": praise is rationed
         self._praised = -99
+        self.book = chess_book.Book(self.rng, self.cfg.book_moves)
+        # her engine moves this game, and how many were not the engine's own top line
+        self.engine_moves = self.limited_picks = 0
+        # a finished game not yet reviewed, and how it ended
+        self.unreviewed = False
+        self.ending = ""
+        self.last_review: chess_review.Review | None = None
+        self.last_review_content: dict | None = None
+        self._lock = asyncio.Lock()
+        # the game as the last finished change left it (a turn's starting point)
+        self._committed = self.snapshot()
+        # what the HUD said it drew, per ply - and every time they disagreed
+        self.divergences: list[dict] = []
 
-    # -- engine --------------------------------------------------------------------------
+    # -- one source of truth, transactions --------------------------------------------------
+
+    def snapshot(self) -> dict:
+        snap = {k: getattr(self, k) for k in _STATE}
+        snap["board"] = self.board.copy()
+        snap["pending"] = list(self.pending)
+        snap["book"] = copy.copy(self.book)
+        return snap
+
+    def restore(self, snap: dict) -> None:
+        for k in _STATE:
+            setattr(self, k, snap[k])
+        self.board = snap["board"].copy()
+        self.pending = list(snap["pending"])
+        self.book = copy.copy(snap["book"])
+        self._committed = self.snapshot()
+
+    def committed(self) -> dict:
+        """The game as the last COMPLETED change left it - never a move half-made. A
+        turn marks this when it starts; retracting the turn restores it."""
+        return {**self._committed, "board": self._committed["board"].copy(), "pending": list(self._committed["pending"]),
+                "book": copy.copy(self._committed["book"])}
+
+    async def _atomic(self, work) -> list[Beat] | None:
+        """One change to the game, all or nothing."""
+        async with self._lock:
+            snap = self.snapshot()
+            try:
+                beats = await work()
+                self._committed = self.snapshot()
+                return beats
+            except EngineDown as error:
+                self.restore(snap)
+                log.error("chess: engine down (%s) - position put back to ply %d, %s to move",
+                          error, len(self.board.move_stack), "white" if self.board.turn else "black")
+                return [Beat(self.lines.pick("engine_down"), self.lines.cue("engine_down"), self.board_spec() if self.active else None)]
+            except BaseException:
+                # cut off (a newer command, a retracted early start) or broken: as if it never began
+                self.restore(snap)
+                log.warning("chess: move cut off half-way - position put back to ply %d (%s)",
+                            len(self.board.move_stack), self.board.fen())
+                raise
+
+    def fen_at(self, ply: int) -> str | None:
+        if not 0 <= ply <= len(self.board.move_stack):
+            return None
+        replay = self.board.root()
+        for mv in self.board.move_stack[:ply]:
+            replay.push(mv)
+        return replay.fen()
+
+    def _log_ply(self, who: str, san: str) -> None:
+        """Every ply: the position, and the one the engine is handed (its root and the
+        moves - rebuilt here exactly as python-chess sends it). Any difference is the
+        bug this replaced."""
+        ply = len(self.board.move_stack)
+        given = self.fen_at(ply)
+        same = given == self.board.fen()
+        (log.info if same else log.error)("chess ply %d (%s %s): board %s | engine given %s%s",
+                                          ply, who, san, self.board.fen(), "the same" if same else given, "" if same else "  DIVERGED")
+
+    def shown(self, ply: int, fen: str, replayed: str | None = None, refused: str | None = None) -> bool:
+        """The HUD's echo of a live board it drew: the pieces and turn it shows, and the
+        position its move list replays to (chessboard.ts). Compared with the game's
+        position at that ply - a difference is logged loud and kept."""
+        want = self.fen_at(ply)
+        problems = []
+        if refused:
+            problems.append(f"the HUD refused the board ({refused})")
+        if want is None:
+            problems.append(f"no ply {ply} in this game ({len(self.board.move_stack)} played)")
+        else:
+            if placement(fen) != placement(want):
+                problems.append(f"HUD shows {placement(fen)!r}")
+            if replayed is not None and placement(replayed) != placement(want):
+                problems.append(f"HUD move list replays to {placement(replayed)!r}")
+        if problems:
+            self.divergences.append({"ply": ply, "want": want, "shown": fen, "replayed": replayed, "why": problems})
+            log.error("chess ply %d DIVERGED: game %s | %s", ply, want, "; ".join(problems))
+            return False
+        log.info("chess ply %d shown: HUD matches the game (%s)", ply, placement(want))
+        return True
+
+    # -- engine (behind a watchdog) -----------------------------------------------------------
 
     async def _ensure_engine(self) -> None:
         if self.engine is None:
-            _, self.engine = await chess.engine.popen_uci(self.cfg.engine)
-            log.info("chess engine started: %s (skill %s)", self.engine.id.get("name"), self.cfg.skill)
+            self._transport, self.engine = await chess.engine.popen_uci(self.cfg.engine)
+            elo = max(ELO_MIN, min(ELO_MAX, int(self.cfg.elo)))
+            # her strength, Stockfish's own way: every play() uses it, every look overrides
+            # it for that one call (python-chess sends it back before her next search)
+            await self.engine.configure({"UCI_LimitStrength": True, "UCI_Elo": elo})
+            # UCI never acknowledges a setoption; readyok says the engine has read it,
+            # and the engine's own config is what goes into every later search
+            await self.engine.ping()
+            log.info("chess engine started: %s - sent setoption UCI_LimitStrength true, UCI_Elo %d; readyok; engine config now %s",
+                     self.engine.id.get("name"), elo, {k: self.engine.config.get(k) for k in ("UCI_LimitStrength", "UCI_Elo")})
+
+    async def _kill_engine(self) -> None:
+        """A hung or dead engine: gone, so the next call starts a fresh one."""
+        if not self._own_engine:
+            return
+        transport, self._transport, self.engine = self._transport, None, None
+        if transport is not None:
+            try:
+                transport.kill()
+            except Exception:  # noqa: BLE001 - already dead is fine
+                pass
 
     async def close(self) -> None:
         if self.engine is not None and self._own_engine:
             try:
                 await asyncio.wait_for(self.engine.quit(), 2)
             except Exception:  # noqa: BLE001 - a dead engine is closed either way
-                pass
-            self.engine = None
+                await self._kill_engine()
+            self.engine, self._transport = None, None
+
+    async def _engine(self, what: str, call):
+        """One engine call under the watchdog: a timeout or a dead engine restarts it and
+        tries once more; twice is EngineDown - she says so, nothing hangs."""
+        for attempt in (1, 2):
+            await self._ensure_engine()
+            try:
+                return await asyncio.wait_for(call(self.engine), self.cfg.engine_timeout_s)
+            except (asyncio.TimeoutError, chess.engine.EngineError, OSError) as error:
+                log.error("chess engine %s failed (attempt %d): %s - restarting it", what, attempt, type(error).__name__ + (f": {error}" if str(error) else ""))
+                await self._kill_engine()
+        raise EngineDown(what)
 
     async def _look(self, board: chess.Board) -> dict:
         """The position at full strength: score and the best move."""
-        info = await self.engine.analyse(board, chess.engine.Limit(time=self.cfg.analyse_ms / 1000), options={"Skill Level": 20})
-        return info
+        board = board.copy()
+        return await self._engine("look", lambda e: e.analyse(board, chess.engine.Limit(time=self.cfg.analyse_ms / 1000), options=FULL))
 
     async def _her_move(self) -> chess.Move:
-        result = await self.engine.play(self.board, chess.engine.Limit(time=self.cfg.think_ms / 1000), options={"Skill Level": int(self.cfg.skill)})
+        book = self.book.move(self.board, self.her)
+        if book is not None:
+            log.info("chess: book move %s (%s)", self.board.san(book), self.book.defence or "book")
+            return book
+        board = self.board.copy()
+        # behind, she never shuffles into a repetition to escape: the engine searches only
+        # the moves that don't bring back an earlier position (at her usual strength)
+        roots = fresh_moves(board) if self.her_eval <= BEHIND_CP else None
+        if roots is not None and len(roots) == board.legal_moves.count():
+            roots = None  # nothing repeats anyway
+        if roots:
+            log.info("chess: behind (%+d) - %d of %d moves don't repeat a position", self.her_eval, len(roots), board.legal_moves.count())
+        # a capped search (whichever comes first), from an EMPTY hash: the full-strength
+        # look at this same position a moment ago filled the table, and a weakened search
+        # reading it plays the deep search's moves (measured: scripts/chess_strength.py)
+        limit = chess.engine.Limit(time=self.cfg.think_ms / 1000, depth=self.cfg.max_depth)
+        info = chess.engine.INFO_PV
+
+        async def play(e):
+            await e.configure({"Clear Hash": None})
+            if roots:
+                return await e.play(board, limit, root_moves=roots, info=info)
+            return await e.play(board, limit, info=info)
+
+        result = await self._engine("play", play)
+        # the engine's acknowledgement, move by move: under UCI_LimitStrength Stockfish
+        # often plays a move other than its own top line - the limiter at work
+        top = (result.info or {}).get("pv") or [None]
+        self.limited_picks += top[0] is not None and top[0] != result.move
+        self.engine_moves += 1
+        log.info("chess: her move %s, engine's top line %s%s (%d of %d of her engine moves off its top line)",
+                 result.move, top[0], " - the limiter picked another" if top[0] not in (None, result.move) else "",
+                 self.limited_picks, self.engine_moves)
+        # (an engine's draw offer or resignation is never taken: the game ends by the board)
+        if result.move is None or result.move not in self.board.legal_moves:
+            # the engine answered a different position than the game's: never played
+            log.error("chess: engine move %s is not legal in %s - DIVERGED", result.move, self.board.fen())
+            raise EngineDown("an illegal engine move")
         return result.move
 
     # -- the board she shows ----------------------------------------------------------------
@@ -416,10 +692,14 @@ class ChessGame:
             "template": "chessboard",
             "live": True,
             "fen": self.board.fen(),
+            # the ply this position is: the HUD echoes it back with what it drew
+            "ply": len(self.board.move_stack),
             "flip": self.her == chess.WHITE,
             "title": "YOU VS IRENE",
-            "status": status or ("YOUR MOVE" if self.board.turn != self.her else "MY MOVE"),
-            "history": [m for m in self._san_history()][-16:],
+            "status": status or ("WHITE OR BLACK?" if self.choosing else "YOUR MOVE" if self.board.turn != self.her else "MY MOVE"),
+            # the WHOLE game: the HUD numbers it from move one (a slice of it once made
+            # Black's moves look like White's: "4. Ngf6 Nc3")
+            "history": self._san_history(),
         }
         if last is not None:
             spec["last"] = [chess.square_name(last.from_square), chess.square_name(last.to_square)]
@@ -430,7 +710,7 @@ class ChessGame:
         return spec
 
     def _san_history(self) -> list[str]:
-        replay = chess.Board()
+        replay = self.board.root()
         out = []
         for mv in self.board.move_stack:
             out.append(replay.san(mv))
@@ -439,65 +719,125 @@ class ChessGame:
 
     # -- what he asks for ----------------------------------------------------------------------
 
-    async def start(self, text: str = "") -> list[Beat]:
-        await self._ensure_engine()
+    def _reset(self) -> None:
         self.board = chess.Board()
-        self.her = chess.WHITE if _SHE_WHITE.search(text or "") else chess.BLACK
-        self.active, self.finished = True, False
-        self.her_eval, self.mood, self.opening_said, self.pending, self._hopeless, self._praised = 0, "even", False, [], 0, -99
-        log.info("chess: new game, he plays %s", "black" if self.her == chess.WHITE else "white")
-        if self.her == chess.BLACK:
-            return [Beat(self.lines.pick("start_he_white"), self.lines.cue("start"), self.board_spec(), sfx="charge")]
-        beats = [Beat(self.lines.pick("start_she_white"), self.lines.cue("start"), self.board_spec("MY MOVE"), sfx="charge")]
-        beats += await self._reply()
+        self.her = chess.BLACK
+        self.active, self.finished, self.choosing = True, False, False
+        self.her_eval, self.mood, self.opening_said, self.pending, self._rattle, self._praised = 0, "even", False, [], 0, -99
+        self.book = chess_book.Book(self.rng, self.cfg.book_moves)
+        self.engine_moves = self.limited_picks = 0
+        self.unreviewed, self.ending = False, ""
+        self.divergences = []
+
+    async def start(self, text: str = "", defence: str | None = None) -> list[Beat]:
+        """A new game. `defence`: the book defence she plays as Black against 1.e4 -
+        one she just studied (study.py) - instead of one picked at random."""
+        async def work():
+            await self._ensure_engine()
+            self._reset()
+            if defence in chess_book.DEFENCES:
+                self.book.defence = defence
+                log.info("chess: her defence pinned to the %s", defence)
+            colour = colour_choice(text)
+            if colour is None:
+                # which side he wants comes first
+                self.choosing = True
+                log.info("chess: new game - asked him which colour")
+                return [Beat(self.lines.pick("ask_colour"), self.lines.cue("ask_colour"), self.board_spec(), sfx="charge")]
+            return await self._begin(colour)
+
+        return await self._atomic(work)
+
+    async def _begin(self, colour: str) -> list[Beat]:
+        """His colour settled: said out loud before move one - then, if she's white, her move."""
+        coin = colour == "random"
+        if coin:
+            colour = self.rng.choice(("white", "black"))
+        self.her = chess.BLACK if colour == "white" else chess.WHITE
+        self.choosing = False
+        log.info("chess: he plays %s%s", colour, " (her coin)" if coin else "")
+        kind = ("coin_" if coin else "start_") + ("he_white" if colour == "white" else "he_black")
+        beats = [Beat(self.lines.pick(kind), self.lines.cue("start"), self.board_spec(), sfx=None if coin else "charge")]
+        if self.her == chess.WHITE:
+            beats[0].board = self.board_spec("MY MOVE")
+            beats += await self._reply()
         return beats
 
     async def stop(self) -> list[Beat]:
-        self.active = False
-        self.finished = True
-        await self.close()
-        return [Beat(self.lines.pick("stop"), self.lines.cue("stop"), None)]
+        async def work():
+            self.active, self.choosing = False, False
+            self.finished = True
+            self._end("stopped")
+            return [Beat(self.lines.pick("stop"), self.lines.cue("stop"), None)]
+
+        return await self._atomic(work)
 
     async def resign(self) -> list[Beat]:
-        self.active, self.finished = False, True
-        await self.close()
-        return [Beat(self.lines.pick("he_resigns"), self.lines.cue("he_resigns"), self.board_spec("YOU RESIGNED"))]
+        async def work():
+            self.active, self.finished, self.choosing = False, True, False
+            self._end("you resigned")
+            return [Beat(self.lines.pick("he_resigns"), self.lines.cue("he_resigns"), self.board_spec("YOU RESIGNED"))]
+
+        return await self._atomic(work)
+
+    def _end(self, how: str) -> None:
+        self.ending = how
+        self.unreviewed = len(self.board.move_stack) >= 4
 
     async def takeback(self) -> list[Beat]:
-        # his last move and her answer to it
-        his = [i for i, _ in enumerate(self.board.move_stack) if (i % 2 == 0) == (self.her == chess.BLACK)]
-        if not his:
-            return [Beat(self.lines.pick("nothing_to_take_back"), self.lines.cue("takeback"), None)]
-        undo = len(self.board.move_stack) - his[-1]
-        for _ in range(undo):
-            self.board.pop()
-        self.pending = []
-        log.info("chess: takeback (%d plies)", undo)
-        return [Beat(self.lines.pick("takeback"), self.lines.cue("takeback"), self.board_spec())]
+        async def work():
+            # his last move and her answer to it
+            his = [i for i, _ in enumerate(self.board.move_stack) if (i % 2 == 0) == (self.her == chess.BLACK)]
+            if not his:
+                return [Beat(self.lines.pick("nothing_to_take_back"), self.lines.cue("takeback"), None)]
+            undo = len(self.board.move_stack) - his[-1]
+            for _ in range(undo):
+                self.board.pop()
+            self.pending = []
+            log.info("chess: takeback (%d plies) - now ply %d: %s", undo, len(self.board.move_stack), self.board.fen())
+            return [Beat(self.lines.pick("takeback"), self.lines.cue("takeback"), self.board_spec())]
+
+        return await self._atomic(work)
 
     def claims(self, text: str) -> bool:
-        """These words are for the board: a move (legal or not), or the answer to her
-        "which one?". Cheap - no engine."""
+        """These words are for the board: a move (legal or not), the answer to her
+        "which one?", or - before move one - his colour. Cheap - no engine."""
         if not self.active:
             return False
+        if self.choosing:
+            return colour_choice(text) is not None
         if self._resolve_pending(text) is not None:
             return True
         return parse(text, self.board) is not None
 
     async def his_move(self, text: str) -> list[Beat] | None:
         """His words, mid-game. None: they weren't a move (the model answers)."""
-        await self._ensure_engine()
-        parsed = self._resolve_pending(text) or parse(text, self.board)
-        if parsed is None:
-            return None
-        if parsed.options:
-            self.pending = parsed.options
-            return [Beat(self.lines.pick("which", options=which(self.board, parsed.options)), self.lines.cue("which"), None)]
-        self.pending = []
-        if parsed.illegal:
-            log.info("chess: illegal %r - %s", text, parsed.illegal)
-            return [Beat(self.lines.pick("illegal", reason=parsed.illegal), self.lines.cue("illegal"), None)]
-        return await self.play(parsed.move)
+
+        async def work():
+            await self._ensure_engine()
+            if self.choosing:
+                colour = colour_choice(text)
+                return None if colour is None else await self._begin(colour)
+            if self.board.turn == self.her:
+                # her move is owed (it can't be, every move is atomic - but if it ever
+                # is, she plays it rather than judge his against the wrong side)
+                log.error("chess: my move was owed at ply %d - playing it before his", len(self.board.move_stack))
+                beats = await self._reply()
+                beats[0].text = f"{self.lines.pick('owed')} {beats[0].text}"
+                return beats
+            parsed = self._resolve_pending(text) or parse(text, self.board)
+            if parsed is None:
+                return None
+            if parsed.options:
+                self.pending = parsed.options
+                return [Beat(self.lines.pick("which", options=which(self.board, parsed.options)), self.lines.cue("which"), None)]
+            self.pending = []
+            if parsed.illegal:
+                log.info("chess: illegal %r at ply %d (%s) - %s", text, len(self.board.move_stack), self.board.fen(), parsed.illegal)
+                return [Beat(self.lines.pick("illegal", reason=parsed.illegal), self.lines.cue("illegal"), None)]
+            return await self._play(parsed.move)
+
+        return await self._atomic(work)
 
     def _resolve_pending(self, text: str) -> Parsed | None:
         """"The one on f3" after she asked which."""
@@ -511,7 +851,10 @@ class ChessGame:
         return None
 
     async def play(self, move: chess.Move) -> list[Beat]:
-        """His (legal) move, her reaction to it, and her answer."""
+        """His (legal) move, her reaction to it, and her answer - one transaction."""
+        return await self._atomic(lambda: self._play(move))
+
+    async def _play(self, move: chess.Move) -> list[Beat]:
         before = await self._look(self.board)
         his_before = _score(before, not self.her)
         best = before.get("pv", [None])[0]
@@ -519,7 +862,7 @@ class ChessGame:
         mover = self.board.piece_type_at(move.from_square)
         captured = chess.PAWN if self.board.is_en_passant(move) else self.board.piece_type_at(move.to_square)
         self.board.push(move)
-        log.info("chess: he played %s", san)
+        self._log_ply("he", san)
         beats: list[Beat] = []
         if self.board.is_game_over():
             return beats + self._over(his=True)
@@ -571,7 +914,7 @@ class ChessGame:
         captured = chess.PAWN if self.board.is_en_passant(move) else self.board.piece_type_at(move.to_square)
         san = self.board.san(move)
         self.board.push(move)
-        log.info("chess: she played %s", san)
+        self._log_ply("she", san)
         parts: list[str] = []
         kind = "her_move"
         if hanging and captured and PIECE_NAME.get(captured) == hanging:
@@ -601,16 +944,18 @@ class ChessGame:
         her = _score(look, self.her)
         self.her_eval = her
         mood = "winning" if her >= 250 else "losing" if her <= -250 else "even"
-        if her <= -900:
-            self._hopeless += 1
-        else:
-            self._hopeless = 0
-        if self._hopeless >= 2 and len(self.board.move_stack) > 20:
-            # hopeless and staying so: she bows out
-            self.active, self.finished = False, True
-            await self.close()
-            return beats + [Beat(self.lines.pick("she_resigns"), self.lines.cue("she_resigns"), self.board_spec("I RESIGN"))]
         mate = look["score"].pov(self.her).mate()
+        # she never resigns: as it falls apart she says so, more rattled each step
+        rattle = rattle_level(her, mate)
+        if rattle == 0 and her > -250:
+            self._rattle = 0
+        elif rattle > self._rattle:
+            self._rattle = rattle
+            self.mood = "mated" if mate is not None and mate < 0 else "losing"
+            kind = RATTLE[rattle]
+            log.info("chess: unravelling (%+d cp, mate %s) - %s", her, mate, kind)
+            beats.append(Beat(self.lines.pick(kind), self.lines.cue(kind), None))
+            return beats
         if mate is not None and mate > 0 and self.mood != "mating":
             self.mood = "mating"
             beats.append(Beat(self.lines.pick("she_sees_mate"), self.lines.cue("winning"), None))
@@ -626,17 +971,21 @@ class ChessGame:
         return beats
 
     def _over(self, his: bool) -> list[Beat]:
-        """The game just ended on a move (his if `his`)."""
+        """The game just ended on a move (his if `his`) - by the board alone: mate,
+        stalemate, too little material, or the board's own automatic rules (fivefold
+        repetition, 75 moves). A draw is never claimed or agreed."""
         self.active, self.finished = False, True
         outcome = self.board.outcome()
         if outcome is not None and outcome.winner is not None:
             kind = "she_mates" if outcome.winner == self.her else "he_mates"
             status = "MATE - I WIN!" if kind == "she_mates" else "MATE - YOU WIN"
+            how = "checkmate"
         else:
             kind = "draw"
             status = "DRAW"
-        log.info("chess: game over - %s", kind)
-        asyncio.ensure_future(self.close())
+            how = outcome.termination.name.lower().replace("_", " ") if outcome is not None else "draw"
+        log.info("chess: game over - %s (%s)", kind, how)
+        self._end(how)
         return [Beat(self.lines.pick(kind), self.lines.cue(kind), self.board_spec(status), sfx="tada" if kind == "she_mates" else None)]
 
     def _opening(self, his: bool) -> str:
@@ -655,11 +1004,92 @@ class ChessGame:
         his_ply = (plies - 1) % 2 == (0 if self.her == chess.BLACK else 1)
         return self.lines.pick("opening_his" if his_ply else "opening_hers", name=name)
 
+    # -- after the game: the review, from the engine ---------------------------------------------
+
+    def _result(self) -> str:
+        outcome = self.board.outcome()
+        if outcome is not None:
+            return outcome.result()
+        if self.ending == "you resigned":
+            return "0-1" if self.her == chess.BLACK else "1-0"
+        if self.ending == "Irene resigned":  # (older games: she no longer resigns)
+            return "1-0" if self.her == chess.BLACK else "0-1"
+        return "*"
+
+    def review_intro(self) -> Beat:
+        return Beat(self.lines.pick("review_intro"), self.lines.cue("review_intro"), None)
+
+    async def review(self) -> tuple[list[Beat], dict] | None:
+        """The finished game, every position looked at by the engine at full strength:
+        what she says about it and the panel. None when there is nothing to review."""
+        async with self._lock:
+            if not self.unreviewed:
+                return None
+            self.unreviewed = False
+            board, he, result, ending = self.board.copy(), not self.her, self._result(), self.ending
+
+        async def look(pos: chess.Board) -> chess_review.Look:
+            pos = pos.copy()
+            info = await self._engine("review", lambda e: e.analyse(pos, chess.engine.Limit(time=self.cfg.review_ms / 1000), options=FULL))
+            pv = info.get("pv") or [None]
+            score = info["score"].white()
+            return chess_review.Look(score.score(mate_score=chess_review.MATE), pv[0], score.mate())
+
+        started = time.perf_counter()
+        try:
+            rv = await chess_review.analyse(board, look, he=he, result=result, ending=ending)
+        except EngineDown as error:
+            log.error("chess review: engine down (%s)", error)
+            return [Beat(self.lines.pick("review_failed"), self.lines.cue("engine_down"), None)], {}
+        log.info("chess review: %d plies in %.1f s - he %s blunders / %s mistakes (%.0f%%), she %s / %s (%.0f%%), worst %s, turning %s",
+                 len(rv.plies), time.perf_counter() - started, rv.count(he, "blunder"), rv.count(he, "mistake"), rv.accuracy[he],
+                 rv.count(not he, "blunder"), rv.count(not he, "mistake"), rv.accuracy[not he],
+                 rv.worst.label if rv.worst else "-", rv.turning.label if rv.turning else "-")
+        self.last_review = rv
+        self.last_review_content = chess_review.content(rv, time.strftime("%d %b %Y, %H:%M"))
+        if not self.active:
+            await self.close()
+        return self.review_beats(rv), self.last_review_content
+
+    def review_beats(self, rv: chess_review.Review) -> list[Beat]:
+        """What she says about the review - every fact from it, none from the model."""
+        he = rv.he
+
+        def n(color: chess.Color) -> str:
+            k = rv.count(color, "blunder")
+            return "no blunders" if k == 0 else "one blunder" if k == 1 else f"{k} blunders"
+
+        parts = [self.lines.pick("review_counts", his=n(he), hers=n(not he))]
+
+        def said(p: chess_review.Ply, move: chess.Move | None) -> str:
+            return spoken(chess.Board(p.fen_before), move) if move is not None else ""
+
+        w = rv.worst
+        if w is None:
+            parts.append(self.lines.pick("review_clean"))
+        else:
+            fill = {"n": w.number, "move": said(w, w.move), "best": said(w, w.best) if w.best is not None and w.best != w.move else ""}
+            kind = "review_worst_his" if w.color == he else "review_worst_hers"
+            parts.append(self.lines.pick(kind + ("" if fill["best"] else "_plain"), **fill))
+        t = rv.turning
+        if t is not None:
+            if w is not None and t.index == w.index:
+                parts.append(self.lines.pick("review_turning_same"))
+            else:
+                parts.append(self.lines.pick("review_turning", n=t.number, move=said(t, t.move),
+                                             who="you" if t.color == he else "I"))
+        parts.append(self.lines.pick("review_panel"))
+        return [Beat(" ".join(parts), self.lines.cue("review"), None)]
+
     # -- for the model, when he just talks mid-game ---------------------------------------
 
     def section(self) -> str:
         if not self.active:
             return ""
+        if self.choosing:
+            return ("## You're about to play chess with him\n\n"
+                    "You asked which colour he wants - white, black, or you pick. The game hears his answer, not you; "
+                    "never choose a colour or a move yourself.")
         history = self._san_history()
         side = "black" if self.her == chess.BLACK else "white"
         feeling = {"winning": "you are winning", "losing": "you are losing", "mating": "you can see a mate", "mated": "he has a mate on you"}.get(self.mood, "it's about even")

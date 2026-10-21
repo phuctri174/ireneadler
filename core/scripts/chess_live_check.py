@@ -77,6 +77,10 @@ async def main() -> int:
             print(f"      she: {said!r} faces {faces(seen)}")
             record("start: live board up", bool(b) and b[-1].get("template") == "chessboard" and b[-1].get("live"), f"status {b[-1].get('status') if b else None}")
             record("start: a line and a face", bool(said) and bool(faces(seen)), said[:60])
+            # she asks which colour first (since the colour question): he takes white
+            said, seen = await say(ws, "white")
+            b = [x for x in boards(seen) if x]
+            record("colour: he takes white", bool(b) and b[-1].get("status") == "YOUR MOVE", f"status {b[-1].get('status') if b else None}")
 
             for move in ("e4", "knight to f3"):
                 said, seen = await say(ws, move)

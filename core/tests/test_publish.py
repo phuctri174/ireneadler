@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import publish  # noqa: E402
 
-RULES = publish.Rules(Path("."), names=["Jane Q Doe"], text=["12.3456", "Some Song", "C:/Users/you"], extensions=[".npy"])
+RULES = publish.Rules(Path("."), names=["Jane Q Doe"], text=["12.3456", "Some Song", "C:/Users/you"], extensions=[".npy"], paths=["voice_data", "calibration"])
 
 
 def scan(tmp_path, files: dict[str, bytes]):
@@ -39,6 +39,17 @@ def test_text_file_types_and_binaries(tmp_path):
     assert found == [("c.py:1", "12.3456"), ("c.py:2", "Some Song"), ("c.py:3", "C:/Users/you"), ("img.png", "12.3456"), ("voice.npy", "a .npy file")]
 
 
+def test_anything_under_a_private_folder_is_caught(tmp_path):
+    hits = scan(tmp_path, {
+        "core/voice_data/turns/a.wav": b"RIFF",
+        "deep/x/Calibration/hand.json": b"{}",
+        "core/irene/voice_data.py": b"# the module, not the folder",
+        "core/irene/calibration.py": b"",
+        "core/assets/openers/hi.wav": b"RIFF",
+    })
+    assert sorted(h.where for h in hits) == ["core/voice_data/turns/a.wav", "deep/x/Calibration/hand.json"]
+
+
 def test_the_commit_message_is_scanned_too():
     assert publish.Scanner(RULES).scan_text("(commit message)", "Fix the Jane Q Doe bug")
 
@@ -56,4 +67,5 @@ def test_no_patterns_no_publish(tmp_path):
 
 def test_the_example_config_has_the_shape():
     rules = publish.load(publish.REPO / "config" / "publish.example.yaml")
-    assert rules.names and rules.text and ".npy" in rules.extensions
+    assert rules.names and rules.text and ".npy" in rules.extensions and ".pt" in rules.extensions
+    assert "voice_data" in rules.paths

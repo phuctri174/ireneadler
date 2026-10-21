@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // An analog clock: a given time, or the live time with a sweeping second hand.
 //
 //   { "template": "clock", "time"?: "14:05", "label"?: "Tokyo" }

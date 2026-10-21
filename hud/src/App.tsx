@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { note as perfNote, take as takePerf } from "./perf";
 import type { RefObject } from "react";
@@ -6,6 +8,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { EVENT_DASHBOARD, EVENT_DASHBOARD_FOCUS, EVENT_DASHBOARD_OPEN, EVENT_DASHBOARD_READY, EVENT_PANEL_CONTENT, EVENT_PANEL_LINK_DEV, EVENT_PANEL_LINK_OPEN } from "./dashboard/Dashboard";
 import { invoke } from "@tauri-apps/api/core";
+import { boardSnapshot } from "./board/snapshot";
 import { useHandTracking } from "./tracking/useHandTracking";
 import { Reticle } from "./tracking/Reticle";
 import { onFrame } from "./tracking/frameLoop";
@@ -20,13 +23,18 @@ import type { AssistantState, Emotion } from "./face/faceState";
 import { streamedLevel } from "./face/audioLevel";
 import { CoreSocket } from "./link/coreSocket";
 import { REACTIONS, showReaction } from "./face/reactions";
+import { gameHand } from "./face/gameHandBus";
 import { ACTIVITIES, currentActivity, cycleActivity, isActivity, showActivity } from "./face/activity";
 import { SUMMON_TAIL_MS } from "./led/summon";
 import { keikoReact } from "./led/scenes";
+import { showReadout } from "./led/readout";
+import { currentStudy, studyOn, studyState } from "./led/study";
+import { currentScore, scoreOn, shiaiScore } from "./led/score";
 import { ENTRANCE_NAMES, ENTRANCES, isEntrance } from "./led/entrances";
 import type { EntranceName } from "./led/entrances";
 import entranceRegistry from "../../config/entrances.json";
 import { prepare } from "./board/board";
+import { liveEcho } from "./board/templates/chessboard";
 import type { Prepared } from "./board/board";
 import type { SummonTimes } from "./led/summon";
 import { summonTail } from "./led/summon";
@@ -58,6 +66,8 @@ import { LectureBadge } from "./ui/LectureBadge";
 import type { LectureStatus } from "./ui/LectureBadge";
 import "./App.css";
 
+// a board drawing builds up: each element a sentence brings up starts this long after the last
+const BUILD_STAGGER_MS = 320;
 const SKELETON_COLOR = "#22e0ff";
 const JOINT_COLOR = "#ffffff";
 const CURSOR_JOINT = 8;
@@ -393,7 +403,10 @@ function App() {
     inputRef,
     poseRef,
     armPose,
+    frameTiming,
+    cameraInfo,
     setKeiko,
+    setStrikeEvents,
     gestures,
     fps,
     detectMs,
@@ -402,12 +415,31 @@ function App() {
     error,
     setActive,
     setSuspended,
+    game,
   } = useHandTracking({
     // keiko (started by his voice - no pose trigger): a strike he made, for core
     // to answer (core/irene/keiko.py)
     onStrike: (event) => {
       console.log(`[irene] keiko strike: ${event.strike} p=${event.p.toFixed(2)}${event.clean ? " clean" : ""}`);
       core.send({ type: "keiko_strike", strike: event.strike, p: event.p, clean: event.clean });
+    },
+    // study mode, shiai, a calibration (core/irene/strikes.py): he struck at her -
+    // binary, a threshold (tracking/strikeEvent.ts); core decides what it means
+    onStrikeEvent: (event) => {
+      console.log(`[irene] strike event: ${event.wrist} wrist, peak ${event.peak.toFixed(1)}, stop ${event.stopMs.toFixed(0)} ms`);
+      core.send({ type: "strike_event", wrist: event.wrist, peak: event.peak, stopMs: event.stopMs });
+    },
+    // shiai (core/irene/shiai.py): his footwork
+    onMove: (move) => {
+      core.send({ type: "shiai_move", move });
+    },
+    // shiai: a block (tracking/strikeKind.ts); core times it against her attack
+    onBlock: (hit) => {
+      core.send({ type: "shiai_move", move: "block", height: hit.height, rest: hit.rest });
+    },
+    // dev probe (core's strike_probe): what the body did, each second
+    onProbe: (stats) => {
+      core.send({ type: "probe_stats", stats });
     },
   });
   // keiko is on (core's "keiko" start .. end)
@@ -615,7 +647,9 @@ function App() {
       const g = gestureRef.current;
       const point = cursor.current;
       const fromCamera = handSource.current === "camera";
-      const active = pointerOnRef.current && fromCamera && Boolean(g?.handPresent) && Boolean(point);
+      // mid-game the hand is a game piece: never the pointer (gameMode.ts also keeps
+      // the engine's state neutral; this is the pointer's own guard)
+      const active = pointerOnRef.current && fromCamera && Boolean(g?.handPresent) && Boolean(point) && !game.active(now);
       if (!active || !g || !point) {
         // his hand went while he was trying to scroll: where it was (core.log)
         if (scrollTrying && g && !g.handPresent && now - lastScrollLog > 150) {
@@ -801,6 +835,10 @@ function App() {
     const lecture = listen("irene://lecture", () => {
       core.send({ type: "lecture", action: "toggle" });
     });
+    // Ctrl+Alt+Shift+S / +M: study mode / shiai on or off with no voice at all
+    const mode = listen<string>("irene://mode", (event) => {
+      core.send({ type: "mode_hotkey", mode: event.payload });
+    });
     const clicked = listen<[number, number, boolean]>("irene://hand-click", (event) => {
       const [x, y, ok] = event.payload;
       core.send({ type: "hud_trace", step: `hand click at (${x}, ${y})${ok ? "" : " - Windows refused the input"}` });
@@ -810,6 +848,7 @@ function App() {
       void clicked.then((unlisten) => unlisten());
       void darken.then((unlisten) => unlisten());
       void lecture.then((unlisten) => unlisten());
+      void mode.then((unlisten) => unlisten());
     };
   }, [core, setActive]);
 
@@ -928,22 +967,103 @@ function App() {
             setKeiko(false);
             if (currentActivity().name === "keiko") showActivity(null);
           } else {
-            keikoReact({ action: message.action, at: performance.now(), target: message.target, flags: message.flags });
+            const { action, target, flags, call, who, result, ms, label } = message;
+            if (action === "countdown") showActivity("keiko", 0);
+            keikoReact({ action, at: performance.now(), target, flags, call, who, result, ms, label });
+          }
+          break;
+        }
+        case "strike_events": {
+          // core switches the strike detector (and shiai's footwork) on with its
+          // tuning, or off (null): study mode, shiai, a 3-swing calibration
+          setStrikeEvents(message.config ?? null);
+          core.send({ type: "hud_trace", step: `capture strike events ${message.config ? `ON at ${message.config.strikes.threshold.toFixed(1)}${message.config.moves ? " + footwork" : ""}` : "off"}` });
+          break;
+        }
+        case "strike_readout":
+          // -Dev: the peak he just produced, against the threshold, on her face
+          showReadout(message.text, performance.now());
+          break;
+        case "shiai": {
+          // shiai: the keiko dojo, her in bogu facing him; core runs the bout and
+          // sends her answers as keiko actions - and the score, the moment a point is
+          // called, on the scoreboard (led/score.ts)
+          shiaiScore(scoreOn(currentScore(), message, performance.now()));
+          if (message.action === "start") {
+            keikoActive.current = true;
+            keikoReact(null);
+            setEntrance(null);
+            setBoard(null);
+            showActivity("keiko", 0);
+          } else if (message.action === "end") {
+            keikoActive.current = false;
+            keikoReact(null);
+            if (currentActivity().name === "keiko") showActivity(null);
+          }
+          break;
+        }
+        case "study": {
+          // study mode: head down over the book, the bar filling; core switches the
+          // strike events on with it
+          const next = studyOn(currentStudy(), message, performance.now());
+          studyState(next);
+          if (message.action === "start") {
+            setEntrance(null);
+            setBoard(null);
+            showActivity("study", 0);
+          } else if (message.action === "end") {
+            if (currentActivity().name === "study") showActivity(null);
           }
           break;
         }
         case "activity":
           // keiko holds the stage: no other scene replaces it until it ends
           if (keikoActive.current && message.value !== "keiko") break;
+          // and so does study mode
+          if (currentStudy() && message.value !== "study") break;
           // one scene at a time: a new scene ends the entrance it would draw over
           if (message.value) setEntrance(null);
           showActivity(message.value, message.loops ?? 0);
           break;
+        case "game_hand":
+          // her LED hand in the game (led/gameHand.ts): fade in, a pump on a counted
+          // word as it is heard, or the shrug after a misread
+          if (message.glyph === "shrug") gameHand({ kind: "shrug" });
+          else if (typeof message.beat === "number") gameHand({ kind: "beat", n: message.beat });
+          else gameHand({ kind: "show" });
+          break;
+        case "game_mode": {
+          game.set(message.on, performance.now(), message.ms, message.game ?? "");
+          if (!message.on) gameHand({ kind: "hide" });
+          core.send({ type: "hud_trace", step: `game mode ${message.on ? `ON (${message.game ?? "?"}, ${Math.round((message.ms ?? 0) / 1000)} s): normal gestures suspended` : "OFF: gestures back"}` });
+          break;
+        }
+        case "game_shoot": {
+          // the shoot instant is now: wait out the window, then send what the camera saw
+          const t0 = performance.now();
+          const { id, before, after } = message;
+          // her throw shows at THE instant his hand's window is anchored to - the same
+          // t0 - never before (it isn't in any earlier message)
+          if (message.throw) gameHand({ kind: "throw", glyph: message.throw }, t0);
+          window.setTimeout(() => {
+            const frames = game.window(t0, t0 - before, t0 + after);
+            const span = frames.length > 1 ? (frames[frames.length - 1].t - frames[0].t) / 1000 : 0;
+            core.send({ type: "game_frames", id, frames, fps: span > 0 ? Math.round((frames.length - 1) / span) : 0 });
+          }, after + 50);
+          break;
+        }
         case "draw": {
-          // nothing is drawn over keiko
-          if (keikoActive.current && message.value) break;
+          // nothing is drawn over keiko, or over study mode
+          if ((keikoActive.current || currentStudy()) && message.value) break;
           // checked again in full here: anything wrong draws nothing
-          const drawing = message.value ? prepare(message.value) : null;
+          let refused = "";
+          const drawing = message.value ? prepare(message.value, (why) => { refused = why; console.warn(`[irene] draw refused: ${why}`); }) : null;
+          // a live chess board: what it drew goes back to core, checked against the game
+          const spec = message.value as { template?: string; live?: boolean; ply?: number } | null;
+          if (spec && spec.template === "chessboard" && spec.live) {
+            const echo = drawing ? liveEcho(drawing.args as Parameters<typeof liveEcho>[0]) : null;
+            core.send(echo ? { type: "chess_shown", ...echo } : { type: "chess_shown", ply: spec.ply ?? -1, fen: "", refused: refused || "not drawn" });
+          }
           // a drawing takes the whole matrix: the scene under it ends, so it can't
           // come back on top of the next thing when the drawing goes
           if (drawing && currentActivity().name) showActivity(null);
@@ -973,6 +1093,11 @@ function App() {
           }
           break;
         }
+        case "board_render": {
+          // drawn off-screen by the board's own code, never on her face
+          core.send({ type: "board_rendered", id: message.id, png: boardSnapshot(message.spec) });
+          break;
+        }
         case "board_sync": {
           // an illustrated answer: a new drawing (spec), and/or what the sentence
           // just heard adds to it, each item stamped with the board's own clock so
@@ -989,10 +1114,19 @@ function App() {
           for (const old of Array.isArray(base.shapes) ? (base.shapes as Record<string, unknown>[]) : []) {
             if (typeof old.id === "string") seen.set(old.id, old.at);
           }
+          // the elements a sentence brings up are drawn one after another, never all at
+          // once: each new element (its shapes share an id prefix, "e3.0", "e3.1") starts
+          // BUILD_STAGGER_MS after the one before it
+          const order = new Map<string, number>();
           for (const [key, value] of Object.entries(message.set ?? {})) {
             next[key] =
               key === "shapes" && Array.isArray(value)
-                ? (value as Record<string, unknown>[]).map((s) => ({ ...s, at: typeof s.id === "string" && seen.has(s.id) ? seen.get(s.id) : Math.round(now - at) }))
+                ? (value as Record<string, unknown>[]).map((s) => {
+                    if (typeof s.id === "string" && seen.has(s.id)) return { ...s, at: seen.get(s.id) };
+                    const element = typeof s.id === "string" ? s.id.split(".")[0] : "";
+                    if (!order.has(element)) order.set(element, order.size);
+                    return { ...s, at: Math.round(now - at) + (order.get(element) ?? 0) * BUILD_STAGGER_MS };
+                  })
                 : value;
           }
           for (const [key, items] of Object.entries(message.add ?? {})) {
@@ -1590,7 +1724,7 @@ function App() {
       />
 
 
-      <GestureCapture run={captureRun} gestures={gestureRef} input={inputRef} pose={poseRef} armPose={armPose} core={core} />
+      <GestureCapture run={captureRun} gestures={gestureRef} input={inputRef} pose={poseRef} armPose={armPose} timing={frameTiming} camera={cameraInfo} core={core} />
       <CorpusRecorder core={core} />
 
       {pointerOn ? null : <Reticle cursor={cursor} gestures={gestureRef} tracking={tracking} />}

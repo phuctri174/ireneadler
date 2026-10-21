@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Dev-only stand-in for a real hand: a pointing hand whose index tip sits on a
 // chosen screen point, fed to the gesture engine in place of the camera's hand.
 // It exercises the real path - classification, cursor filter, dwell timer, the

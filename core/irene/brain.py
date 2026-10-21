@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """A conversation with Irene: history, tool calls, and a reply streamed into speech.
 
 gemma3 has no native tool calling, so tools use a prompt protocol: a reply that
@@ -25,12 +27,12 @@ from typing import Protocol
 from tools import REGISTRY, ToolError, ToolResult
 from tools.registry import ToolContext, validate
 
-from . import board, compose, drawing, fast, home, illustrate, provenance, recall, sentiment, story
+from . import board, compose, drawing, fast, home, illustrate, lecture_summary, modes, provenance, recall, sentiment, story, taught
 from .grounding import Grounder
 from .llm import Ollama
 from .prompt import system_prompt
 from .react import React, act_out, of_family, resolve
-from .reply import MAX_SPOKEN_WORDS, Reply, admits_ignorance, drop_apologies, drop_promise, for_display, is_apology, parse_reply, promises_action, spoken, unnest
+from .reply import MAX_SPOKEN_WORDS, Reply, admits_ignorance, drop_apologies, drop_promise, for_display, is_apology, parse_reply, promises_action, spoken, unnest, unsaid_answer
 from .router import groups_for, tools_block
 from .memory import _CORRECTION, SessionNotes, recall_hint
 from .provenance import Evidence, LastAnswer, MemoryGuard
@@ -62,6 +64,23 @@ MAX_TOOL_ROUNDS = 4
 # not offered when he asks about an earlier session: that is memory, not a new search
 # (taking every tool away was worse - the model called research unlisted, 15 -> 13/22)
 RECALL_NOT = ("research", "read_and_summarize", "lecture_summary", "lecture_ask")
+# naming a song, a film, a book or a person (recall.world_knowledge) is answered from
+# the model alone, out loud, in one go: not a search, not YouTube, not his music (routing
+# evals 2026-10-19: lyrics called search_files, youtube_search, youtube_play, and Harry Potter
+# looped on lecture_research) - unless
+# he asked to play, open or search
+NAMING_NOT = ("research", "lecture_research", "search_files", "list_files", "open_file", "youtube_search", "youtube_play", "open_url", "open_in_my_browser",
+              "media_play_pause", "media_next", "media_previous")
+# ...and never from the page open in his browser, whatever he said: page text is not an
+# answer source for the world (live 2026-10-19: his own Google search for one song read
+# off it - right - then the same stale page given for a different song - wrong)
+PAGE_NOT = ("read_page_text",)
+_WANTS_IT = re.compile(r"\b(?:play|put (?:it |that )?on|open|queue|listen to|show me|search|look (?:it |that )?up|google|youtube|find (?:me )?(?:it|that|the video))\b", re.I)
+NAMING_ONLY = (
+    "not run: he asked you to NAME it, from what he described - answer out loud now from what you know (the title, "
+    "the name; who by), no tool. If you don't know it, say so, or give your best guess AS a guess - never state a "
+    "made-up title as fact."
+)
 FROM_MEMORY = (
     "not run: he is asking about an earlier session - answer him now from 'From your memory' in your context, "
     "or say plainly you don't remember it. No tool, and don't mention this note or apologise: just answer."
@@ -102,6 +121,16 @@ DRAW_AGAIN = (
 )
 DRAW_TIMEOUT_S = 45  # she is still speaking; a slow prefill (VRAM short) takes ~30 s
 # a chart of numbers that change, with none from research behind it: said, not drawn
+# her whole answer named a work he never taught her this way (taught.py)
+NOT_TAUGHT = [
+    "I don't know that one, sir - it isn't one you've taught me.",
+    "That one I don't know yet. Teach me?",
+]
+# a follow-up about a song he taught her, every sentence of it a fact he never gave
+ALL_I_KNOW = [
+    "That's all you've taught me about it, sir.",
+    "That's everything you've told me about it - teach me more?",
+]
 NO_NUMBERS = [
     "I couldn't find real numbers for that, so no chart - just the key points.",
     "No reliable figures in what I found, sir, so I won't draw a made-up chart.",
@@ -356,8 +385,27 @@ class StreamingReply:
         tale: story.Tale | None = None,
         stale: tuple[str, ...] = (),
         memory: MemoryGuard | None = None,
+        taught: str | None = None,
+        not_these: tuple = (),
+        guessing: bool = False,
     ) -> None:
         self.raw = ""
+        # naming a work nothing he taught matched: his works (taught.Named) are not the answer
+        self.not_these = not_these
+        # sentences the taught guards dropped (all of them: she says she doesn't know)
+        self.unsaid = 0
+        # she answered with one of his works: the rest of that reply goes with it
+        # ("Again. You're obsessed." after it, live) - she says she doesn't know instead
+        self.spoiled = False
+        # a song from its lyrics that he never taught her: any title or artist is a
+        # guess, and a reply holding one goes whole ("I don't know that one" instead)
+        self.guessing = guessing
+        # "I don't know that one" said the moment a reply is spoiled - not after the
+        # model has finished writing the rest (live: 7.1 s to her first word)
+        self.owned = False
+        # naming a work he taught her: his statements - a sentence claiming anything
+        # about it they don't hold (a year, a chart, another artist) is never spoken
+        self.taught = taught
         # what she says about him, his people or his past: only what a retrieved
         # memory or this conversation says (provenance.py) - the rest is never spoken
         self.memory = memory
@@ -479,6 +527,20 @@ class StreamingReply:
         if text and self.memory is not None and self.memory.check(text) is None:
             self.edited = True
             return []
+        if text and self.spoiled:
+            log.info("taught: the rest of a guess - dropped: %r", text[:80])
+            self.unsaid += 1
+            return []
+        if text and self.taught is not None and (claim := taught.unknown(text, self.taught) or (taught.guess(text, self.taught) if self.guessing else None)) is not None:
+            log.info("taught: %r not his - dropped: %r", claim, text[:80])
+            self.edited = True
+            self.unsaid += 1
+            return self._spoil() if self.guessing else []
+        if text and any(taught.names(n, text) for n in self.not_these):
+            log.info("taught: one of his works, but nothing he taught matched - dropped: %r", text[:80])
+            self.edited = True
+            self.unsaid += 1
+            return self._spoil()
         if not text or self._words >= self._max_words:
             return []
         if self.grounder is not None and len(text.split()) >= 4:
@@ -527,6 +589,18 @@ class StreamingReply:
         self.said.append(text)
         topic = short_topic(self.grounder.research.question) if terms and self.grounder is not None else ""
         return [Line(text, cue, tuple(terms), topic)]
+
+    def _spoil(self) -> list[Line]:
+        """A guess: nothing more of this reply is said, and "I don't know that one" is,
+        now - unless she has already said something (then it closes the reply)."""
+        self.spoiled = True
+        if self.said:
+            return []
+        said = fast._pick(NOT_TAUGHT)
+        self.owned = True
+        self.said.append(said)
+        self._lines += 1
+        return [Line(said, None)]
 
     def drawing(self) -> board.Draw | None:
         """The reply's <draw>, once, as soon as its tag closes - so the board starts
@@ -662,6 +736,8 @@ class Conversation:
         self.recent_tools: list[str] = []
         # she just offered the research's details on the panel: "yes" shows them
         self._panel_offer = False
+        # she just offered to look up more on the lecture's topics: "yes" does it
+        self._lecture_offer = False
         self._last_tools: list[str] = []
         # the entrance she was summoned in, and the backstory lines offered last turn
         self.entrance: Entrance | None = None
@@ -678,6 +754,15 @@ class Conversation:
         # what was recalled for the message being answered
         self.session = recall.new_session()
         self._recalled = recall.Recalled()
+        # the title of a song he taught her, when her LAST reply named it (taught.py) -
+        # his "yes, it's correct" to that is what songwin.py waits for
+        self.named: str | None = None
+        # the song he taught her that her answer named, and his statement of it - kept
+        # while his messages are about it ("what else do you know about it?"): live, the
+        # follow-up got "released in 2023, a sleeper hit, used in TikTok videos" -
+        # all invented. Every follow-up is held to his words too (taught.py)
+        self.about: tuple[str, str] | None = None
+        self._about_now: str | None = None
         # what her last reply was built on (provenance.py), for "where's that from?"
         self.last_answer: LastAnswer | None = None
         # the reply being streamed now, and his message it answers (cut_off)
@@ -688,6 +773,23 @@ class Conversation:
         self._turn_start = 0
         self._context = ""
         self._warm: asyncio.Future | None = None
+        # a mode on (modes.py): it owns the display - only the quiet tools exist for
+        # the turn, it has no board, and a refused call is her brush-off. Set by the
+        # app before each turn (Core.mode_lock), by an eval case's "mode"
+        self.lock: modes.Lock | None = None
+        self.brush_off = modes.BrushOff()
+
+    def offered(self) -> list[str]:
+        """The tools that exist for this turn: all of hers, or a mode's quiet ones."""
+        if self.lock is None:
+            return list(self.tool_names)
+        return [t for t in self.tool_names if self.lock.allows(t)]
+
+    @staticmethod
+    def naming(text: str) -> bool:
+        """He asked her to name a song, film, book or person from a description - and
+        not to play, open or search for it: the answer is said, no app is touched."""
+        return recall.world_knowledge(text) and not _WANTS_IT.search(text or "")
 
     def system(self, text: str = "") -> str:
         """The system prompt: the same for every request, so Ollama keeps it (and the
@@ -711,12 +813,18 @@ class Conversation:
         router's pick), the clock, how he said it, and any hints."""
         recent = self.recent_tools if recent_tools is None else recent_tools
         # what she remembers from earlier sessions that bears on it (recall.py)
-        self._recalled = remembered = recall.recall(text, self.session)
+        # (his message before this one: lyrics sung after a song question are that question)
+        before = next((m["content"] for m in reversed(self.history[:-1]) if m["role"] == "user" and not m["content"].startswith("[")), "")
+        self._recalled = remembered = recall.recall(text, self.session, before=before)
         # a story he is telling needs no tool: none is offered in detail; a question
         # about an earlier session is answered from memory, never researched anew
         tale = self.tale(text, history)
-        tools = [t for t in self.tool_names if not (remembered.past and t in RECALL_NOT)]
+        naming = self.naming(text)
+        world = remembered.skipped == "world knowledge"
+        tools = [t for t in self.offered() if not (remembered.past and t in RECALL_NOT) and not (naming and t in NAMING_NOT) and not (world and t in PAGE_NOT)]
         parts = [tools_block("" if tale else text, [] if tale else recent, tools), now_section(text)]
+        if self.lock is not None:
+            parts.append(modes.lock_section(self.lock))
         doing = self.entrance_section(text)
         if doing:
             parts.append(doing)
@@ -734,8 +842,12 @@ class Conversation:
         session = self.notes.section()
         if session:
             parts.append(session)
-        if remembered.section:
+        if remembered.section and not world:
             parts.append(remembered.section)
+        if getattr(self, "_teach", None) is not None:
+            parts.append("## He is teaching you\nWhat he just said is kept, in his words, as something he told you. It is "
+                         "something new, not a correction - you did nothing wrong. Confirm you've got it, happily, in a few "
+                         "words of your own; no apology, and don't recite it back.")
         game = getattr(self, "game", None)
         if game is not None and game.active:
             parts.append(game.section())
@@ -748,6 +860,23 @@ class Conversation:
         asked_back = recall_hint(text)
         if asked_back and self.history:
             parts.append(asked_back)
+        if remembered.section and world:
+            # what he taught (or that it's none of it) last, nearest his message: placed
+            # mid-context, her answer stayed one sentence, as her earlier ones were
+            parts.append(remembered.section)
+        self._about_now = None
+        # (not when his lyrics matched again - that answer has its own section; ordinary
+        # memory recalled about it is no reason to skip: live, it switched this off)
+        if self.about is not None and not (world and remembered.items):
+            if taught.follows_up(text, self.about[0]):
+                self._about_now = self.about[1]
+                log.info("taught: a follow-up about %r - his words only", self.about[0])
+                parts.append(f"## About “{self.about[0]}”\nAll you know about it is what he told you: \"{self.about[1]}\". "
+                             "Anything beyond that - a year, an album, a label, a chart, sales, where it was used, who the "
+                             "artist is - you don't know: say so, and that he can tell you more. Your own feel for it is fine.")
+            else:
+                log.info("taught: %r put down (%r is about something else)", self.about[0], text[:50])
+                self.about = None
         parts.append(SHAPE_REMINDER)
         return "\n\n".join(parts)
 
@@ -974,6 +1103,7 @@ class Conversation:
             self.history.append({"role": "user", "content": said})
             self.history.append({"role": "assistant", "content": f"<speak>{f'<cue>{cue}</cue>' if cue else ''}{line}</speak>"})
         self.last_active = time.monotonic()
+        self.named = None
         if cue:
             self.last_cue, self.last_cues = cue, (cue,)
         self.recent_tools, self._last_tools = list(self._last_tools), []
@@ -1019,18 +1149,49 @@ class Conversation:
             )
         return section
 
+    def _song_lyrics(self) -> str | None:
+        """His lyrics when her last reply answered his song question ("" if he gave
+        none), else None: then whatever title he states next corrects her."""
+        if not self.history or self.history[-1]["role"] != "assistant":
+            return None
+        his = [m["content"] for m in self.history if m["role"] == "user" and not m["content"].startswith("[")]
+        for k in (1, 2):
+            if len(his) < k:
+                break
+            msg, before = his[-k], his[-k - 1] if len(his) > k else ""
+            if recall.world_knowledge(msg) or recall.lyrics_after(msg, before):
+                for m in (msg, before):
+                    q = recall.quoted(m) if recall.world_knowledge(m) else m
+                    if (recall.world_knowledge(m) or recall.lyrics_after(m, "")) and len(q.split()) >= 4:
+                        return q
+                return ""
+        return None
+
     async def respond(self, text: str, host: Host) -> Turn:
         if self.expired():
             log.info("idle for over %ds - starting a fresh conversation", IDLE_RESET_S)
             self.reset()
         self.last_active = time.monotonic()
+        self.named = None
         # a correction or something that should hold: noted before she answers - and
         # what he tells her about himself is kept for later sessions too
         noted = self._hear(text)
         # (a question is never a fact: "When's my birthday? I told you last week." was
         # once kept as one, from "my birthday")
-        if (noted is not None and noted.kind == "lasting" and not recall.asks(text)) or recall.about_him(text):
+        # ...or he is telling her about a song: a correction of her answer, whatever its
+        # shape, or a statement of one ("that song is Blue by yung kai") - filed NOW, and
+        # she says what happened: filed, or not and why (taught.py). Live 2026-10-19 "No,
+        # it's Blue by Yongkai" was never filed, and nothing said so
+        self._teach = taught.teaching(text, self._song_lyrics(), recall.asks(text))
+        # (filed once, as the song: "remember that one is..." is a lasting note too)
+        if not isinstance(self._teach, taught.Teach) and ((noted is not None and noted.kind == "lasting" and not recall.asks(text)) or recall.about_him(text)):
             recall.remember_fact(text, self.session)
+        teach_reply: str | None = None
+        if self._teach is not None:
+            filed = await asyncio.to_thread(recall.file_taught, self._teach, self.session) if isinstance(self._teach, taught.Teach) else None
+            line, cue = taught.confirm_line(self._teach, filed)
+            log.info("taught: %s -> %r", "filed" if filed is not None and filed.ok else "NOT filed", line)
+            teach_reply = f"<speak><cue>{cue}</cue>{line}</speak>"
         self._turn_text = text
         self.begin(text)
         research_question = ""
@@ -1041,6 +1202,8 @@ class Conversation:
         # could be steering the model: nothing that changes anything runs until he
         # asks again himself
         tainted = False
+        # a tool call was refused this turn ("not run: ..."): no apology for it after
+        refused = False
 
         retried = False
         # she promised work and did not call anything: nudged once, then forced
@@ -1050,11 +1213,29 @@ class Conversation:
         canned: str | None = None
         # the board a canned reply brings with it (the daily briefing's sections)
         canned_board = None
+        # a tool that wrote its own speech (fast.OWN_SPEECH): said whole - the spoken
+        # cap is for the model's rambling, and it cut the lecture walkthrough, its
+        # homework notes and the offer at 110 words
+        own_speech = False
         # an unmistakable command ("close the panel") goes straight to its tool
         direct = fast.direct_call(text, self.recent_tools)
+        if teach_reply is not None:
+            direct = teach_reply
+        locked = self.lock
+        if direct is not None and locked is not None and (named := tool_call(direct)) is not None and not locked.allows(named[0]):
+            # (an explicit request for it was brushed off before this: dispatch.BLOCKED)
+            # an inferred lookup - an opening named in his trash talk - is talk now
+            log.info("mode lock (%s): %s not run - the model answers in words", locked.mode, named[0])
+            direct = None
+        if locked is not None:
+            self._panel_offer = self._lecture_offer = False
         if direct is None and self._panel_offer and _YES.match(text):
             direct = '<tool_call>{"name": "show_panel", "arguments": {"what": "last research"}}</tool_call>'
         self._panel_offer = False
+        if direct is None and self._lecture_offer and _YES.match(text):
+            # she offered to look up more on the lecture's topics: yes is all of them
+            direct = '<tool_call>{"name": "lecture_research", "arguments": {"topic": "all"}}</tool_call>'
+        self._lecture_offer = False
         # "where did you get that?": from the record of what her last reply was built
         # on (provenance.py), never the model's account of it
         sourced = direct is None and provenance.asks_source(text) and len(self.history) > 1
@@ -1094,7 +1275,7 @@ class Conversation:
         # about an earlier session: her memory answers, or she says she doesn't remember
         # - "I don't remember" is the true answer then, never a reason to search
         from_memory = self._recalled.past
-        if from_memory:
+        if from_memory or locked is not None:
             may_research = False
         while True:
             await host.thinking()
@@ -1102,7 +1283,9 @@ class Conversation:
             # the board for this answer (illustrate.py): she composes the drawing
             # herself; a research answer's numbers and chess line come from its pages
             plan: illustrate.Live | None = None
-            if canned is None and grounder is not None:
+            if locked is not None:
+                pass  # the mode's display: no board for this answer
+            elif canned is None and grounder is not None:
                 question = grounder.research.question
                 fetched = " ".join(s.text or " ".join(s.passages) for s in grounder.research.sources)
                 plan = illustrate.Live(f"{question} {text}", compose.board_title(question), fetched)
@@ -1124,11 +1307,23 @@ class Conversation:
             if canned is not None and canned_board is not None:
                 # the briefing: the board in sections, each drawn as she reaches it
                 plan = illustrate.Live(text, wanted=False)
+            card = taught.card_for(self._recalled) if canned is None and _round == 0 and locked is None else None
+            if card is None and canned is None and _round == 0 and locked is None and self._about_now:
+                # a follow-up about the song: its card again, not a drawing of her answer
+                work = taught.named(self._about_now)
+                card = taught.CardBoard(work, self._about_now) if work is not None else None
+            if card is not None:
+                # naming a work he taught her: its card is the board, up as she names it
+                plan = illustrate.Live(text, wanted=False)
+                plan.card = True
             if hasattr(sink, "illustrate"):
                 sink.illustrate(plan)
             if plan is not None and canned_board is not None and hasattr(sink, "adopt"):
                 sink.adopt(canned_board)
                 plan.adopted, canned_board = True, None
+            if card is not None and hasattr(sink, "adopt"):
+                sink.adopt(card)
+                plan.adopted = True
             guard = MemoryGuard(self._evidence(), strict, recall_question) if canned is None else None
             stream = self._live = StreamingReply(
                 act_out(text) if _round == 0 else None,
@@ -1136,11 +1331,17 @@ class Conversation:
                 hold=_round == 0 and canned is None and may_research,
                 mood=mood if canned is None else (),
                 avoid=self.last_cues,
-                no_apology=bool(recall_hint(text)) and bool(self.history),
+                no_apology=(bool(recall_hint(text)) and bool(self.history)) or refused or self._teach is not None,
                 tale=tale if canned is None else None,
                 stale=tuple(self.openers(self.history[: self._turn_start])) if tale is not None else (),
                 memory=guard,
+                taught=(taught.known(self._recalled.items) or None if self._recalled.items else text if self._recalled.lyrics else None)
+                if canned is None and self._recalled.skipped == "world knowledge" else (self._about_now if canned is None else None),
+                guessing=canned is None and self._recalled.lyrics,
+                not_these=tuple(n for n in map(taught.named_item, self._recalled.others) if n is not None) if canned is None else (),
             )
+            if canned is not None and own_speech:
+                stream._max_words = 10_000
             messages = self.messages()
             if retried:
                 messages.append({"role": "user", "content": RETRY_NUDGE})
@@ -1162,7 +1363,9 @@ class Conversation:
                     announced = True
                     await host.tool_status(named.group(1), "starting")
                 found = stream.drawing()
-                if found is not None:
+                if found is not None and locked is not None:
+                    log.info("mode lock (%s): her drawing dropped, never shown", locked.mode)
+                elif found is not None:
                     self._drew(found, plan, sink, "reply")
             if prefilling is not None:
                 prefilling(False)
@@ -1170,7 +1373,9 @@ class Conversation:
             # that admits it is dropped unsaid (it was held) and she looks it up
             ignorant = (
                 canned is None and not tools_used and not stream.is_tool_call and "tool_call" not in stream.raw
-                and "research" in self.tool_names and _round < MAX_TOOL_ROUNDS and not from_memory and (may_research or bool(illustrate._ASKS.search(text)))
+                and "research" in self.offered() and _round < MAX_TOOL_ROUNDS and not from_memory and (may_research or bool(illustrate._ASKS.search(text)))
+                # a song he never taught her: "I don't know that one" is allowed - the model alone
+                and self._recalled.skipped != "world knowledge"
                 and admits_ignorance(parse_reply(stream.raw).speak)
             )
             if ignorant:
@@ -1209,6 +1414,15 @@ class Conversation:
                     sink.line(Line(asked, resolve("curious")))
                     stream.said.append(asked)
                     stream.edited = True
+                # the answer itself is always said: a short direct answer left on the
+                # board (a title, a name, a date) is spoken too - the board only backs it up
+                unsaid = None if stream.is_tool_call or "tool_call" in stream.raw else unsaid_answer(" ".join(stream.said), parse_reply(stream.raw).display)
+                if unsaid:
+                    log.info("the answer was only on the board (%r) - saying it", unsaid)
+                    sink.line(Line(unsaid, None))
+                    stream.said.append(unsaid)
+                    stream._words += len(unsaid.split())
+                    stream.edited = True
             if canned is None:
                 calls.append(dict(getattr(self.llm, "last", {})))
                 if tale is not None:
@@ -1216,7 +1430,7 @@ class Conversation:
             elif tools_used:
                 log.info("fast path: %s answered from its template", tools_used[-1])
             canned = None
-            meant = drawn_as_tool(stream.raw) if not stream._drawn else None
+            meant = drawn_as_tool(stream.raw) if not stream._drawn and locked is None else None
             if meant is not None and draw:
                 why = board.check(meant)
                 draw(board.Draw(None if why else meant, why))
@@ -1259,6 +1473,12 @@ class Conversation:
                         log.warning("still no tool after the nudge - researching %r myself", text[:60])
                         call = ("research", {"question": text})
 
+            # (an opener alone - "Well," - is nothing said: live, all that was left)
+            if call is None and stream.unsaid and not stream.owned and (not any(len(x.split()) >= 3 for x in stream.said) or stream.spoiled):
+                # every sentence was a claim he never made: the honest answer instead
+                said = fast._pick(NOT_TAUGHT if stream.guessing or stream.not_these or self._about_now is None else ALL_I_KNOW)
+                sink.line(Line(said, None))
+                stream.said.append(said)
             if call is None:
                 raw = unnest(stream.raw)
                 if stream.edited and stream.said:
@@ -1268,12 +1488,18 @@ class Conversation:
                 if stream._no_apology:
                     # the history too: an apology kept there is copied next time
                     raw = re.sub(r"(<speak>)(.*?)(</speak>)", lambda m: m.group(1) + drop_apologies(m.group(2)) + m.group(3), raw, flags=re.S)
+                if stream.taught is not None and "<display>" in raw:
+                    raw = re.sub(r"(<display>)(.*?)(</display>)", lambda m: m.group(1) + " ".join(
+                        x for x in re.findall(r"[^.!?]+[.!?]*", m.group(2)) if taught.unknown(x, stream.taught) is None).strip() + m.group(3), raw, flags=re.S)
                 if guard is not None and "<display>" in raw:
                     # what she shows is held to the same record as what she says
                     raw = re.sub(r"(<display>)(.*?)(</display>)", lambda m: m.group(1) + guard.filter(m.group(2)) + m.group(3), raw, flags=re.S)
                 self.history.append({"role": "assistant", "content": raw})
                 self._drop_images()
                 reply = parse_reply(raw)
+                if own_speech and stream.said:
+                    # all of what she said (parse_reply caps a reply's text at 110 words)
+                    reply = dataclasses.replace(reply, speak=for_display(" ".join(stream.said)))
                 if guard is not None:
                     self.last_answer = LastAnswer(guard.strict, list(guard.sources), list(guard.dropped), recall_question)
                 elif not sourced:
@@ -1308,7 +1534,19 @@ class Conversation:
                 self._settle(tools_used, cues, research_question, reply.speak)
                 # kept for later sessions (recall.py), off the turn: the exchange, and a
                 # research answer under its question
-                recall.remember_turn(text, reply.speak, self.session)
+                self._lecture_offer = "lecture_summary" in tools_used and lecture_summary.OFFER in reply.speak
+                if self._recalled.skipped != "world knowledge" and self._teach is None and self._about_now is None:
+                    # (her answer to a question about the world is never kept: recalled
+                    # later, her inventions became answers - what he taught is kept as a fact)
+                    recall.remember_turn(text, reply.speak, self.session)
+                elif stream.taught is not None and self._recalled.items and reply.speak:
+                    # (what he taught answered him again: "you keep coming back to it" is true)
+                    recall.asked_again(self._recalled.items[0].id)
+                    work = next((n for n in map(taught.named_item, self._recalled.items) if n is not None), None)
+                    if work is not None and taught.says_title(work, reply.speak):
+                        self.named = work.title
+                        self.about = (work.title, taught.known(self._recalled.items))
+                        log.info("taught: her answer named %r - follow-ups about it are held to his words", work.title)
                 if research_question:
                     recall.remember_research(research_question, reply.speak, self.session)
                 # a goodbye ends the listening, not the session: nothing is forgotten
@@ -1317,6 +1555,13 @@ class Conversation:
                 return Turn(reply, tools_used, ended, calls, tool_ms, claims, cut)
 
             name, args = call
+            if locked is not None and not locked.allows(name):
+                # the mode owns the display: not run, not kept - her brush-off instead
+                line, cue = self.brush_off(locked.mode)
+                log.warning("mode lock (%s): the model called %s - brushed off, never run", locked.mode, name)
+                canned = f"<speak><cue>{cue}</cue>{line}</speak>"
+                _round += 1
+                continue
             if name == "research":
                 research_question = str(args.get("question") or text)
             if name == "research" and not str(args.get("question") or "").strip():
@@ -1349,6 +1594,9 @@ class Conversation:
                 # off the lights in my room, I'm going to sleep" -> screens_off)
                 log.warning("refused %s: he said nothing about his screens (%r)", name, text[:80])
                 result = "not run: he said nothing about his screens or monitors - answer him without a tool"
+            elif (name in NAMING_NOT and self.naming(text)) or (name in PAGE_NOT and recall.world_knowledge(text)):
+                log.warning("refused %s: he asked her to name a song, film, book or person (%r)", name, text[:80])
+                result = NAMING_ONLY
             elif (name in ("research", "read_and_summarize", "lecture_summary", "lecture_ask") and from_memory) or (strict and name in RECALL_LOOKUPS):
                 # (a question about his past, answered strictly from memory: no lookup)
                 # about an earlier session: her memory answers, not a new search or the
@@ -1379,8 +1627,20 @@ class Conversation:
             # so nothing can act on that content afterwards
             if _round == 0 and (not isinstance(result, ToolResult) or (name in fast.OWN_SPEECH and not args.get("expand"))):
                 canned = fast.reply(name, args, outcome, text)
+                own_speech = canned is not None and name in fast.OWN_SPEECH
                 if canned is not None and name == "daily_briefing":
                     canned_board = illustrate.briefing_board(str(args.get("expand") or ""))
+                elif canned is not None and name == "lecture_summary":
+                    # each topic's drawing as she reaches it (lecture_board.TopicBoards)
+                    from tools import lecture as lecture_tool
+
+                    canned_board = getattr(lecture_tool.LECTURES, "board", None)
+            if str(outcome).startswith("not run:"):
+                # a refusal is the app's rule, not him correcting her: about half her replies
+                # after one opened "You're absolutely right, I got ahead of myself..." (evals
+                # 2026-10-19) - said so here, and such sentences are dropped this turn
+                refused = True
+                outcome = f"{outcome} (This note is from the app, not from him, and it is not a correction: never apologise for it or mention it - just answer him.)"
             message = {"role": "user", "content": f"[tool result for {name}] {outcome}\n\n{AFTER_TOOL}"}
             if isinstance(result, ToolResult) and result.images:
                 message["images"] = result.images
@@ -1391,6 +1651,10 @@ class Conversation:
         """The reply's <draw>, as soon as it closed. Hers (a spec) becomes the answer's
         board; a widget or freehand picture is drawn as it is, and is the board."""
         draw = getattr(sink, "draw", None)
+        if plan is not None and plan.card:
+            log.info("her drawing dropped: the card of what he taught is the board")
+            drawing.record(self._turn_text, origin, found.spec if found.spec is not None else found.raw, "card")
+            return
         if plan is None and found.spec is not None and drawing.is_spec(found.spec):
             # chat, a joke, advice: no board, even if she drew one
             log.info("a drawing in a reply that explains nothing: not shown")
@@ -1527,8 +1791,8 @@ class Conversation:
         """(tool, its checked arguments), or the error the model is answered with: no
         such tool, or arguments its schema refuses. Nothing has run either way."""
         tool = REGISTRY.get(name)
-        if tool is None or name not in self.tool_names:
-            return f"error: no tool named {name!r}. Available: {', '.join(self.tool_names)}"
+        if tool is None or name not in self.offered():
+            return f"error: no tool named {name!r}. Available: {', '.join(self.offered())}"
         try:
             return tool, validate(tool, args)
         except ToolError as error:

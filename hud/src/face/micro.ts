@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Micro-expressions: the small, constant life in a face that a state alone
 // doesn't give - blinks, glances, a flicker of a smile mid-sentence. None of it
 // is a readout: state and the emotion core set stay authoritative, and anything a

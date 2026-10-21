@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // What the zoom classifier looks at, and the forest that reads it.
 //
 // The old gate asked one question per finger - extended or curled - and called it

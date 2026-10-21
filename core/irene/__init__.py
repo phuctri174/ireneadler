@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 import os
 
 # No network at runtime. Kokoro's weights resolve through huggingface_hub, which

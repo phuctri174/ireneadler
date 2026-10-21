@@ -1,4 +1,6 @@
-﻿# Start Irene: core (Python backend) and the HUD (Tauri dev), each in its own window.
+﻿# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
+# Start Irene: core (Python backend) and the HUD (Tauri dev), each in its own window.
 #
 #   powershell -ExecutionPolicy Bypass -File .\start-irene.ps1        normal
 #   powershell -ExecutionPolicy Bypass -File .\start-irene.ps1 -Dev   test hooks on
@@ -172,4 +174,4 @@ if (Wait-Port $hudPort 60) {
     Write-Warning "HUD dev server did not open port $hudPort within 60s - check the 'Irene HUD' window"
 }
 
-Write-Host "Irene: up. Ctrl+Alt+I summons, Ctrl+Alt+T types to her, Ctrl+Alt+Shift+C / +1..8 run the gesture captures (6-7: keiko, 8: zoom at the panel), Ctrl+Alt+Shift+R the voice corpus."
+Write-Host "Irene: up. Ctrl+Alt+I summons, Ctrl+Alt+T types to her, Ctrl+Alt+Shift+S study mode, Ctrl+Alt+Shift+M shiai, Ctrl+Alt+Shift+C / +1..9 / +0 run the gesture captures (6-7, 9: keiko, 8: zoom at the panel, 0: hits, a measurement of the desk), Ctrl+Alt+Shift+R the voice corpus."

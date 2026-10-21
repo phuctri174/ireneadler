@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Openers: the short interjections her replies begin with ("Ooh!", "Hmm...", "Oh no..."),
 pre-rendered in her live voice so the first thing he hears needs no synthesis.
 

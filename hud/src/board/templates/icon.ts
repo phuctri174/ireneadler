@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Generic icons, large: weather, music, an idea, a warning, a tick, a cross... up to
 // three side by side, each with an optional caption.
 //

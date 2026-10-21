@@ -1,0 +1,16 @@
+{
+  "_about": "The strike event (study mode hits, shiai): a TUNED THRESHOLD, not a learned classifier - docs/gestures.md says why. A strike = one wrist's signed downward speed (shoulder-widths per second) peaking over the threshold, then a sharp stop. threshold = fraction x the median of his last 3-swing calibration ('Irene, calibrate my strikes'; saved in core/data/strike_calibration.json). Nudge 'fraction' to tune by feel: lower = more sensitive, higher = only his hardest. Read fresh every time a mode switches the detector on, so an edit here needs no restart - start study mode or shiai again. In -Dev each strike's peak shows on her face against the threshold.",
+  "fraction": 0.6,
+  "_stop": "A strike stops sharply: its speed falls to stopRatio of its peak within stopMs of the peak. An arm sinking to the lap slows too gradually to count.",
+  "stopRatio": 0.35,
+  "stopMs": 160,
+  "_refractoryMs": "After a strike, nothing for this long: one two-handed swing is one strike.",
+  "refractoryMs": 400,
+  "_jumps": "Not an arm: a swing whose wrist visibility at the peak is under minVis (the pose model guessing), or whose peak is over maxPeak. Live, the camera reported peaks of 541, 154 and 104 from jumping landmarks; across 248 swings in his two desk sessions no real one passed 35, and every one over 60 had visibility 0.24-0.33.",
+  "minVis": 0.4,
+  "maxPeak": 60,
+  "_calibration": "The 3-swing calibration: strike events on at floorSpeed for 'seconds', his three fastest swings kept. Uneven (the slowest under minEven of the fastest) and she asks again rather than save a threshold from a weak swing.",
+  "calibration": { "seconds": 12, "floorSpeed": 4.0, "swings": 3, "minEven": 0.5 },
+  "_shiai": "Shiai footwork, from his shoulders: their width up (down) by scaleRatio over windowMs is an advance (a retreat); their midpoint moving 'lateral' shoulder widths sideways over windowMs is a step aside. The new width (or place) must HOLD past the threshold for holdMs, a dip shorter than graceMs forgiven - in kamae his hands cover his shoulders and their width jitters ~7% within a second (2026-10-18), so a flicker is not a step. Nudge these by feel too.",
+  "shiai": { "scaleRatio": 0.08, "lateral": 0.5, "windowMs": 500, "refractoryMs": 800, "holdMs": 200, "graceMs": 60 }
+}

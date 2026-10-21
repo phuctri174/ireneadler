@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // The four datotsu-bui - where a strike or thrust scores - on a figure in bogu seen
 // from the front: men (the top of the men), kote (the right kote; the figure's
 // right is the viewer's left), dō (the right side of the dō; the left side,

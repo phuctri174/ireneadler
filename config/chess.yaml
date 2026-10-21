@@ -3,17 +3,33 @@
 
 engine: C:\irene\stockfish\stockfish.exe
 
-# Her strength: Stockfish's Skill Level (0-20). 3-5 is a friendly club player -
-# she can win, she makes human-looking mistakes, she can be beaten.
-skill: 4
-# how long she thinks per move (ms) - also how long he waits
-think_ms: 500
+# Her strength, Stockfish's own limiter (UCI_LimitStrength + UCI_Elo; Stockfish 19
+# takes 1320-3190 - below 1320 is clamped up). Stockfish's Elo is calibrated against
+# engines, not people: its numbers read high against chess.com. 1350 is the target for a
+# 1400-1500 chess.com player - nudge it here (scripts/chess_strength.py measures it).
+elo: 1350
+# her search, capped both ways - it stops at whichever comes first (and he never waits
+# longer than think_ms). Stockfish's limiter picks its move at a shallow depth anyway.
+think_ms: 300
+max_depth: 6
+# her opening book (core/irene/chess_book.py), in HER moves: book moves are perfect
+# theory whatever the Elo. The lines go 6 deep at most (as Black; as White it is 1.e4
+# only) and stop the moment he leaves them. Lower this and the engine takes over sooner.
+book_moves: 6
+
+# the watchdog: an engine call that takes longer than this is a hung engine - it is
+# restarted and asked again once; a second failure and she says so, board put back
+engine_timeout_s: 10
 
 # Commentary reads the position at full strength (it must be true): ms per look
 analyse_ms: 250
+# the post-game review (core/irene/chess_review.py), full strength: ms per position
+review_ms: 120
 
 # Whisper hotwords while a game is on (stt.context_terms): his moves, said aloud
 hotwords:
+  - white
+  - black
   - knight
   - bishop
   - rook

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // A countdown ring: the remaining time as an arc that shrinks, mm:ss in the middle,
 // counting down from when it is shown.
 //

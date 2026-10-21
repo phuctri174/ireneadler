@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Lecture tools: start/stop listening to what the PC plays, the summary, follow-ups.
 
 The capture itself is core's (core/irene/lectures.py): LECTURES is set at startup.
@@ -65,4 +67,20 @@ async def lecture_summary(ctx: ToolContext, expand: str = "") -> ToolResult:
 )
 async def lecture_ask(_ctx: ToolContext, question: str) -> ToolResult:
     text = await _lectures().ask(question)
+    return ToolResult(text, tainted=True)
+
+
+@tool(
+    "lecture_research",
+    "Look up MORE about a topic of the lecture note online - only when he asks ('look up more on the second "
+    "topic', 'research the first topic', 'find more online about <concept> from the lecture') or says yes to your "
+    "offer. Adds sourced reference material to the note in its own section, marked as researched, never mixed with "
+    "what the lecturer said. topic: its number, its title, a concept from it, or 'all'. Not for what the lecture "
+    "itself said (lecture_ask, lecture_summary expand).",
+    {"type": "object", "properties": {"topic": {"type": "string", "description": "which topic: a number, a title, a concept, or 'all'"}}, "required": ["topic"]},
+    readonly=True,
+    cue="reading",
+)
+async def lecture_research(ctx: ToolContext, topic: str) -> ToolResult:
+    text = await _lectures().research(ctx, topic=topic)
     return ToolResult(text, tainted=True)

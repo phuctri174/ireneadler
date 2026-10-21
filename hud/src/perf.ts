@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Where the HUD's time goes, measured in the running app: the hand tracker, the
 // body (pose) tracker, and her face's compose + draw. App.tsx sends a summary to
 // core every 10 s ("hud perf" in core/logs/core.log), then starts over.

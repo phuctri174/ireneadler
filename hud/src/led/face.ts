@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Irene's face on the matrix: the authored 7x7 eyes and the procedural 13x5 mouth
 // from faceState, smoothly upscaled 3x. Layout constants live here so hands,
 // props and scenes can place themselves relative to the face.

@@ -19,6 +19,10 @@ NO cloud calls at runtime. No telemetry. All models local.
 - Mirrored video feed is REQUIRED. openPalm detection depends on it.
 - Work directly on master. Never create branches or git worktrees.
   One session at a time.
+- This repo is NEVER pushed directly (no remote; .git/hooks/pre-push refuses).
+  The squashed publish (core/scripts/publish.py) is the only route out, because
+  local history contains hand-landmark goldens and two third-party images
+  removed in 82de739. Never rewrite that history, never add a remote.
 - Anything he will look at or use (YouTube, a site, a source, a panel link) opens
   in HIS Chrome profile (config/chrome.yaml), launched with
   chrome.exe --profile-directory=<his>. Irene can only LAUNCH into it: Chrome runs
@@ -72,6 +76,13 @@ NO cloud calls at runtime. No telemetry. All models local.
   Run (from core/): .venv/Scripts/python evals/run_evals.py
 
 ## Standing rules (every round)
+- Every feature that ships updates README.md and the relevant docs/ file in the SAME
+  session: the feature list entry (with its disabled status if it is off), the
+  measured results table (a number from an actual eval run or a recorded live
+  measurement, cited with its date or commit - never an estimate), and the roadmap.
+  Stale docs are a failure, the same as a failing test: a feature shipped without
+  its doc update is incomplete work. Docs go through the publish scan
+  (core/scripts/publish.py) like everything else.
 - Before reporting anything done: launch the app (start-irene.ps1 -Dev) and
   exercise the feature for real. Unit tests and headless runs are not enough -
   a speaker crash on every audio block once shipped past 460 green tests.

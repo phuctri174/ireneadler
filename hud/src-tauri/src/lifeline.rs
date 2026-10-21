@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 //! Why the HUD stopped, written down (core/irene/lifeline.py is core's side).
 //!
 //! Round 13: core and the HUD closed together 17 minutes into a lecture capture and

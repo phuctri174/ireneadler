@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Irene core: FastAPI + WebSocket on 127.0.0.1.
 
 Run: .venv\\Scripts\\python -m irene.app
@@ -13,6 +15,7 @@ import os
 import random
 import time
 import uuid
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -26,7 +29,7 @@ from tools import power as power_tool
 from tools import research as research_tool
 from tools import sandbox
 
-from . import calibration, chess_game, dispatch, drawing, entrances, fast, greeting, illustrate, keiko, music, openers, presence, quick, recall, sfx, skit, stt, summon, vram
+from . import calibration, chess_game, dispatch, rps, rps_stakes, drawing, entrances, fast, greeting, illustrate, keiko, modes, music, openers, presence, quick, recall, sfx, shiai, skit, songwin, strike_tuning, stt, study, summon, vram
 from . import react as cues
 from .brain import Conversation, Line, StreamingReply
 from .bridge import Bridge
@@ -92,7 +95,7 @@ CONFIG = ROOT / "config"
 LOGS = ROOT / "core" / "logs"
 # tools that take seconds: she says a cached "Let me look that up!" as one starts
 # lecture_summary: a map-reduce of several model calls (lecture_summary.py) - minutes for a long lecture
-SLOW_TOOLS = {"research", "daily_briefing", "lecture_summary"}
+SLOW_TOOLS = {"research", "daily_briefing", "lecture_summary", "lecture_research"}
 # the briefing's readings kept fresh while she is idle (tools/briefing.prefetch):
 # first this long after startup, then checked this often
 BRIEFING_PREFETCH_START_S = 90.0
@@ -152,6 +155,9 @@ class Core:
         self.presence = presence.Presence()
         # the everyday exchanges, answered from pre-rendered audio (quick.py)
         self.quick = quick.QuickReplies(self.entrances)
+        # the scripted bit after a song he taught her is named and he confirms it
+        # (songwin.py): its three lines pre-rendered, played on cue
+        self.songwin = songwin.SongWin()
         self.last_entrance: str | None = None
         self._sounds: dict = {}
         self.muted = False
@@ -177,9 +183,45 @@ class Core:
         # the HUD's recogniser
         self.keiko = keiko.Keiko()
         self._keiko_watch: asyncio.Task | None = None
+        # study mode (study.py): "go study X" - a progress bar; his swings at her (the
+        # HUD's strike events) jump it, and she complains, and learns faster
+        self.study = study.Study()
+        self._study_tick: asyncio.Task | None = None
+        self._study_notes: asyncio.Task | None = None
+        # shiai (shiai.py): a bout, first to two - rules and dice, his strikes and
+        # footwork from the HUD's thresholds
+        self.shiai = shiai.Shiai()
+        self._shiai_watch: asyncio.Task | None = None
+        # dev: the camera's strike/footwork events count (camera_events turns them off)
+        self._camera_events = True
+        # dev: a strike probe running - what the detectors fire, recorded, not acted on
+        self._probe: dict | None = None
+        # the mode guard: when the mode on last saw anything happen (his words, his
+        # strikes and footwork, a lecture's new words)
+        self._mode_touched = time.monotonic()
+        # her shouted "Hajime!" (sfx.shout over her own voice), rendered once
+        self._hajime_audio: np.ndarray | None = None
+        # the strike detector's tuning (strike_tuning.py): what the HUD was last told,
+        # and a 3-swing calibration's peaks while one is listening
+        self._strike_config: dict | None = None
+        self._calibrating: list[float] | None = None
+        # rock-paper-scissors (rps.py): his hand on the camera in game mode, her throw
+        # sealed before every shoot
+        self.rps = rps.RPS()
+        self.rps_lines = rps.Lines()
+        self._rps_clip: tuple[np.ndarray, np.ndarray, float] | None = None
+        self._rps_frames: dict[str, asyncio.Future] = {}
+        self._rps_watch: asyncio.Task | None = None
+        # a staked game's settlement lines, written by the model while he plays and
+        # checked (rps_stakes.narrate); whatever is missing at the end is a template
+        self._rps_narrations: dict[str, str | None] = {}
+        self._rps_narrating: asyncio.Task | None = None
         self._turn: asyncio.Task | None = None
         # where the current turn began in the history, so a premature one can go
         self._turn_mark: int | None = None
+        # the chess game as it was when the turn began (chess_game.committed()):
+        # a retracted turn puts it back, so its move never stays without her answer
+        self._chess_mark: dict | None = None
         # the watchdog's view of a turn: a tool running now, and the last sign of life
         self._tool_running: str | None = None
         # the model has the prompt and has not written a word yet (prefill)
@@ -198,8 +240,16 @@ class Core:
         self.bridge.handlers["open_link"] = self.on_open_link
         self.bridge.handlers["kamae"] = self.on_kamae
         self.bridge.handlers["keiko_strike"] = self.on_keiko_strike
+        self.bridge.handlers["strike_event"] = self.on_strike_event
+        self.bridge.handlers["shiai_move"] = self.on_shiai_move
+        # his mode hotkeys (Ctrl+Alt+Shift+S study mode, +M shiai): no voice at all
+        self.bridge.handlers["mode_hotkey"] = self.on_mode_hotkey
+        # his hand around "shoot", from the HUD's game-mode buffer
+        self.bridge.handlers["game_frames"] = self.on_game_frames
         # the HUD's side of a voice summon, into core.log (summon path 3-6)
         self.bridge.handlers["hud_trace"] = self.on_hud_trace
+        # the HUD's echo of every live chess board it drew: checked against the game
+        self.bridge.handlers["chess_shown"] = self.on_chess_shown
         # her window shown or hidden: shown, she listens without a wake word
         self.bridge.handlers["visibility"] = self.on_visibility
         # the HUD's own timings every 10 s: tracking, body tracking, her face
@@ -216,6 +266,10 @@ class Core:
         self.bridge.handlers["dashboard_open"] = self.dashboard.on_open
         self.bridge.handlers["dashboard_refresh"] = lambda _m: self.dashboard.push(force=True)
         self.bridge.handlers["research_recall"] = self.dashboard.recall
+        # a lecture topic's drawing, rendered by the HUD for the note (lecture_board.py)
+        from .lecture_board import RENDERS
+
+        self.bridge.handlers["board_rendered"] = RENDERS.on_rendered
         # screens-off mode (tools/power.py): the monitors dark, she still listens
         self.dark = False
         self._dark_since = 0.0
@@ -244,6 +298,13 @@ class Core:
             self.bridge.handlers["voice_heard"] = self.on_voice_heard
             self.bridge.handlers["voice_replay"] = self.on_voice_replay
             self.bridge.handlers["mic_deaf"] = self.on_mic_deaf
+            # dev only: the camera's strikes, footwork and blocks ignored while a live
+            # check sends its own - someone at the desk must not decide the bout
+            self.bridge.handlers["camera_events"] = self.on_camera_events
+            # dev only: shiai's detectors armed, everything they fire recorded and
+            # NOTHING acted on - what fires while he sits still
+            self.bridge.handlers["strike_probe"] = self.on_strike_probe
+            self.bridge.handlers["probe_stats"] = self.on_probe_stats
             # dev only: screens-off mode through its real path (enter_dark), for
             # the live check - his scripted commands are sandboxed otherwise
             self.bridge.handlers["dev_screens_off"] = lambda _m: self.enter_dark()
@@ -286,13 +347,15 @@ class Core:
         await asyncio.to_thread(self._memory_start)
         # small talk in her voice: from the cache, or rendered in the background (a
         # minute, once) - until then it goes to the model like anything else
-        self._quick_task = asyncio.create_task(asyncio.to_thread(self.quick.load_or_render, voice))
+        self._quick_task = asyncio.create_task(asyncio.to_thread(self._render_ahead, voice))
         # held so the task can't be garbage-collected mid-flight
         self._warm_task = asyncio.create_task(self._warm_llm())
         self._searx_task = asyncio.create_task(self._warm_search())
         self._idle_task = asyncio.create_task(self._watch_idle())
         self._watchdog_task = asyncio.create_task(self._watchdog())
         self._lag_task = asyncio.create_task(self._watch_loop_lag())
+        # no mode can get stuck: idle ones end, and the mode on is always on screen
+        self._mode_guard_task = asyncio.create_task(self._mode_guard())
         # the VRAM spill guard: reloads the model when it has spilled (vram.py)
         self.vram = vram.VramGuard(self.llm, self._idle_for_reload)
         if self.lectures.active:
@@ -370,6 +433,11 @@ class Core:
         input, nothing opened - only the system audio listened to - so any origin may."""
         action = str(message.get("action", "toggle"))
         log.info("lecture: %s asked (%s)", action, message.get("_origin", "?"))
+        mode = self.active_mode()
+        if mode not in (None, "lecture") and (action == "start" or (action == "toggle" and not self.lectures.active)):
+            # his order: the mode on ends first (modes.py - the lock never stops him)
+            log.info("lecture hotkey: %s ends first", mode)
+            await self._end_mode(mode)
         if action == "toggle":
             await self.lectures.toggle("hotkey")
         elif action == "start":
@@ -1008,8 +1076,9 @@ class Core:
 
     async def on_hud_trace(self, message: dict) -> None:
         step = str(message.get("step", ""))[:200]
-        # the board reports what it drew (an illustrated answer); the rest is the summon path
-        log.info("hud %s", step) if step.startswith(("board", "panel", "skit")) else log.info("summon path %s", step)
+        # the board reports what it drew (an illustrated answer), a capture its framing check;
+        # the rest is the summon path
+        log.info("hud %s", step) if step.startswith(("board", "panel", "skit", "capture")) else log.info("summon path %s", step)
 
     async def on_voice_replay(self, message: dict) -> None:
         """Dev only: one of his saved voice turns (voice_data/turns/<day>/<id>.wav)
@@ -1024,6 +1093,51 @@ class Core:
         audio, _ = sf.read(path, dtype="float32")
         log.info("voice replay: %s (%.1f s)", name, len(audio) / 16000)
         self.voice.mic.replay(audio)
+
+    async def on_camera_events(self, message: dict) -> None:
+        """Dev only: the HUD's (his camera's) strike, block and footwork events off or
+        back on. A script's own events still count."""
+        self._camera_events = bool(message.get("value", True))
+        log.info("camera events %s (dev)", "on" if self._camera_events else "ignored")
+
+    def _from_camera_ignored(self, message: dict) -> bool:
+        if self._probe is not None and message.get("_origin") == "hud":
+            # a probe is running: recorded, never acted on
+            self._probe["events"].append({"t": round(time.monotonic() - self._probe["t0"], 3),
+                                          **{k: v for k, v in message.items() if not k.startswith("_")}})
+            return True
+        return not self._camera_events and message.get("_origin") == "hud"
+
+    async def on_probe_stats(self, message: dict) -> None:
+        if self._probe is not None:
+            self._probe["stats"].append({"t": round(time.monotonic() - self._probe["t0"], 3), **(message.get("stats") or {})})
+
+    async def on_strike_probe(self, message: dict) -> None:
+        """Dev only: shiai's detectors on with shiai's own tuning (or `tuning` to try
+        another), for `seconds`; every event and a second-by-second body summary
+        recorded, none acted on; the record sent back and kept in core/logs."""
+        seconds = max(5.0, min(120.0, float(message.get("seconds") or 30)))
+        config = strike_tuning.tuning(moves=True)
+        if config is None:
+            await self.bridge.send({"type": "strike_probe_result", "error": "no strike calibration"})
+            return
+        config = {**config, "block": shiai.block_tuning(config["strikes"]), "men": shiai.men_tuning(config["strikes"]), "probe": True}
+        self._probe = {"t0": time.monotonic(), "events": [], "stats": [], "config": config}
+        log.info("strike probe (dev): %.0f s, config %s", seconds, config)
+        self._strike_config = None
+        await self.bridge.send({"type": "strike_events", "config": config})
+        try:
+            await asyncio.sleep(seconds)
+        finally:
+            record, self._probe = self._probe, None
+            await self.bridge.send({"type": "strike_events", "config": None})
+            self._strike_config = None
+            await self._sync_strike_events()
+        record.pop("t0", None)
+        path = LOGS / f"strike_probe-{time.strftime('%Y%m%d-%H%M%S')}.json"
+        path.write_text(json.dumps(record, indent=1), encoding="utf-8")
+        log.info("strike probe (dev): %d events in %.0f s -> %s", len(record["events"]), seconds, path.name)
+        await self.bridge.send({"type": "strike_probe_result", "path": str(path), **record})
 
     async def on_mic_deaf(self, message: dict) -> None:
         """Dev only: the mic stops acting on anything (a live check in a room where a
@@ -1105,6 +1219,7 @@ class Core:
             # a take is being filmed: nothing but the script speaks (abort it first)
             log.info("command while skit %s runs - ignored: %r", self.skit.skit.name if self.skit.skit else "?", text[:80])
             return
+        self._mode_touched = time.monotonic()
         # his command (the HUD, the mic) acts for real; a test script's never
         # reaches his apps (tools/sandbox.py). The turn task inherits this.
         sandbox.enter(message.get("_origin"), bool(message.get("real_launch")))
@@ -1122,6 +1237,7 @@ class Core:
             await self.retract_turn(settle=False)
         # a new command cuts off whatever she was still saying or thinking
         self._turn_mark = len(self.conversation.history)
+        self._chess_mark = self.chess.committed()
         if self._turn and not self._turn.done():
             self._turn.cancel()
             if self.speaker:
@@ -1129,24 +1245,207 @@ class Core:
             for future in self._confirms.values():
                 if not future.done():
                     future.set_result(False)
-        # (the evals take the same route: dispatch.py)
+        # (the evals take the same route: dispatch.py). Mode commands are matched
+        # here, in code, before the fast path or the model sees the words - with
+        # Whisper's known mishearings of them put back first (modes.py)
+        entry = modes.heard(text)
+        # his orders first: an exit or a switch out of the mode on always runs. Then a
+        # mode on owns the display until he ends it (modes.py): its own commands are
+        # its own, an explicit request for what it refuses is her brush-off, and
+        # anything else is answered with nothing on screen changing
+        mode = self.active_mode()
+        lock = modes.lock(mode)
+        # her last reply named a song he taught her, and this is his very next message:
+        # "yes, it's correct" starts the bit, "hey, don't say that" finishes it
+        # (songwin.py) - only ever then; any other message and the window is gone
+        named, self.conversation.named = self.conversation.named, None
+        bit = self.songwin.heard(text, named) if mode is None else None
+        if bit is not None:
+            self._turn = asyncio.create_task(self._respond_songwin(text, bit))
+            return
         who, found = dispatch.route(
-            keiko=lambda: keiko.command(text, self.keiko.active),
-            chess=lambda: self.chess_claims(text),
-            quick=lambda: self.quick_answer(text),
+            text,
+            {
+                dispatch.STRIKES: lambda s, on: strike_tuning.command(modes.heard(s)),
+                dispatch.SHIAI: lambda s, on: shiai.command(modes.heard(s), on),
+                dispatch.KEIKO: lambda s, on: keiko.command(modes.heard(s), on),
+                dispatch.STUDY: lambda s, on: study.command(modes.heard(s), on),
+                dispatch.RPS: lambda s, on: rps.command(s, on, self.rps.awaiting_now()),
+                dispatch.CHESS: self.chess_claims,
+            },
+            quick=self.quick_answer,
+            mode=mode,
+            blocked=lambda s: modes.blocked(s, lock) if lock else None,
         )
+        if who != dispatch.MODEL and entry != text.strip():
+            log.info("mode command heard as %r (said %r)", entry, text)
         if who == dispatch.KEIKO:
             self._turn = asyncio.create_task(self._respond_keiko(text, found))
+            return
+        if who == dispatch.BLOCKED:
+            self._turn = asyncio.create_task(self._respond_blocked(text, mode, found))
             return
         # (after the greeting read how long it had been)
         if message.get("_origin") in sandbox.HIS:
             self.presence.heard()
-        if who == dispatch.CHESS:
-            self._turn = asyncio.create_task(self._respond_chess(text, found))
-        elif who == dispatch.QUICK:
-            self._turn = asyncio.create_task(self._respond_quick(text, found, time.perf_counter()))
+        if who == dispatch.EXIT:
+            self._turn = asyncio.create_task(self._respond_exit(text, found))
+        elif who == dispatch.SWITCH:
+            self._turn = asyncio.create_task(self._respond_switch(text, found))
         else:
-            self._turn = asyncio.create_task(self._respond(text))
+            self._turn = asyncio.create_task(self._answer(text, who, found))
+
+    def _answer(self, text: str, who: str, found: object):
+        """The turn for whoever dispatch.route said answers (a mode, a quick line, the model)."""
+        if who == dispatch.STRIKES:
+            return self._respond_strikes(text)
+        if who == dispatch.SHIAI:
+            return self._respond_shiai(text, found)
+        if who == dispatch.KEIKO:
+            return self._respond_keiko(text, found)
+        if who == dispatch.STUDY:
+            return self._respond_study(text, found)
+        if who == dispatch.RPS:
+            return self._respond_rps(text, found)
+        if who == dispatch.CHESS:
+            return self._respond_chess(text, found)
+        if who == dispatch.QUICK:
+            return self._held(self._respond_quick(text, found, time.perf_counter()))
+        return self._respond(text)
+
+    async def _respond_exit(self, text: str, mode: str) -> None:
+        """"Cancel", "quit this", "stop the match": the mode on ends, with its own goodbye."""
+        log.info("mode exit (%s): %r", mode, text[:80])
+        if mode == "chess":
+            await self._respond_chess(text, "stop")
+        elif mode == "shiai":
+            await self._respond_shiai(text, "stop")
+        elif mode == "keiko":
+            await self._respond_keiko(text, "stop")
+        elif mode == "study":
+            await self._respond_study(text, ("stop", None))
+        elif mode == "rps":
+            await self._respond_rps(text, "exit")
+        elif mode == "lecture":
+            await self.bridge.transcript("user", text)
+            await self.lectures.toggle("voice")
+            await self.bridge.state("listening")
+        else:
+            await self.bridge.transcript("user", text)
+            await self._end_mode(mode)
+            await self._study_say("Okay - calibration off.", "shrug")
+            await self.bridge.emotion("neutral")
+            await self.bridge.state("listening")
+
+    async def _respond_switch(self, text: str, switch: "dispatch.Switch") -> None:
+        """"Cancel the chess match then learn tenouchi", or another mode's start said
+        mid-mode: the mode on ends quietly, and the rest is answered as if nothing had
+        been on - one utterance, one turn."""
+        log.info("mode switch: %s -> %s %r (said %r)", switch.left, switch.who, switch.found, text[:80])
+        await self._end_mode(switch.left)
+        if switch.who in (dispatch.MODEL, dispatch.QUICK):
+            # the model hears what is left to answer: the exit was done in code
+            await self._answer(switch.said, switch.who, switch.found)
+        else:
+            await self._answer(text, switch.who, switch.found)
+
+    async def _end_mode_said(self, mode: str, line: str) -> None:
+        """A mode off, and her saying so (the guard, a hotkey clearing it)."""
+        await self._end_mode(mode)
+        await self._study_say(line.format(mode=modes.SHOWN.get(mode, mode).lower()), "shrug")
+        await self.bridge.emotion("neutral")
+        await self.bridge.state("listening")
+
+    async def _mode_guard(self) -> None:
+        """Always running: the mode on shown on the dashboard (or none), and any mode
+        with nothing happening in it for modes.IDLE_LIMIT_S ended - so none can get
+        stuck, even one whose own watchdog has died."""
+        shown: object = ()
+        words = None
+        while True:
+            await asyncio.sleep(1.0)
+            try:
+                mode = self.active_mode()
+                if mode != shown:
+                    shown = mode
+                    self._mode_touched = time.monotonic()
+                    self.dashboard.state["mode"] = modes.SHOWN.get(mode) if mode else None
+                    await self.dashboard.push()
+                    log.info("mode now: %s", mode or "none")
+                if mode is None:
+                    continue
+                if mode == "lecture":
+                    # a capture is busy while the lecture still has words coming
+                    now_words = (self.lectures.status() or {}).get("words")
+                    if now_words != words:
+                        words = now_words
+                        self._mode_touched = time.monotonic()
+                idle = time.monotonic() - self._mode_touched
+                busy = self._turn is not None and not self._turn.done()
+                if idle > modes.IDLE_LIMIT_S.get(mode, 600.0) and not busy:
+                    log.warning("mode guard: %s idle %.0f s - ended", mode, idle)
+                    self._mode_touched = time.monotonic()
+                    self._turn = asyncio.create_task(self._end_mode_said(mode, "Nothing's happened for a while - I've ended {mode}."))
+            except Exception:  # never let the guard die
+                log.exception("mode guard")
+
+    async def _end_mode(self, mode: str | None) -> None:
+        """A mode off, without a word: its scene down, its detectors off."""
+        if mode == "chess" and self.chess.active:
+            await self.chess.stop()
+            stt.context_terms("chess", None)
+            await self.bridge.send({"type": "draw", "value": None})
+        elif mode == "shiai" and self.shiai.active:
+            self.shiai.stop()
+            await self.bridge.send({"type": "shiai", "action": "end"})
+        elif mode == "keiko" and self.keiko.active:
+            self.keiko.stop()
+            await self.bridge.send({"type": "keiko", "action": "end"})
+        elif mode == "study" and self.study.active:
+            self.study.stop()
+            await self.bridge.send(self._study_hud("end"))
+        elif mode == "rps" and self.rps.active:
+            await self._rps_end("switch", quiet=True)
+        elif mode == "lecture" and self.lectures.active:
+            await self.lectures.stop("switch")
+        elif mode == "strikes":
+            self._calibrating = None
+        await self._sync_strike_events()
+
+    def active_mode(self) -> str | None:
+        """The mode that owns the display now (modes.MODES), or None."""
+        on = {
+            "strikes": self._calibrating is not None, "shiai": self.shiai.active, "keiko": self.keiko.active,
+            "study": self.study.active, "rps": self.rps.active, "chess": self.chess.active, "lecture": self.lectures.active,
+        }
+        return next((m for m in modes.MODES if on[m]), None)
+
+    async def _held(self, turn) -> None:
+        """A turn run with the display held by the mode on, if any (modes.HOLD): a quick
+        line's scene is not drawn over the game."""
+        hold = modes.HOLD.set(self.active_mode())
+        try:
+            await turn
+        finally:
+            modes.HOLD.reset(hold)
+
+    async def _respond_blocked(self, text: str, mode: str | None, found: object) -> None:
+        """Something the mode on refuses (another mode, research, a drawing, the
+        panel): her short brush-off, in character - nothing on screen changes."""
+        mode = mode or self.active_mode() or "chess"
+        hold = modes.HOLD.set(mode)
+        try:
+            line, cue = self.conversation.brush_off(mode)
+            log.info("mode lock (%s): %r refused (%s) - %r", mode, text[:80], found, line)
+            await self.bridge.transcript("user", text)
+            if mode == "study":
+                self.study.talking()
+            await self._study_say(line, cue)
+            self.conversation.quick_exchange(text, line, cue)
+            await self.bridge.emotion("neutral")
+            await self.bridge.state("listening")
+        finally:
+            modes.HOLD.reset(hold)
 
     async def retract_turn(self, settle: bool = True, why: str = "the full transcript differs") -> None:
         """The reply begun on his first words was premature (the speculative start):
@@ -1165,9 +1464,18 @@ class Core:
         if self._turn_mark is not None:
             del self.conversation.history[self._turn_mark :]
             self._turn_mark = None
+        if self._chess_mark is not None:
+            # a chess move the early turn made goes with it (live 2026-10-15: the early
+            # "Quid 2 E2" played Qe2, was retracted mid-reply, and the full transcript
+            # was then judged with Black to move - "illegal", and she never answered)
+            before, after = self._chess_mark["board"], self.chess.board
+            if before.move_stack != after.move_stack or self._chess_mark["active"] != self.chess.active:
+                self.chess.restore(self._chess_mark)
+                log.info("chess: the retracted turn's move undone - back to ply %d (%s)", len(before.move_stack), before.fen())
+            self._chess_mark = None
         log.info("early turn retracted (%s)", why)
         if settle:
-            await self.bridge.send({"type": "draw", "value": None})
+            await self.bridge.send({"type": "draw", "value": self.idle_board()})
             await self.bridge.emotion("neutral")
             await self.bridge.state("listening")
 
@@ -1206,6 +1514,80 @@ class Core:
             usual_hour=seen.usual_hour, topic=seen.topic, topic_at=seen.topic_at, timer=timer,
             city=getattr(HOME, "city", "") or "town",
         )
+
+    def _render_ahead(self, voice) -> None:
+        """Her pre-rendered lines, one engine call at a time: small talk, then the song-win bit."""
+        self.quick.load_or_render(voice)
+        try:
+            self.songwin.load_or_render(voice)
+        except Exception:  # noqa: BLE001 - the bit says its lines live instead
+            log.exception("song win lines could not be rendered")
+
+    async def _respond_songwin(self, text: str, which: str) -> None:
+        """The song-win bit (songwin.py): his words, then her pre-rendered line(s) with
+        their faces on the clip's own clock - every gap from config/songwin.yaml, read now."""
+        await self.bridge.transcript("user", text)
+        bit = self.songwin
+        pace = songwin.pace()
+        if bit.stale(pace) and self.speaker is not None and not getattr(self, "_songwin_rerender", None):
+            # the config's speeds changed: rendered again in the background, for next time
+            log.info("song win: speeds changed in config - rendering again for next time")
+            voice = self.speaker.voice if hasattr(self.speaker, "voice") else None
+            if voice is not None:
+                self._songwin_rerender = asyncio.ensure_future(asyncio.to_thread(bit.load_or_render, voice, pace))
+                self._songwin_rerender.add_done_callback(lambda _: setattr(self, "_songwin_rerender", None))
+        if which == "gloat":
+            lines = [songwin.GLOAT]
+            gloat = bit.audio.get(songwin.GLOAT.text)
+            audio, marks_at = songwin.gloat_clip(gloat, pace) if gloat is not None else (None, [pace.beat_before_gloat_ms / 1000])
+        else:
+            lines = [songwin.REALLY, songwin.FUGGING]
+            really, fugging = bit.audio.get(songwin.REALLY.text), bit.audio.get(songwin.FUGGING.text)
+            if really is not None and fugging is not None:
+                audio, marks_at = songwin.held(really, fugging, pace)
+            else:
+                audio, marks_at = None, [pace.beat_before_really_ms / 1000, (pace.beat_before_really_ms + 800 + pace.beat_after_really_ms + pace.hold_ms + pace.beat_before_fugging_ms) / 1000]
+        said = " ".join(line.text for line in lines)
+        self.voice.heard_her(said)
+        await self.bridge.send({"type": "draw", "value": self.idle_board()})
+        self.conversation.quick_exchange(text, said, lines[-1].cue)
+        self.last_react = lines[-1].cue
+        loop = asyncio.get_running_loop()
+
+        def show(k: int) -> None:
+            # her face and her words, together, as each line starts - the command bar
+            # shows a reply's text at once: "FUGGING EASY" there before the pause would
+            # give the joke away
+            self.bridge.send_threadsafe({"type": "emotion", "value": lines[k].cue})
+            self.bridge.send_threadsafe({"type": "reply", "display": "", "speak": " ".join(line.text for line in lines[: k + 1])})
+            loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self.bridge.transcript("irene", lines[k].text)))
+            log.info("song win: %r with %s at %.2f s", lines[k].text, lines[k].cue, time.perf_counter() - started)
+
+        started = time.perf_counter()
+        if self.muted or not self.speaker:
+            for k, at in enumerate(marks_at):
+                loop.call_later(at, show, k)
+            await asyncio.sleep(marks_at[-1] + 1.2)
+        elif audio is None or (self.speaker and bit.engine != self.speaker.engine):
+            # not rendered (yet): said live - the timing is not guaranteed then
+            log.warning("song win: lines not rendered for %s - said live", self.speaker.engine if self.speaker else "?")
+            for k, line in enumerate(lines):
+                await asyncio.sleep((pace.beat_after_really_ms + pace.hold_ms + pace.beat_before_fugging_ms) / 1000 if k else marks_at[0])
+                show(k)
+                await self.say(line.text, after="speaking")
+        else:
+            finished: asyncio.Future[bool] = loop.create_future()
+            await self.bridge.state("speaking")
+            self.speaker.play(audio, block_levels(audio), marks=[(at, lambda k=k: show(k)) for k, at in enumerate(marks_at)],
+                              done=lambda ok: loop.call_soon_threadsafe(lambda: finished.done() or finished.set_result(ok)))
+            log.info("speech queued (song win %s): %r - %.1f s", which, said, len(audio) / sfx.SR)
+            if not await finished:
+                log.warning("song win %s cut off", which)
+                return
+        # the last face holds a moment past the last word, then she settles
+        await self.bridge.state("listening")
+        await asyncio.sleep(pace.face_after_ms / 1000)
+        await self.bridge.emotion("neutral")
 
     def quick_answer(self, text: str) -> quick.Answer | None:
         """Her pre-rendered answer to an everyday exchange, or None for the model.
@@ -1310,22 +1692,442 @@ class Core:
                 await self.bridge.emotion("neutral")
                 await self.bridge.state("listening")
 
+    # -- study mode (study.py) ------------------------------------------------------------
+
+    def _study_hud(self, action: str, **extra) -> dict:
+        """The HUD's study message: the bar is `progress` now, rising at `rate` per second."""
+        s = self.study
+        return {"type": "study", "action": action, "subject": s.subject, "progress": round(s.progress(), 4),
+                "rate": s.rate, "hits": s.hits, **extra}
+
+    async def _respond_study(self, text: str, found: tuple) -> None:
+        """"Irene, go study the Sicilian": head down, the bar starts filling. "Stop": she
+        closes the book and says how far she got."""
+        kind, subject = found
+        await self.bridge.transcript("user", text)
+        if kind == "start":
+            if self.keiko.active:
+                self.keiko.stop()
+                await self.bridge.send({"type": "keiko", "action": "end"})
+            if self.chess.active:
+                await self.chess.stop()
+                stt.context_terms("chess", None)
+            if self.shiai.active:
+                self.shiai.stop()
+                await self.bridge.send({"type": "shiai", "action": "end"})
+            # his hits need a threshold: the first time, three swings measure it
+            if strike_tuning.threshold() is None:
+                await self._calibrate_strikes(first=True)
+            answer = self.study.start(subject)
+            line = answer.line
+            await self.bridge.send(self._study_hud("start"))
+            await self._sync_strike_events()
+            if self._study_notes and not self._study_notes.done():
+                self._study_notes.cancel()
+            self._study_notes = asyncio.create_task(self._study_write_notes(subject))
+            if self._study_tick is None or self._study_tick.done():
+                self._study_tick = asyncio.create_task(self._study_ticker())
+        else:
+            answer = self.study.stop()
+            line = answer.line
+            await self.bridge.send(self._study_hud("end"))
+            await self._sync_strike_events()
+        log.info("study %s %r: %r", kind, subject or self.study.subject, line)
+        await self._study_say(line, answer.cue, answer.sounds)
+        self.conversation.quick_exchange(text, line, answer.cue)
+        await self.bridge.emotion("neutral")
+        await self.bridge.state("listening")
+
+    async def _study_write_notes(self, subject: str) -> None:
+        """What she is learning, written by the model while the bar fills: her mutters,
+        the summary, and the fumble for a finish that was rushed."""
+        started = time.perf_counter()
+        try:
+            raw = await self.llm.chat([{"role": "user", "content": study.notes_prompt(subject)}], temperature=0.5)
+        except Exception as error:  # noqa: BLE001 - no notes: she falls back to plain lines
+            log.warning("study notes for %r failed: %s", subject, error)
+            return
+        notes = study.parse_notes(raw)
+        if self.study.subject == subject:
+            self.study.notes = notes
+        log.info("study notes for %r in %.1f s: %d mutters, summary %s, fumble %s", subject, time.perf_counter() - started,
+                 len(notes.mutters), "yes" if notes.summary else "NO", "yes" if notes.wrong and notes.right else "no")
+
+    async def _sync_strike_events(self) -> None:
+        """The HUD's strike detector on with the tuning the mode needs (strike_tuning.py)
+        - a calibration's low floor, shiai's strikes and footwork, study mode's strikes -
+        or off. Sent only when it changes."""
+        if self._calibrating is not None:
+            config = strike_tuning.calibration_tuning()
+        elif self.shiai.active:
+            config = strike_tuning.tuning(moves=True)
+            if config is not None:
+                # shiai's own reads beside the strike: a tsuki, a block
+                config = {**config, "block": shiai.block_tuning(config["strikes"]), "men": shiai.men_tuning(config["strikes"])}
+        elif self.study.active:
+            config = strike_tuning.tuning()
+        else:
+            config = None
+        if config != self._strike_config:
+            self._strike_config = config
+            await self.bridge.send({"type": "strike_events", "config": config})
+
+    async def _calibrate_strikes(self, first: bool = False) -> bool:
+        """"Hit me three times": the detector on at a low floor for a few seconds, his
+        three fastest swings kept, the threshold set from them. True if one was saved."""
+        settings = strike_tuning.settings()
+        await self._study_say(random.choice(strike_tuning.LINES["first" if first else "ask"]), strike_tuning.CUES["ask"])
+        self._calibrating = []
+        await self._sync_strike_events()
+        try:
+            await asyncio.sleep(float(settings["calibration"]["seconds"]))
+        except asyncio.CancelledError:
+            # cut off ("cancel", another mode): never left measuring
+            self._calibrating = None
+            raise
+        peaks, self._calibrating = self._calibrating, None
+        await self._sync_strike_events()
+        result = strike_tuning.calibrate(peaks)
+        if result.ok:
+            strike_tuning.save(result)
+        log.info("strike calibration: peaks %s -> %s", [round(x, 1) for x in peaks],
+                 f"median {result.median}, threshold {result.threshold} (saved)" if result.ok else f"not saved ({result.why or 'nothing felt'})")
+        text, cue = strike_tuning.line(result, random)
+        await self._study_say(text, cue)
+        return result.ok
+
+    async def _respond_strikes(self, text: str) -> None:
+        """"Irene, calibrate my strikes": three swings, measured, any time."""
+        await self.bridge.transcript("user", text)
+        await self._calibrate_strikes()
+        await self._sync_strike_events()
+        await self.bridge.emotion("neutral")
+        await self.bridge.state("listening")
+
+    async def on_strike_event(self, message: dict) -> None:
+        """He struck at her (the HUD's threshold detector, binary). Calibrating: one of
+        his three swings. In shiai: her answer. In study mode: a hit - the bar jumps,
+        she complains. In -Dev its peak shows on her face against the threshold."""
+        if self._from_camera_ignored(message):
+            return
+        self._mode_touched = time.monotonic()
+        peak = float(message.get("peak") or 0)
+        if DEV:
+            at = None if self._calibrating is not None else strike_tuning.threshold()
+            await self.bridge.send({"type": "strike_readout", "text": f"{peak:.1f}" + (f"/{at:.1f}" if at else "")})
+        if self._calibrating is not None:
+            self._calibrating.append(peak)
+            log.info("strike calibration swing: peak %.1f (%s wrist)", peak, message.get("wrist"))
+            return
+        if self.shiai.active:
+            answer = self.shiai.strike()
+            log.info("shiai: his strike (peak %.1f) -> %s, %d-%d", peak, answer.action if answer else "ignored", self.shiai.you, self.shiai.her)
+            if answer:
+                self._shiai_go(answer)
+            return
+        answer = self.study.hit()
+        log.info("strike event (%s wrist, peak %.1f, stop %s ms) -> %s", message.get("wrist"), peak, message.get("stopMs"),
+                 f"study hit {answer.hits} ({answer.tier}), bar {answer.progress:.0%}" if answer else "ignored")
+        if answer is None:
+            # nothing wants strikes any more (a mode ended): the detector goes off
+            await self._sync_strike_events()
+            return
+        if self._turn and not self._turn.done():
+            self._turn.cancel()
+            if self.speaker:
+                self.speaker.stop()
+        self._turn = asyncio.create_task(self._study_hit_turn(answer))
+
+    async def _study_hit_turn(self, answer: "study.Answer") -> None:
+        await self.bridge.send(self._study_hud("hit", tier=answer.tier))
+        await self._study_say(answer.line, answer.cue, answer.sounds)
+        await self.bridge.emotion("neutral")
+        await self.bridge.state("listening")
+
+    async def _study_say(self, line: str, cue: str | None, sounds: tuple[str, ...] = ()) -> None:
+        """Her sounds (the bonk), then her line with its face."""
+        for name in sounds:
+            if self.speaker and not self.muted:
+                await self._play_sound(name)
+        react = cues.resolve(cue) if cue else None
+        if self.speaker:
+            await self.say(line, react=react, after="speaking")
+        else:
+            await self.bridge.transcript("irene", line)
+            for m in self.react_messages(react, text=line):
+                await self.bridge.send(m)
+        await self.bridge.send({"type": "reply", "display": "", "speak": line})
+
+    async def _study_mutter_turn(self, line: str, cue: str) -> None:
+        log.info("study mutter: %r", line)
+        await self._study_say(line, cue)
+        await self.bridge.emotion("neutral")
+        await self.bridge.state("listening")
+
+    async def _study_ticker(self) -> None:
+        """While she studies: a mutter now and then, and the payoff when the bar fills -
+        never on top of something she is still saying."""
+        while self.study.active:
+            await asyncio.sleep(0.25)
+            busy = self._turn is not None and not self._turn.done()
+            if self.study.expired():
+                answer = self.study.stop()
+                await self.bridge.send(self._study_hud("end"))
+                await self._study_say(answer.line, answer.cue)
+                break
+            if busy:
+                self.study.talking()
+                continue
+            if self.study.finished():
+                self._turn = asyncio.create_task(self._study_finish())
+                break
+            line = self.study.mutter()
+            if line:
+                self._turn = asyncio.create_task(self._study_mutter_turn(line, self.study.mutter_cue()))
+        await self._sync_strike_events()
+
+    async def _respond_shiai(self, text: str, kind: str) -> None:
+        """"Irene, let's do shiai": the dojo, her in bogu, first to two. "Stop": she
+        calls it and bows."""
+        await self.bridge.transcript("user", text)
+        if kind == "start":
+            if self.keiko.active:
+                self.keiko.stop()
+                await self.bridge.send({"type": "keiko", "action": "end"})
+            if self.study.active:
+                self.study.stop()
+                await self.bridge.send(self._study_hud("end"))
+            if self.chess.active:
+                await self.chess.stop()
+                stt.context_terms("chess", None)
+            await self.bridge.send({"type": "shiai", "action": "start"})
+            if strike_tuning.threshold() is None and not await self._calibrate_strikes(first=True):
+                await self.bridge.send({"type": "shiai", "action": "end"})
+                await self.bridge.emotion("neutral")
+                await self.bridge.state("listening")
+                return
+            await self._hajime_shout()  # rendered now, so zero is never kept waiting
+            answer = self.shiai.start()
+            await self._sync_strike_events()
+            if self._shiai_watch is None or self._shiai_watch.done():
+                self._shiai_watch = asyncio.create_task(self._shiai_watchdog())
+        else:
+            answer = self.shiai.stop()
+        log.info("shiai %s: %r", kind, answer.line)
+        await self._shiai_answer(answer)
+        self.conversation.quick_exchange(text, answer.line, answer.cue)
+        if kind == "start" and self.shiai.active:
+            # nothing counts until the countdown's hajime
+            try:
+                await self._shiai_hajime(shiai.beat()["startCountdownS"])
+            finally:
+                if self.shiai.active and self.shiai.paused:
+                    self.shiai.hajime()
+        await self.bridge.emotion("neutral")
+        await self.bridge.state("listening")
+
+    async def _shiai_answer(self, answer: "shiai.Answer") -> None:
+        """Her move on the dojo scene (a keiko action), her sounds and line - and the
+        bout's end when it is over. A point is on the board's scoreboard first, the
+        moment it is called, before she says it; then the match's beat: a pause, both
+        back to the start lines, "Hajime!" (shiai.py)."""
+        for message in answer.before:
+            # her cut landing, before the call
+            await self.bridge.send(message)
+            await asyncio.sleep(0.45)
+        if answer.score is not None:
+            you, her = answer.score
+            await self.bridge.send({"type": "shiai", "action": "score", "you": you, "her": her})
+        hud = answer.hud()
+        if hud is not None:
+            await self.bridge.send(hud)
+        if answer.reset and answer.line:
+            # the point's beat runs on while she says it: the reset is not held back
+            # by her line (live, waiting for it put 6-8 s between the call and the reset)
+            await self._shiai_reset(answer.reset, asyncio.ensure_future(self._study_say(answer.line, answer.cue, answer.sounds)))
+            return
+        if answer.line:
+            await self._study_say(answer.line, answer.cue, answer.sounds)
+        else:
+            for name in answer.sounds:
+                if self.speaker and not self.muted:
+                    await self._play_sound(name)
+        if answer.over:
+            await self.bridge.send({"type": "shiai", "action": "end"})
+            await self._sync_strike_events()
+
+    async def _shiai_reset(self, label: str, speech: asyncio.Future) -> None:
+        """After a called point (`speech`: her saying it): the pause (config/shiai.json,
+        from the call to hajime), both back to the start lines (on screen) inside it,
+        and "Hajime!" once it is over and she has finished her line. Nothing counts
+        until then (Shiai.paused: every strike, move and attack is refused in code)."""
+        called = time.monotonic()
+        beat = shiai.beat()
+        try:
+            await asyncio.sleep(beat["resetAfterS"])
+            await self.bridge.send({"type": "keiko", "action": "reset", "label": label, "ms": 15000})
+            # the rest of the pause counted down on screen, under the end of her line -
+            # hajime pauseS after the call, never cutting her off
+            count = max(0.0, beat["pauseS"] - (time.monotonic() - called))
+            await self.bridge.send({"type": "keiko", "action": "countdown", "ms": int(count * 1000), "label": label})
+            await asyncio.gather(asyncio.sleep(count), speech)
+            log.info("shiai: hajime (%s), %d-%d, %.1f s after the call", label, self.shiai.you, self.shiai.her, time.monotonic() - called)
+            await self._shiai_hajime(0.0)
+        finally:
+            if not speech.done():
+                speech.cancel()
+            if self.shiai.active and self.shiai.paused:
+                # cut off mid-beat (he said something): play is never left frozen
+                self.shiai.hajime()
+
+    async def _hajime_shout(self) -> np.ndarray | None:
+        """Her "Hajime!" as a kiai: her own voice, made a shout (sfx.shout), rendered
+        once - None without a voice."""
+        if self._hajime_audio is None and self.speaker is not None:
+            voice = await asyncio.to_thread(self.speaker.synthesize, "Hajime!", 1.25)
+            self._hajime_audio = (0.95 * sfx.shout(voice, np.random.default_rng(7))).astype(np.float32)
+        return self._hajime_audio
+
+    async def _shiai_hajime(self, seconds: float, label: str | None = None) -> None:
+        """The start signal: a visible countdown of `seconds` (and what the point is, after
+        a reset), then "Hajime!" on screen and shouted - and play begins."""
+        if seconds > 0:
+            message = {"type": "keiko", "action": "countdown", "ms": int(seconds * 1000)}
+            if label:
+                message["label"] = label
+            await self.bridge.send(message)
+            await asyncio.sleep(seconds)
+        go = self.shiai.hajime()
+        await self.bridge.send(go.hud())
+        react = cues.resolve(go.cue) if go.cue else None
+        await self.bridge.transcript("irene", go.line)
+        for m in self.react_messages(react, text=go.line):
+            await self.bridge.send(m)
+        audio = await self._hajime_shout() if self.speaker and not self.muted else None
+        if audio is not None:
+            loop = asyncio.get_running_loop()
+            finished: asyncio.Future[bool] = loop.create_future()
+            self.speaker.play(audio, block_levels(audio), done=lambda ok: loop.call_soon_threadsafe(lambda: finished.done() or finished.set_result(ok)))
+            await finished
+
+    def _shiai_go(self, answer: "shiai.Answer") -> None:
+        """Her answer now: it cuts off whatever she was still saying."""
+        if self._turn and not self._turn.done():
+            self._turn.cancel()
+            if self.speaker:
+                self.speaker.stop()
+        self._turn = asyncio.create_task(self._shiai_turn(answer))
+
+    async def _shiai_turn(self, answer: "shiai.Answer") -> None:
+        log.info("shiai: %s %r (%d-%d)", answer.action, answer.line, self.shiai.you, self.shiai.her)
+        await self._shiai_answer(answer)
+        await self.bridge.emotion("neutral")
+        await self.bridge.state("listening")
+
+    async def on_mode_hotkey(self, message: dict) -> None:
+        """Ctrl+Alt+Shift+S / +M from the HUD: study mode or shiai on (or off, if it is
+        on) without a word - a transcription can never block it. Study mode takes the
+        last subject, or the Sicilian."""
+        mode = str(message.get("mode", ""))
+        if self._turn and not self._turn.done():
+            self._turn.cancel()
+            if self.speaker:
+                self.speaker.stop()
+        log.info("mode hotkey: %s (%s now)", mode, "on" if (self.shiai.active if mode == "shiai" else self.study.active) else "off")
+        on = self.active_mode()
+        if on is not None and on != mode:
+            # a mode hotkey always clears the mode on, whatever it is: press again to start
+            log.info("mode hotkey: %s cleared", on)
+            self._turn = asyncio.create_task(self._end_mode_said(on, "Okay - {mode} off."))
+            return
+        if mode == "shiai":
+            said = "(hotkey) yame" if self.shiai.active else "(hotkey) shiai"
+            self._turn = asyncio.create_task(self._respond_shiai(said, "stop" if self.shiai.active else "start"))
+        elif mode == "study":
+            if self.study.active:
+                self._turn = asyncio.create_task(self._respond_study("(hotkey) stop", ("stop", None)))
+            else:
+                subject = self.study.subject or study.HOTKEY_SUBJECT
+                self._turn = asyncio.create_task(self._respond_study(f"(hotkey) study {subject}", ("start", subject)))
+
+    async def on_shiai_move(self, message: dict) -> None:
+        """His footwork and guard (the HUD's shoulders and wrists): sets up a strike,
+        slips her attack, or blocks it."""
+        if self._from_camera_ignored(message):
+            return
+        self._mode_touched = time.monotonic()
+        move = str(message.get("move", ""))
+        answer = self.shiai.move(move)
+        log.info("shiai move %s -> %s", move, answer.action if answer else "noted" if self.shiai.active else "ignored")
+        if answer:
+            self._shiai_go(answer)
+
+    async def _shiai_watchdog(self) -> None:
+        """Her attacks when he goes still, their result, and the bout's end on its own -
+        never a new attack over something she is still saying."""
+        while self.shiai.active:
+            await asyncio.sleep(0.2)
+            busy = self._turn is not None and not self._turn.done()
+            if busy and self.shiai.attacking is None:
+                # talking: her next attack waits until she has finished
+                self.shiai.next_attack = max(self.shiai.next_attack, time.monotonic() + 1.0)
+                continue
+            answer = self.shiai.tick()
+            if answer:
+                self._shiai_go(answer)
+        await self._sync_strike_events()
+
+    async def _study_finish(self) -> None:
+        """The bar is full: what she learned, and - for chess - straight into a game."""
+        subject = self.study.subject
+        if self._study_notes and not self._study_notes.done():
+            try:
+                await asyncio.wait_for(asyncio.shield(self._study_notes), 8.0)
+            except asyncio.TimeoutError:
+                log.warning("study notes for %r not ready at the finish - plain lines", subject)
+        hits = self.study.hits
+        done = self.study.finish()
+        log.info("study done %r after %d hits%s: %r", subject, hits, " (fumbled)" if done.fumbled else "", done.line)
+        await self.bridge.send(self._study_hud("done", progress=1.0))
+        await self._sync_strike_events()
+        await self._study_say(done.line, done.cue)
+        await self.bridge.send(self._study_hud("end"))
+        if done.chess:
+            try:
+                beats = await self.chess.start("", defence=done.defence)
+            except (FileNotFoundError, OSError, chess_game.chess.engine.EngineError) as error:
+                log.error("chess engine unavailable after study: %s", error)
+                self.chess.active = False
+                beats = []
+            board = next((b.board for b in beats if b.board is not None), None)
+            if board is not None:
+                await self.bridge.send({"type": "draw", "value": board})
+            stt.context_terms("chess", self.chess.cfg.hotwords if self.chess.active else None)
+            # the challenge goes with the board, the moment it is up
+            if done.challenge and self.chess.active:
+                await self._study_say(done.challenge, self.study.challenge_cue())
+        await self.bridge.emotion("neutral")
+        await self.bridge.state("listening")
+
     def idle_board(self) -> dict | None:
         """What the board shows when a reply draws nothing: the chess game if one is on."""
         return self.chess.board_spec() if self.chess.active else None
 
-    def chess_claims(self, text: str) -> str | None:
+    def chess_claims(self, text: str, on: bool | None = None) -> str | None:
         """His words as chess: "start" / "stop" / "resign" / "takeback" / "move" - or
         None, for everything else (mid-game too: "you're good at this" is for her,
-        not the board). Matched in code; the model never sees a move."""
-        kind = chess_game.command(text, self.chess.active, self.chess.finished)
+        not the board). Matched in code; the model never sees a move. `on`: is the
+        game the mode on (False for what he says after leaving it)."""
+        on = self.chess.active if on is None else on
+        kind = chess_game.command(text, on, self.chess.finished)
         if kind == "move" and not self.chess.claims(text):
             return None
         return kind
 
     async def _respond_chess(self, text: str, kind: str) -> None:
         """His chess command or move: the engine's answer, said beat by beat - each
-        with its face, its board and the piece's knock. No model call."""
+        with its face, its board and the piece's knock. No model call. A finished game
+        is then reviewed by the engine (chess_review.py) and she narrates it."""
         received = time.perf_counter()
         await self.bridge.transcript("user", text)
         game = self.chess
@@ -1338,19 +2140,41 @@ class Core:
                 beats = await game.resign()
             elif kind == "takeback":
                 beats = await game.takeback()
+            elif kind == "review":
+                beats = []
             else:
                 beats = await game.his_move(text)
         except (FileNotFoundError, OSError, chess_game.chess.engine.EngineError) as error:
             log.error("chess engine unavailable: %s", error)
             game.active = False
             beats = [chess_game.Beat("My chess engine isn't set up yet - run setup_stockfish once, and then I'm all yours.", "sheepish", None)]
+        except asyncio.CancelledError:
+            # cut off mid-move: the game put itself back (chess_game._atomic) - the board
+            # he sees is put back with it, never left on a position the game isn't in
+            if game.active:
+                await self.bridge.send({"type": "draw", "value": game.board_spec()})
+            raise
         stt.context_terms("chess", game.cfg.hotwords if game.active else None)
         if beats is None:
             # not a move after all: hers to answer, the board stays
             await self._respond(text)
             return
+        said = await self._say_beats(beats, received)
+        log.info("chess %s: %r -> %r (%.0f ms to first words)", kind, text[:60], " | ".join(said)[:200], self._chess_first_ms)
+        # in the history like any exchange, so what she said about the game is hers
+        last = next((b.cue for b in reversed(beats) if b.cue), None)
+        self.conversation.quick_exchange(text, " ".join(said) or "(the board moved)", last)
+        if game.unreviewed or kind == "review":
+            await self._chess_review(again=kind == "review")
+        if not game.active:
+            asyncio.get_running_loop().call_later(6.0, lambda: asyncio.ensure_future(self._chess_board_down()))
+        await self.bridge.emotion("neutral")
+        await self.bridge.state("listening")
+
+    async def _say_beats(self, beats: list, received: float | None = None) -> list[str]:
+        """Chess beats, in order: the board each brings, its sound, its line and face."""
         said = [b.text for b in beats if b.text]
-        heard_at: float | None = None
+        self._chess_first_ms = 0.0
         for beat in beats:
             if beat.board is not None:
                 await self.bridge.send({"type": "draw", "value": beat.board})
@@ -1359,23 +2183,395 @@ class Core:
             if not beat.text:
                 continue
             react = cues.resolve(beat.cue) if beat.cue else None
-            if heard_at is None:
-                heard_at = time.perf_counter()
+            if received is not None and not self._chess_first_ms:
+                self._chess_first_ms = (time.perf_counter() - received) * 1000
             if self.speaker:
                 await self.say(beat.text, react=react, after="speaking")
             else:
                 await self.bridge.transcript("irene", beat.text)
                 for message in self.react_messages(react, text=beat.text):
                     await self.bridge.send(message)
-        await self.bridge.send({"type": "reply", "display": "", "speak": " ".join(said)})
-        # in the history like any exchange, so what she said about the game is hers
-        last = next((b.cue for b in reversed(beats) if b.cue), None)
-        self.conversation.quick_exchange(text, " ".join(said) or "(the board moved)", last)
-        log.info("chess %s: %r -> %r (%.0f ms to first words)", kind, text[:60], " | ".join(said)[:200], ((heard_at or received) - received) * 1000)
-        if not game.active:
-            asyncio.get_running_loop().call_later(6.0, lambda: asyncio.ensure_future(self._chess_board_down()))
-        await self.bridge.emotion("neutral")
-        await self.bridge.state("listening")
+        if said:
+            await self.bridge.send({"type": "reply", "display": "", "speak": " ".join(said)})
+        return said
+
+    async def _chess_review(self, again: bool = False) -> None:
+        """The finished game, reviewed by the engine: the panel (the move list with each
+        move's class, the evaluation graph, the key positions with the move it
+        preferred - savable as a PDF like research), and her spoken summary."""
+        game = self.chess
+        if again and not game.unreviewed and game.last_review is not None:
+            beats, content = game.review_beats(game.last_review), game.last_review_content
+        else:
+            if not game.unreviewed:
+                await self._say_beats([chess_game.Beat("We haven't finished a game to review yet.", "shrug", None)])
+                return
+            await self._say_beats([game.review_intro()])
+            found = await game.review()
+            if found is None:
+                return
+            beats, content = found
+        if content:
+            await self.show_panel(content)
+        said = await self._say_beats(beats)
+        self.conversation.quick_exchange("(the game review)", " ".join(said), next((b.cue for b in beats if b.cue), None))
+
+    async def on_chess_shown(self, message: dict) -> None:
+        """The HUD drew a live chess board: what it shows, against the game at that ply."""
+        try:
+            ply = int(message.get("ply", -1))
+        except (TypeError, ValueError):
+            ply = -1
+        ok = self.chess.shown(ply, str(message.get("fen") or ""), message.get("replayed"), message.get("refused"))
+        await self.bridge.send({"type": "chess_check", "ply": ply, "ok": ok})
+
+    # ---- rock-paper-scissors (rps.py) -----------------------------------------------------
+
+    async def _rps_say(self, text: str, cue: str | tuple[str, ...] | None) -> None:
+        """Her line with its cue - a name, or a family (rps.CUES): a repeat of the last
+        reply's cue then swaps to the next of the same family, never to a stray one."""
+        react = cues.of_family(cue) if isinstance(cue, tuple) else cues.resolve(cue) if cue else None
+        if self.speaker:
+            await self.say(text, react=react, after="speaking")
+        else:
+            await self.bridge.transcript("irene", text)
+            for message in self.react_messages(react, text=text):
+                await self.bridge.send(message)
+
+    async def _respond_rps(self, text: str, kind: str) -> None:
+        """His rock-paper-scissors words: start (or a guided capture), another round,
+        the score, or exit. Every round: her throw sealed, the count, his hand read in
+        the fixed window around "shoot", both revealed together."""
+        await self.bridge.transcript("user", text)
+        game, lines = self.rps, self.rps_lines
+        try:
+            if kind in ("cancel", "confirm", "deny", "stakes") and not game.active:
+                await self._rps_stakes_turn(text, kind)
+                return
+            if kind == "exit":
+                await self._rps_end("he said so")
+                return
+            if kind == "score":
+                s = game.score
+                line = lines.pick("score", him=s["him"], her=s["her"], draws=(", and 1 draw" if s["draw"] == 1 else f", and {s['draw']} draws") if s["draw"] else "")
+                await self._rps_say(line, rps.CUES["score"])
+                self.conversation.quick_exchange(text, line, rps.CUES["score"][0])
+                return
+            if kind in ("start", "capture") and not game.active:
+                capture = kind == "capture"
+                if not capture and rps.load_model() is None:
+                    line = lines.pick("no_model")
+                    log.info("rps: no model shipped (core/irene/rps_model.json) - the game stays off")
+                    await self._rps_say(line, rps.CUES["no_model"])
+                    self.conversation.quick_exchange(text, line, rps.CUES["no_model"][0])
+                    return
+                if not capture and rps_stakes.mentions(text):
+                    # stakes on it: parsed, read back, and nothing counted until his yes
+                    game.prelog = []
+                    await self._rps_offer(text)
+                    return
+                await self._rps_begin(text, capture, None, 1 if capture else rps_stakes.best_of(text))
+            if game.capturing:
+                await self._rps_capture()
+            else:
+                await self._rps_play()
+        finally:
+            await self.bridge.emotion("neutral")
+            await self.bridge.state("listening")
+
+    async def _rps_begin(self, text: str, capture: bool, stakes: "rps_stakes.Stakes | None", best_of: int) -> None:
+        """The game (or a capture) starts: game mode, her hand, her opening line."""
+        game, lines = self.rps, self.rps_lines
+        game.start(capture=capture, stakes=stakes, best_of=best_of)
+        await self.bridge.send({"type": "game_mode", "on": True, "game": "rps", "ms": rps.HUD_MODE_MS})
+        if not capture:
+            # her hand fades in beside her face, neutral - the same glyph every
+            # round until the shoot instant (led/gameHand.ts)
+            await self.bridge.send({"type": "game_hand", "glyph": "neutral"})
+        if self._rps_watch is None or self._rps_watch.done():
+            self._rps_watch = asyncio.create_task(self._rps_watchdog())
+        kind_line = "capture_start" if capture else "deal" if stakes else "start"
+        line = lines.pick(kind_line)
+        if best_of > 1 and not stakes:
+            line += f" Best of {best_of} - first to {game.needed()}."
+        # the count is rendered while she talks, so round one isn't kept waiting
+        clip = asyncio.ensure_future(self._rps_count_clip()) if self.speaker else None
+        await self._rps_say(line, rps.CUES[kind_line])
+        if clip is not None:
+            await clip
+        self.conversation.quick_exchange(text, line, self.last_react or rps.CUES[kind_line][0])
+
+    async def _rps_play(self) -> None:
+        """Rounds until one needs his word: a draw on a bet, or the next round of a
+        series, follows on by itself."""
+        while self.rps.active and await self._rps_round():
+            await asyncio.sleep(0.4)
+
+    # ---- stakes (rps_stakes.py): the model parses and narrates, the code decides --------
+
+    async def _rps_offer(self, said: str) -> None:
+        """His stakes, parsed and read back for his yes - or asked for, never guessed."""
+        game = self.rps
+        game.said = said
+        got = await rps_stakes.parse(self.llm.chat if self.llm else None, said)
+        if isinstance(got, rps_stakes.Stakes):
+            game.offered, game.asked = got, ""
+            game.wait_for("confirm")
+            game.note({"event": "stakes_parsed", "said": said, "parsed": got.to_json()})
+            line, cue = rps_stakes.confirm_line(got), rps.CUES["confirm"]
+            await self.show_panel({"title": "Rock · Paper · Scissors", "subtitle": "the stakes - waiting for your yes",
+                                   "blocks": [{"kind": "box", "tone": "research", "title": "If you say yes" + (", best of three" if got.best_of > 1 else ""),
+                                               "blocks": [{"kind": "text", "text": f"You win: {got.win}\nYou lose: {got.lose}\nDraw: {got.draw or 'replay, same stakes'}"}]}]})
+        else:
+            game.offered, game.asked = None, got.kind
+            game.wait_for("stakes")
+            game.note({"event": "stakes_asked", "said": said, "kind": got.kind, "why": got.why})
+            line, cue = random.choice(rps_stakes.ASK[got.kind]), rps.CUES["ask_stakes"]
+        await self._rps_say(line, cue)
+        self.conversation.quick_exchange(said, line, self.last_react or cue[0])
+
+    async def _rps_stakes_turn(self, text: str, kind: str) -> None:
+        """His answer while she waits on the stakes: yes (the game starts), no (she asks
+        again), more stakes (parsed again), or off."""
+        game, lines = self.rps, self.rps_lines
+        if kind == "cancel":
+            game.wait_for(None)
+            game.offered, game.prelog = None, []
+            line = lines.pick("no_bet")
+            await self._rps_say(line, rps.CUES["no_bet"])
+            self.conversation.quick_exchange(text, line, self.last_react or "shrug")
+            return
+        if kind == "confirm" and game.offered is not None:
+            stakes = game.offered
+            stakes.confirmed_at = rps._now_iso()
+            game.note({"event": "stakes_confirmed", "his_words": text, "stakes": stakes.to_json()})
+            # her settlement lines, written while he plays - checked before any is used
+            self._rps_narrations = {}
+            if self._rps_narrating is not None and not self._rps_narrating.done():
+                self._rps_narrating.cancel()
+            self._rps_narrating = asyncio.create_task(self._rps_write_narrations(stakes))
+            await self._rps_begin(text, False, stakes, stakes.best_of)
+            await self._rps_play()
+            return
+        if kind == "deny":
+            game.note({"event": "stakes_denied", "his_words": text, "offered": game.offered.to_json() if game.offered else None})
+            game.offered = None
+            if rps_stakes.mentions(text):
+                await self._rps_offer(text)
+                return
+            game.asked = "denied"
+            game.wait_for("stakes")
+            line = random.choice(rps_stakes.ASK["denied"])
+            await self._rps_say(line, rps.CUES["ask_stakes"])
+            self.conversation.quick_exchange(text, line, self.last_react or "headTilt")
+            return
+        # more words about the stakes
+        if game.awaiting == "confirm" and not rps_stakes.mentions(text):
+            game.wait_for("confirm")
+            line = lines.pick("confirm_again")
+            await self._rps_say(line, rps.CUES["confirm"])
+            return
+        if rps_stakes.mentions(text) and game.asked not in ("missing_win", "missing_lose"):
+            said = text
+        else:
+            # the side she asked for, answered: his first words plus this one
+            lead = {"missing_win": "if I win ", "missing_lose": "if I lose "}.get(game.asked, "") if not rps_stakes.mentions(text) else ""
+            said = f"{game.said.rstrip(' .')}. {lead}{text}"
+        await self._rps_offer(said)
+
+    async def _rps_write_narrations(self, stakes: "rps_stakes.Stakes") -> None:
+        outcomes = ("him", "her") + (("draw",) if stakes.draw else ())
+        for outcome in outcomes:
+            line = await rps_stakes.narrate(self.llm.chat if self.llm else None, stakes, outcome)
+            self._rps_narrations = {**self._rps_narrations, outcome: line}
+        log.info("rps stakes: settlement lines ready: %s", {k: bool(v) for k, v in self._rps_narrations.items()})
+
+    async def _rps_count_clip(self) -> tuple[np.ndarray, np.ndarray, float]:
+        """"Rock... paper... scissors... shoot!" on a steady beat, rendered once: the
+        clip, its mouth track, and the second "shoot" starts at."""
+        if self._rps_clip is None:
+            from .tts import SAMPLE_RATE
+
+            def render() -> tuple[np.ndarray, np.ndarray, float]:
+                words = []
+                for w in ("Rock!", "Paper!", "Scissors!", "Shoot!"):
+                    a = self.speaker.synthesize(w)
+                    loud = np.flatnonzero(np.abs(a) > 0.02 * max(float(np.abs(a).max()), 1e-6))
+                    words.append(a[loud[0]: loud[-1] + 1] if len(loud) else a)
+                beat = max(0.55, max(len(a) for a in words[:3]) / SAMPLE_RATE + 0.15)
+                step = int(beat * SAMPLE_RATE)
+                clip = np.zeros(3 * step + len(words[3]) + SAMPLE_RATE // 5, np.float32)
+                for i, a in enumerate(words):
+                    clip[i * step: i * step + len(a)] += a
+                return clip, block_levels(clip), 3 * step / SAMPLE_RATE
+
+            self._rps_clip = await asyncio.to_thread(render)
+            log.info("rps: count clip rendered - shoot at %.2f s", self._rps_clip[2])
+        return self._rps_clip
+
+    async def _rps_count(self, rnd: "rps.Round") -> list[dict]:
+        """The count; on the first sample of "shoot" (as it reaches the speaker) the HUD
+        is told, and its frames around that instant come back. [] if none came.
+
+        Her hand (led/gameHand.ts) pumps on each counted word as that word's first
+        sample is heard - marks on the clip, so it can't drift from her voice - and
+        every pump is the SAME neutral glyph, whatever she sealed: her throw goes out
+        only inside the shoot message, the instant the HUD starts reading his hand."""
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future = loop.create_future()
+        self._rps_frames[rnd.id] = future
+        game = not rnd.capture
+
+        async def beat(n: int) -> None:
+            if game:
+                await self.bridge.send({"type": "game_hand", "glyph": "neutral", "beat": n})
+
+        async def shoot() -> None:
+            self.rps.shot(rnd)
+            message = {"type": "game_shoot", "id": rnd.id, "before": rps.SEND_BEFORE_MS, "after": rps.SEND_AFTER_MS}
+            if game:
+                message["throw"] = rnd.hers
+            await self.bridge.send(message)
+
+        def on_audio(make) -> Callable[[], None]:
+            return lambda: loop.call_soon_threadsafe(lambda: asyncio.ensure_future(make()))
+
+        await self.bridge.transcript("irene", "Rock... paper... scissors... shoot!")
+        if self.speaker and not self.muted:
+            audio, levels, shoot_s = await self._rps_count_clip()
+            finished: asyncio.Future = loop.create_future()
+            await self.bridge.state("speaking")
+            # the clip puts "rock", "paper", "scissors" on a steady beat, shoot on the fourth
+            marks = [(n * shoot_s / 3, on_audio(lambda n=n: beat(n))) for n in range(3)]
+            marks.append((shoot_s, on_audio(shoot)))
+            self.speaker.play(audio, levels, marks=marks,
+                              done=lambda ok: loop.call_soon_threadsafe(lambda: finished.done() or finished.set_result(ok)))
+            await finished
+        else:
+            # muted: no voice to follow - the same beat, kept by the clock
+            for n in range(3):
+                await beat(n)
+                await asyncio.sleep(0.6)
+            await shoot()
+        try:
+            return await asyncio.wait_for(future, rps.SEND_AFTER_MS / 1000 + 3.0)
+        except asyncio.TimeoutError:
+            log.warning("rps round %d: no frames from the HUD", rnd.n)
+            return []
+        finally:
+            self._rps_frames.pop(rnd.id, None)
+
+    async def on_game_frames(self, message: dict) -> None:
+        future = self._rps_frames.get(str(message.get("id", "")))
+        frames = message.get("frames")
+        if future is not None and not future.done():
+            future.set_result(frames if isinstance(frames, list) else [])
+            log.info("rps: %d frames from the HUD around shoot (%s fps)", len(frames or []), message.get("fps"))
+
+    async def _rps_round(self) -> bool:
+        """One round. True when the next follows on by itself (a draw on a bet, the
+        next round of a series)."""
+        game = self.rps
+        rnd = game.commit()  # sealed and logged before anything else happens
+        await self.bridge.send({"type": "game_mode", "on": True, "game": "rps", "ms": rps.HUD_MODE_MS})
+        await self.show_panel(game.panel(rnd, reveal=False))
+        frames = await self._rps_count(rnd)
+        got = game.resolve(rnd, frames)
+        await self.show_panel(game.panel(rnd, reveal=True))
+        lines = self.rps_lines
+        if got.throw is None:
+            # with a bet on it, a throw below the stricter bar is a redo, never a guess
+            kind = "unseen" if got.frames == 0 else "unsure_staked" if game.stakes else "unsure"
+            line = lines.pick(kind)
+            # her throw goes back down - the round doesn't count - and she shrugs
+            await self.bridge.send({"type": "game_hand", "glyph": "shrug"})
+            await self._rps_say(line, rps.CUES[kind])
+            self.conversation.quick_exchange(f"(rock paper scissors, round {rnd.n})", line, self.last_react or rps.CUES[kind][0])
+            return False
+        if game.stakes is None and game.best_of == 1:
+            line, kind = rps.reveal_line(lines, rnd, game.score)
+            await self._rps_say(line, rps.CUES[kind])
+            self.conversation.quick_exchange(f"(rock paper scissors, round {rnd.n})", line, self.last_react or rps.CUES[kind][0])
+            return False
+        # a bet or a series: the CODE's score says whether it is settled
+        reveal, kind = rps.reveal_line(lines, rnd, game.score, tally=False)
+        decided = game.decided()
+        if rnd.result == "draw" and game.stakes and game.stakes.draw and game.best_of == 1:
+            decided = "draw"
+        s = game.score
+        if decided is None:
+            more = lines.pick("draw_replay") if rnd.result == "draw" else lines.pick("series_next", him=s["him"], her=s["her"])
+            await self._rps_say(f"{reveal} {more}", rps.CUES["draw_replay" if rnd.result == "draw" else kind])
+            return True
+        series = lines.pick(f"series_won_{decided}", him=s["him"], her=s["her"]) if game.best_of > 1 and decided != "draw" else ""
+        if game.stakes:
+            settle, family, source = rps_stakes.settlement(game.stakes, decided, self._rps_narrations)
+        else:
+            settle, family, source = "", rps_stakes.SETTLE_CUES[decided], "template"
+        line = " ".join(part for part in (reveal, series, settle) if part)
+        game.settle(decided, line, source)
+        await self.show_panel(game.panel(rnd, reveal=True, settled=decided))
+        await self._rps_say(line, family)
+        self.conversation.quick_exchange(f"(rock paper scissors, settled: {decided})", line, self.last_react or family[0])
+        await self._rps_end("settled", quiet=True)
+        return False
+
+    async def _rps_capture(self) -> None:
+        """The guided capture: each asked-for throw on the game's own count, his frames
+        written to core/calibration/rps-<session>.jsonl with the label."""
+        game, lines = self.rps, self.rps_lines
+        reps: dict[str, int] = {}
+        misses = 0
+        while game.active and game.capturing and game.plan:
+            rnd = game.commit()
+            label = rnd.label
+            await self.bridge.send({"type": "game_mode", "on": True, "game": "rps", "ms": rps.HUD_MODE_MS})
+            await self.show_panel({"title": "Rock · Paper · Scissors - training", "subtitle": f"capture {game.capture_session} · {len(game.plan)} to go",
+                                   "blocks": [{"kind": "heading", "text": f"Throw {label.upper()} on shoot"}]})
+            await self._rps_say(lines.pick("capture_ask", label=label), rps.THROW_CUE[label])
+            frames = await self._rps_count(rnd)
+            seen = len(rps.in_window(frames, (0, 900)))
+            if seen == 0:
+                misses += 1
+                game.plan.insert(0, label)
+                game.rounds.append(rnd)
+                if misses >= 4:
+                    await self._rps_say("I keep missing your hand - is it in front of the camera? Let's stop here.", "concerned")
+                    break
+                await self._rps_say(lines.pick("capture_again", label=label), rps.CUES["capture_again"])
+                continue
+            misses = 0
+            rep = reps.get(label, 0)
+            reps[label] = rep + 1
+            path, count = await asyncio.to_thread(calibration.write, {"profile": "rps", "session": game.capture_session, "pose": label, "rep": rep,
+                                                                       "frames": [{"t": f.get("t"), "lm": f.get("lm"), "handed": f.get("handed")} for f in frames]})
+            game.rounds.append(rnd)
+            log.info("rps capture: %s rep %d - %d frames (%d in 0-900 ms) -> %s", label, rep, count, seen, path.name)
+        if game.active and not game.plan:
+            await self._rps_say(lines.pick("capture_done"), rps.CUES["capture_done"])
+        await self._rps_end("capture finished", quiet=True)
+
+    async def _rps_end(self, why: str, quiet: bool = False) -> None:
+        game = self.rps
+        was = game.active and not game.capturing
+        s = dict(game.score)
+        game.stop(why)
+        await self.bridge.send({"type": "game_mode", "on": False})
+        if quiet:
+            return
+        kind = "timeout" if why == "timeout" else "end"
+        line = self.rps_lines.pick(kind, **s) if was else "Okay - gestures are back on."
+        await self._rps_say(line, rps.CUES[kind])
+
+    async def _rps_watchdog(self) -> None:
+        """The game ends by itself when he stops playing (rps.IDLE_END_S)."""
+        while self.rps.active:
+            await asyncio.sleep(5)
+            if self.rps.idle() and not (self._turn and not self._turn.done()):
+                log.info("rps: no round for %.0f s - ending the game", rps.IDLE_END_S)
+                await self._rps_end("timeout")
+                await self.bridge.emotion("neutral")
+                await self.bridge.state("listening")
 
     async def _chess_board_down(self) -> None:
         """A finished game's board, a few seconds after the last word: her face back."""
@@ -1494,13 +2690,25 @@ class Core:
             f.write(json.dumps(record) + "\n")
 
     async def _respond(self, text: str) -> None:
+        # a mode on owns the display (modes.py): the turn gets only the quiet tools and
+        # no board, and nothing it sends repaints the screen
+        mode = self.active_mode()
+        self.conversation.lock = modes.lock(mode)
+        hold = modes.HOLD.set(mode)
+        try:
+            await self._respond_turn(text)
+        finally:
+            modes.HOLD.reset(hold)
+            self.conversation.lock = None
+
+    async def _respond_turn(self, text: str) -> None:
         received = time.perf_counter()
         await self.bridge.transcript("user", text)
         host = TurnHost(self, received)
         self.last_ttfa = None
         # a new question, a new board: nothing of the last answer's drawing stays up
-        # (a plain command - "pause" - leaves it alone)
-        if fast.direct_call(text) is None:
+        # (a plain command - "pause" - leaves it alone; a mode's board always stays)
+        if fast.direct_call(text) is None and self.conversation.lock is None:
             await self.bridge.send({"type": "draw", "value": self.idle_board()})
         # what is playing on his PC right now, for her context ("pause" acts on it)
         try:
@@ -1515,7 +2723,8 @@ class Core:
             if "research" in turn.tools_used and not sandbox.os_input_blocked():
                 # what they were doing, for next time's greeting ("Still on the Sicilian?")
                 self.presence.topic(text)
-            self.keep_answer(text, turn)
+            if self.conversation.lock is None:
+                self.keep_answer(text, turn)
         except asyncio.CancelledError:
             log.info("turn cancelled by a newer command")
             self.conversation.cut_off()
@@ -1594,6 +2803,9 @@ class Core:
         return [r.name for r in order]
 
     async def show_panel(self, content: dict | None) -> None:
+        if modes.held():
+            log.warning("mode lock (%s): the panel stays as it is", modes.held())
+            return
         self.panel_links = panel_tool.links_in(content)
         self.panel_content = content
         await self.bridge.panel(content)
@@ -2022,6 +3234,7 @@ async def lifespan(_app: FastAPI):
         # what is still queued is transcribed and the session closed: nothing lost
         await asyncio.to_thread(core.lectures.capture.stop, 30.0)
     core.voice.stop()
+    await core.chess.close()
     await core.llm.close()
 
 

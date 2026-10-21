@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import { OneEuroFilter } from "./oneEuro";
 import type { OneEuroConfig, Vec2 } from "./oneEuro";

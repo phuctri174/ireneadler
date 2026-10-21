@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // A 3x5 pixel font for the board's labels. On the 128x72 matrix a glyph is 5 LEDs
 // tall - about 12 mm on a 27" 1440p screen at the interface's reference scale,
 // ~40 arcminutes at 1 m, comfortably legible - and up to 32 characters fit across

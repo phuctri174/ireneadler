@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Story mode: he is telling her about his life, and she is his friend, not his fixer.
 
 An assistant hears "my coworker took credit for my slides" and starts drafting an

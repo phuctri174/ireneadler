@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Is it him? A voiceprint check on every utterance before it can become a turn.
 
 ECAPA-TDNN speaker embeddings (SpeechBrain spkrec-ecapa-voxceleb, vendored in

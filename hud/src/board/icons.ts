@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Generic icons for the board: weather, music, an idea, a warning, a tick. Drawn
 // as small cell art (9x9) so they can be scaled up whole; the freehand "sprite"
 // shape and the icon template both use this table. All original, all generic.

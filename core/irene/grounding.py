@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Grounding: every claim in a research answer is backed by text she actually fetched.
 
 Each spoken sentence of a research answer is checked, as it streams, against the

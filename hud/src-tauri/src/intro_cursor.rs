@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 //! The cursor during her introduction: gone - Windows' own and the hand pointer's
 //! ring - from the boot until the last word of her greeting (core sends
 //! intro_cursor hidden/shown; the HUD invokes this).

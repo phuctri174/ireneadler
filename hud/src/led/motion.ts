@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Body movement under a feeling: the whole face shifts, dips, bounces or tilts, so
 // a reaction reads from across the room and not only in the shape of her eyes.
 // A gesture's motion is its pose's (led/poses.ts); an expression's is here, timed
@@ -69,6 +71,31 @@ export const EMOTION_MOTION: Partial<Record<Emotion, (t: number) => Motion>> = {
   fuming: (t) => ({ dy: 2 * settle(300)(t), dx: Math.sin((t / 1000) * 9 * Math.PI * 2) * 0.6, moving: true }),
   // shocked: snapped back, and frozen there
   shocked: (t) => ({ dy: -4 * settle(160)(t), moving: t < 200 }),
+  // caughtOffGuard: a small jolt back - then not one more movement while it holds
+  caughtOffGuard: (t) => ({ dy: -3 * settle(140)(t), tilt: -0.6 * settle(140)(t), moving: t < 180 }),
+  // arrogant: chin up and head cocked, then a slow, satisfied little nod
+  arrogant: (t) => ({ dy: -3 * settle(320)(t) + (t > 400 ? 0.8 * Math.sin(((t - 400) / 1000) * 0.9 * TAU) : 0), tilt: 1.2 * settle(320)(t) }),
+  // triumphant: a hop up on the win, then a gleeful little wiggle side to side
+  triumphant: (t) => ({ dy: t < 700 ? hop(1.45, 4)(t) : 0, dx: t > 500 ? sway(1.8, 1.4)(t) : 0, moving: t < 800 }),
+  // outplayed: rocked back by it, then a slump with a small disbelieving head shake
+  outplayed: (t) => ({ dy: t < 220 ? -2 * Math.sin((t / 220) * Math.PI) : 2.5 * settle(600)(t - 220), dx: t > 400 && t < 1600 ? Math.sin(((t - 400) / 1000) * 3 * TAU) * 1.2 : 0, moving: t < 300 }),
+  // standoff: leaning in, eye to eye, and a slow sway - sizing each other up
+  standoff: (t) => ({ dx: 2 * settle(500)(t) + sway(0.4, 0.8)(t), dy: 1 * settle(500)(t) }),
+  // oops: the double take - the head cocks past where it lands and bobs back, then
+  // a slow puzzled wobble
+  oops: (t) => ({
+    tilt: -3.2 * settle(220)(t) + 1.1 * settle(420)(Math.max(0, t - 220)) + (t > 700 ? Math.sin(((t - 700) / 1000) * 0.7 * TAU) * 0.5 : 0),
+    dy: t < 260 ? -1.5 * Math.sin((t / 260) * Math.PI) : 0,
+    dx: 1.5 * settle(400)(t),
+    moving: t < 300,
+  }),
+  // the study-mode hits (core/irene/study.py)
+  // bonked: knocked down by it, a dazed wobble, slowly back up
+  bonked: (t) => ({ dy: t < 120 ? (t / 120) * 4 : 4 * (1 - settle(900)(t - 120)), dx: t < 1200 ? Math.sin(t / 70) * (1 - t / 1200) * 1.5 : 0, tilt: Math.sin(t / 260) * 0.8 * Math.max(0, 1 - t / 1600), moving: t < 300 }),
+  // indignant: snapped upright, chin up, a huffy little shake
+  indignant: (t) => ({ dy: -2.5 * settle(160)(t), dx: t > 200 && t < 900 ? Math.sin(t / 40) * 0.8 : 0, moving: t < 200 }),
+  // surrender: slumped, shaking her head, sobbing - for show
+  surrender: (t) => ({ dy: 2 * settle(400)(t) + Math.abs(Math.sin(t / 170)) * 1.5, dx: Math.sin(t / 110) * 1.8, moving: true }),
 };
 
 export function emotionMotion(emotion: Emotion, elapsed: number): Motion {

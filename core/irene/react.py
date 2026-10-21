@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """What Irene may show while she talks: the cue vocabulary, from config/cues.json.
 
 Four kinds, one flat namespace:
@@ -99,7 +101,7 @@ def catalogue() -> str:
 # move) often enough that the action he named is enforced for that turn.
 _ACT_ALIASES: dict[str, str] = {c["name"]: c["act"] for c in CUES if c.get("act")}
 _ACT_REQUEST = re.compile(
-    r"^\W*(irene\W+)?(please\W+)?(go on\W+)?(wave|salute|yawn|facepalm|shrug|cross|kiai|strike)\b"
+    r"^\W*(irene\W+)?(please\W+)?(go on\W+)?(wave|salute|yawn|facepalm|shrug|cross|kiai|strike|flinch|cover|peer|peek|measure|size|raise|call|lights|roll)\b"
     r"|\b(do|show|play|make|give|perform|put|let'?s see|let me see|let'?s hear|can you|could you|will you)\b",
     re.I,
 )

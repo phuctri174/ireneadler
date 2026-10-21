@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Quick replies: the everyday exchanges - hello, thanks, how are you, what were you
 doing, okay, goodbye - answered at once from audio rendered ahead of time in her
 live voice. No model call, no synthesis: the answer plays as soon as his words are

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """The panel: show_panel(what) puts a result on Irene's second surface.
 
   "the last research" / "it" / "that"   the newest result - research or an answer
@@ -81,8 +83,19 @@ def research_content(found: R.Research, only: str | None = None) -> dict:
 
 
 def links_in(content: dict | None) -> set[str]:
-    """Every URL a click on this content may open."""
-    return {b["url"] for b in (content or {}).get("blocks", []) if b.get("url")}
+    """Every URL a click on this content may open (inside a box too)."""
+
+    def walk(blocks) -> set[str]:
+        out: set[str] = set()
+        for b in blocks or []:
+            if not isinstance(b, dict):
+                continue
+            if b.get("url"):
+                out.add(b["url"])
+            out |= walk(b.get("blocks"))
+        return out
+
+    return walk((content or {}).get("blocks"))
 
 
 def _match(what: str, items: list[R.Research]) -> R.Research | None:

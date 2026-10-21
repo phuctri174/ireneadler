@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Stand-in for the Unix-only pwd module, so SearXNG imports on Windows.
 
 SearXNG only calls it to word an error message when Valkey (which Irene's

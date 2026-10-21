@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Irene's whole body, for the entrances: she is a ROBOT - a chunky, friendly
 // desk-robot in the EMO style. A big rounded head that is a screen (her own eyes
 // on it, the same eye art as her big face), a short boxy chassis, and limbs made

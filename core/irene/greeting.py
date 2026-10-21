@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """How she greets him: like someone who has been paying attention.
 
 "Good morning Mister Tri, how can I help you?" every time is lifeless. Her

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // What every board template works with: the contract, the free area (her face
 // keeps the top-right corner), and small builders for strokes so a template reads
 // as a description of the picture.

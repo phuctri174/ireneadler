@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Summon entrances: which one plays, and its clip.
 
 The registry is config/entrances.json. The hand sign always plays domain_expansion;

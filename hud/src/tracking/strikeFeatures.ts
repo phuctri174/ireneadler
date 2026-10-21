@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Men, kote, gyaku-dou - from his upper body, during keiko.
 //
 // The TS twin of core/irene/strikes.py (read its header for the why); it must stay in

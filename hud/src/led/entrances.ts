@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Summon entrances: how Irene arrives. The hand sign always plays the domain
 // expansion (led/summon.ts, keyed to its own clip); every other summon picks one of
 // these from config/entrances.json (never the same twice running).

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Skit mode: scripted scenes for filming, one file each in config/skits/<name>.json.
 
   ctrl+alt+shift+k   start the newest skit file (or, mid-skit, start it over)

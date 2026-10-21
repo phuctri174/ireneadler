@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // A bar chart from numbers she has: one bar per label, value on top.
 //
 //   { "template": "bar_chart", "labels": ["Mon", "Tue"], "values": [3, 5], "title"?: "...", "unit"?: "h" }

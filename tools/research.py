@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Research: search, read the best pages, keep what was found.
 
   research(question)       SearXNG (several engines, Wikipedia among them) -> the top

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // A month calendar, weeks starting Monday, today boxed; other days can be marked.
 //
 //   { "template": "calendar", "month"?: "2026-09", "highlight"?: [25, 30] }

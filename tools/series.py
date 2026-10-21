@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """The real numbers behind a question about something that changes (Round 8, part 4).
 
 Price and weather pages mostly draw their numbers with JavaScript, so research read

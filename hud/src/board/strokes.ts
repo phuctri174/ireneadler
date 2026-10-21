@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // What the board is made of: strokes. Every template and every freehand drawing
 // comes down to a list of these, drawn in order; the board reveals them one after
 // another, each growing in as if sketched - a line from one end, a box around its

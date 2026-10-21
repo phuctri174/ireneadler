@@ -15,9 +15,13 @@ const templateFiles = readdirSync(TEMPLATE_DIR).filter((f) => f.endsWith(".ts") 
 // OUT; one that imports across folders (led/) keeps its tree under OUT
 for (const entry of [
   "src/tracking/gestures.ts",
+  "src/tracking/gameMode.ts",
   "src/tracking/zoomFeatures.ts",
   "src/tracking/kamaeFeatures.ts",
   "src/tracking/strikeFeatures.ts",
+  "src/tracking/strikeEvent.ts",
+  "src/tracking/strikeKind.ts",
+  "src/tracking/framing.ts",
   "src/face/reactions.ts",
   "src/tracking/frameLoop.ts",
   "src/led/compose.ts",
@@ -79,6 +83,13 @@ await import("./idle.verify.mjs");
 await import("./entrances.verify.mjs");
 await import("./figure.verify.mjs");
 await import("./board.verify.mjs");
+await import("./gameMode.verify.mjs");
+await import("./gameHand.verify.mjs");
+// the strike threshold and shiai footwork on made-up bodies
+await import("./strikeEvent.verify.mjs");
+// shiai's block, on made-up bodies
+await import("./strikeKind.verify.mjs");
+await import("./framing.verify.mjs");
 // the parity tests replay real captured frames (his hand and body - personal, so
 // never committed): with no golden file in the checkout they are skipped, saying so
 for (const [test, needs] of [["./zoom.verify.mjs", ["zoom.golden.json", "zoom.engine.json"]], ["./kamae.verify.mjs", ["kamae.golden.json"]], ["./strike.verify.mjs", ["strike.golden.json"]]]) {

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // A coordinate grid: axes through the origin (when it's in range), grid lines,
 // points (labelled if given) and line segments.
 //

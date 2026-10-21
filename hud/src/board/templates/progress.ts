@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Progress bars: one row per item, filled to its share, percentage at the end.
 //
 //   { "template": "progress", "items": [{ "label": "Thesis", "value": 60, "max"?: 100 }], "title"?: "..." }

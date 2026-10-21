@@ -38,7 +38,7 @@ async def turn(game: ChessGame, said: str):
 
 async def scripted() -> None:
     game = ChessGame()
-    for said in ("Let's play chess!", "e4", "knight to f3", "bishop to b5", "what a game, huh?", "queen to h7",
+    for said in ("Let's play chess!", "white", "e4", "knight to f3", "bishop to b5", "what a game, huh?", "queen to h7",
                  "take that back", "castle kingside", "rook e1"):
         await turn(game, said)
     await game.close()
@@ -47,7 +47,7 @@ async def scripted() -> None:
 async def full(him_skill: int) -> str:
     game = ChessGame()
     _, him = await chess.engine.popen_uci(settings().engine)
-    await turn(game, "let's play a game of chess")
+    await turn(game, "let's play a game of chess, I'll be white")
     plies = 0
     while game.active and plies < 160:
         r = await him.play(game.board, chess.engine.Limit(time=0.05), options={"Skill Level": him_skill})

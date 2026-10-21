@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Kamae, from the upper body: is he holding chudan at her?
 //
 // The features are the arms measured from the midpoint of the shoulders, in

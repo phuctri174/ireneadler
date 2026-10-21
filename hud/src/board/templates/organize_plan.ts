@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // An organize_files dry-run plan as before / after: the loose files on the left,
 // the folders they would go into on the right, an arrow between.
 //

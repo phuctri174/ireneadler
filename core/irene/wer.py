@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Word error rate, with the normalisation that makes it fair.
 
 Whisper writes "25%", the corpus says "twenty-five percent"; Whisper writes

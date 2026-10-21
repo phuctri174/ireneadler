@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """The fast path: a simple command's reply straight from a template once its tool has
 run - no second LLM call. Only for short, single-purpose messages ("pause", "volume
 to 30", "set a timer for 10 minutes", "what time is it") whose tool succeeded;
@@ -16,7 +18,7 @@ from .react import act_out
 MAX_WORDS = 10
 # tools whose result carries outside content but which write their own spoken reply
 # from it (brain.py speaks it as is - the turn ends there, nothing acts on it)
-OWN_SPEECH = {"lecture_summary"}
+OWN_SPEECH = {"lecture_summary", "lecture_research"}
 _MORE = re.compile(r"\b(and|then|also|but|why|explain|tell me|what about)\b", re.I)
 _RESUME = re.compile(r"\b(resume|unpause|play|continue|start|back on)\b", re.I)
 
@@ -163,7 +165,17 @@ def _lecture_stopped(args: dict, result: str, said: str):
     return "Stopped - but I didn't catch any speech in it.", "concerned"
 
 
+def _lecture_researched(args: dict, result: str, said: str):
+    if result.startswith("added to the lecture note"):
+        first = result.split("\n", 2)[1] if "\n" in result else ""
+        concept = first[2:].split(":", 1)[0] if first.startswith("- ") else "that"
+        return (f"I looked up {concept} and added what I found to the note - in its own section, marked as "
+                f"researched online, so it never mixes with what your lecturer said. Every line links to its source."), "pinNote"
+    return "I looked, but nothing the pages said held up well enough to add with a source - so the note stays as it was.", "sheepish"
+
+
 TEMPLATES = {
+    "lecture_research": _lecture_researched,
     "lecture_start": _lecture_started,
     "lecture_stop": _lecture_stopped,
     "screens_off": _screens,
@@ -460,8 +472,20 @@ _RESEARCH = re.compile(
 )
 
 
+# "search X", "search for X", "search up X": the same word for it - but searching his
+# files or YouTube is its own tool's
+_SEARCH = re.compile(
+    r"^\W*(?:(?:ok(?:ay)?|so|now|irene|hey irene|please|can you|could you|would you)[,\s]+)*"
+    r"search\s+(?:up\s+|for\s+|about\s+)?(?!(?:at|to|me|it|that|this|them|my|his|the\s+(?:files?|folders?|desktop|downloads?))\b)(.{3,})$",
+    re.I,
+)
+_SEARCH_NOT = re.compile(r"\b(?:files?|folders?|desktop|downloads?|pdfs?|documents?|youtube|videos?|my\s+(?:pc|computer|drive))\b", re.I)
+
+
 def _research(said: str) -> str | None:
     m = _RESEARCH.match(said.strip())
+    if m is None and not _SEARCH_NOT.search(said):
+        m = _SEARCH.match(said.strip())
     if not m or len(said.split()) > 30:
         return None
     from .home import HOME
@@ -499,12 +523,19 @@ _OPENING = re.compile(
 )
 
 
+_OPENING_ASK = re.compile(r"^\W*(?:(?:hey\s+)?irene\W+)?(?:please\s+)?(?:explain|describe|tell\s+me\s+about|show\s+me|teach\s+me|walk\s+me\s+through|go\s+over)\b", re.I)
+
+
 def _chess_opening(said: str) -> str | None:
     """A chess opening he asks about: researched, so the board's moves come from a
     page she read (the model may misremember a line - live, it gave the London
     System the Italian's moves)."""
     text = said.strip()
-    if len(text.split()) > 20 or not _QUESTION.search(text + "?") or _PERSONAL.search(text):
+    # asked: a question, or "explain / tell me about / show me ..." - never a sentence
+    # that only names an opening ("I studied the Sicilian all weekend"). This used to
+    # test text + "?", which every sentence passes: "Learn Sicilian" went to research.
+    asked = _QUESTION.search(text) or _OPENING_ASK.search(text)
+    if len(text.split()) > 20 or not asked or _PERSONAL.search(text):
         return None
     # "open the Queen's Gambit PDF": his file, named after an opening - not a question about it
     if re.search(r"\b(?:pdf|file|document|docx?|saved|download(?:ed|s)?)\b|^\W*(?:open|play|show me the)\b", text, re.I):
@@ -576,6 +607,17 @@ _LEC_START = re.compile(_LEC_LEAD + r"(?:(?:start\s+)?listen(?:ing)?\s+(?:in\s+)
 _LEC_STOP_NAMED = re.compile(_LEC_LEAD + r"(?:stop\s+(?:listening|transcribing|recording|capturing|taking\s+notes)\s+(?:to|on|of)\s+" + _LEC_THING
                              + r"|" + _LEC_THING + r"(?:'s|\s+is)\s+(?:over|done|finished)(?:[,.;!]?\s+(?:so\s+|you can\s+)?stop\s+(?:listening|transcribing|recording|taking\s+notes))?)"
                              + _LEC_TAIL, re.I)
+# starting it said less plainly - still a mode command, so still code, never the model's
+# call: "transcribe this Zoom meeting while I cook", "take notes on the class that's
+# about to start on my screen", "I'm going to sleep, keep listening to the webinar and
+# write it all down". A lead-in clause, two words before the thing, anything after - but
+# no other time ("record the meeting tomorrow", "I listened to the lecture yesterday")
+_LEC_START_LOOSE = re.compile(
+    _LEC_LEAD + r"(?:[^,.;!?]{0,40}[,;]\s*)?(?:(?:keep|start)\s+)?(?:listen(?:ing)?\s+(?:in\s+)?(?:to|on)|transcrib(?:e|ing)|captur(?:e|ing)|record(?:ing)?|"
+    r"tak(?:e|ing)\s+notes\s+(?:on|of|for|during))\s+(?:the\s+|this\s+|my\s+|that\s+)?(?:[\w'-]+\s+){0,2}?(?:lecture|class|lesson|seminar|webinar|meeting)\b"
+    r"(?![^.!?]*\b(?:yesterday|tomorrow|later|next\s+\w+|last\s+\w+|tonight)\b)",
+    re.I,
+)
 # bare "stop listening" is the lecture only while one is being captured (else it
 # may mean "stop listening to me")
 _LEC_STOP_BARE = re.compile(_LEC_LEAD + r"stop\s+(?:listening|transcribing|recording|taking\s+notes)" + _LEC_TAIL, re.I)
@@ -585,6 +627,13 @@ _LEC_SUM = re.compile(_LEC_LEAD + r"(?:summari[sz]e|sum\s+up|give\s+me\s+(?:a\s+
 _LEC_ORDINAL = r"(first|second|third|fourth|fifth|sixth|seventh|eighth|last|1st|2nd|3rd|4th|5th|one|two|three|four|five|six|seven|eight|[1-8])"
 _LEC_EXPAND = re.compile(r"^\W*(?:(?:ok(?:ay)?|so|and|alright|irene)\W+)*(?:(?:can|could) you\s+|please\s+)*(?:tell\s+me\s+)?(?:a\s+bit\s+|a\s+little\s+)?more\s+(?:about|on)\s+"
                          r"(?:the\s+)?(?:" + _LEC_ORDINAL + r"\s+(?:topic|section|part|one)|(?:topic|section|part)\s+(?:number\s+)?" + _LEC_ORDINAL + r")" + _LEC_TAIL, re.I)
+# "look up more on the second topic", "research the first topic online": web research
+# into the note's walled-off section (lecture_research) - "tell me more about the second
+# topic" stays the lecture's own words (expand)
+_LEC_RESEARCH = re.compile(r"^\W*(?:(?:ok(?:ay)?|so|and|alright|irene)\W+)*(?:(?:can|could|would) you\s+|please\s+|go ahead and\s+)*"
+                           r"(?:look\s+up|research|search(?:\s+online)?\s+for|find(?:\s+(?:me|out))?)\s+(?:some\s+|a\s+bit\s+|a\s+little\s+)?(?:more\s+)?(?:(?:about|on|for)\s+)?"
+                           r"(?:the\s+)?(?:" + _LEC_ORDINAL + r"\s+(?:topic|section|part)|(?:topic|section|part)\s+(?:number\s+)?" + _LEC_ORDINAL
+                           + r"|(all|each|every)\s+(?:of\s+)?(?:the\s+)?(?:topics|sections|parts))(?:\s+(?:online|on the (?:web|internet)|from the lecture|of the lecture))?" + _LEC_TAIL, re.I)
 _LEC_WORDS = {"first": "1", "one": "1", "1st": "1", "second": "2", "two": "2", "2nd": "2", "third": "3", "three": "3", "3rd": "3", "fourth": "4",
               "four": "4", "4th": "4", "fifth": "5", "five": "5", "5th": "5", "sixth": "6", "six": "6", "seventh": "7", "seven": "7", "eighth": "8",
               "eight": "8", "last": "last"}
@@ -604,10 +653,13 @@ def _lecture(said: str, recent_tools=()) -> str | None:
     text = said.strip()
     if _LEC_STOP_NAMED.match(text) or (_LEC_STOP_BARE.match(text) and _capturing()):
         return _call("lecture_stop")
-    if _LEC_START.match(text):
+    if _LEC_START.match(text) or _LEC_START_LOOSE.match(text):
         return _call("lecture_start")
     if _LEC_SUM.match(text):
         return _call("lecture_summary")
+    if m := _LEC_RESEARCH.match(text):
+        which = (m.group(1) or m.group(2) or m.group(3) or "").lower()
+        return _call("lecture_research", {"topic": "all" if which in ("all", "each", "every") else _LEC_WORDS.get(which, which)})
     if "lecture_summary" in recent_tools and (m := _LEC_EXPAND.match(text)):
         which = (m.group(1) or m.group(2) or "").lower()
         return _call("lecture_summary", {"expand": _LEC_WORDS.get(which, which)})
@@ -722,21 +774,32 @@ def lecture_reply(result: str) -> str | None:
     spoken = getattr(lectures, "spoken", None)
     if not spoken or not result.startswith("lecture summarised"):
         return None
+    from irene.lecture_summary import ORDINAL
+
     parts = []
+    # each topic she opens points at its drawing - a different gesture each time
+    boards = ["presentBoard", "airDraw", "countOff"]
+    last = ""
     for k, sentence in enumerate(spoken):
+        cue = ""
         if k == 0:
             cue = "takeNotes"
         elif sentence.startswith("Heads up"):
             cue = _pick(["concerned", "lookout"])
         elif sentence.startswith("Note:"):
             cue = "focused"
-        elif sentence.startswith("The main topics"):
+        elif sentence.startswith(("The main topics", "The main topic")):
             cue = "presentBoard"
+        elif sentence.startswith(tuple(f"{o}, " for o in ORDINAL)):
+            cue = _pick([c for c in boards if c != last])
         elif sentence.startswith(("Fair warning", "I couldn't")):
             cue = "sheepish"
-        else:
-            cue = _pick(["proud", "happy"])
-        parts.append(f"<cue>{cue}</cue>{sentence}")
+        elif sentence.startswith("I've written it all up"):
+            cue = "pinNote"
+        if cue == last:
+            cue = ""
+        last = cue or last
+        parts.append(f"<cue>{cue}</cue>{sentence}" if cue else sentence)
     return f"<speak>{' '.join(parts)}</speak>"
 
 
@@ -756,6 +819,12 @@ def reply(name: str, args: dict, result: str, said: str) -> str | None:
         return expansion_reply(result) if args.get("expand") else briefing_reply(result)
     if name == "lecture_summary" and not args.get("expand"):
         return lecture_reply(result)
+    if name == "lecture_research" and not result.startswith("not run:"):
+        # (refused - e.g. naming a song - the model answers instead)
+        # always her own words about it, however he asked: the model never retells
+        # what she found (only the note's sourced lines say it)
+        speak, cue = _lecture_researched(args, result, said)
+        return f"<speak><cue>{cue}</cue>{speak}</speak>"
     fn = TEMPLATES.get(name)
     if fn is None or len(said.split()) > MAX_WORDS or _MORE.search(said):
         return None

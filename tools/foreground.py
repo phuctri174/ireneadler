@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Bring a window to the front - his Chrome after she opens something in it.
 
 Windows only lets the foreground process raise a window; core is a background

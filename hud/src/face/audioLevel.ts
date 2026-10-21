@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 /**
  * The mouth is driven by the short-window RMS of whatever Irene is currently
  * speaking. Kokoro streams that audio from the Python side, so the real source

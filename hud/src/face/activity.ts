@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Activity scenes: short looping LED animations Irene plays with her face still
 // visible - a game of chess, kendo practice, a tool's prop. Like reactions, they
 // never change state. This is the trigger API; the scenes are drawn in

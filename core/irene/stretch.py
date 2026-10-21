@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Slower (or faster) speech at the same pitch - WSOLA, for Turbo, which has no
 speed of its own. Short Hann-windowed frames of her own voice are laid down at
 the new rate, each one shifted (within a few ms) to where it lines up best with

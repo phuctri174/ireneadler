@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Voice on her face: that she is listening, that she hears him, and how long she
 // will wait before deciding he has finished (core/irene/listen.py's end-of-speech
 // wait, up to 3 s, shorter when his sentence clearly ended).

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Activity scenes on the matrix. Each is a looping timeline with two halves: a
 // pure look(t) - the expression the face wears at that moment, needed before the
 // face is drawn - and draw(frame, t), which paints in front of the face. The face
@@ -10,6 +12,8 @@ import { HANDS, drawHand } from "./hands";
 import type { Expression } from "./poses";
 import { PROPS } from "./props";
 import { drawBackdrop } from "./backdrops";
+import { STUDY_SCENE } from "./study";
+import { glyphCells, textWidth } from "../board/font";
 
 export interface SceneLook extends Expression {
   /** Eye colour override for a flash (kendo kiai). */
@@ -623,16 +627,43 @@ function kamaeLook(t: number): SceneLook {
 //   hit      she takes it: the target (men, kote or do) flashes, she rocks back
 //   strike   she strikes back at him: up, then the kensen comes at the camera
 //   ippon    two or three shinpan flags go up for him, with a whoosh
+//   dodge    (shiai) she slips his strike: arms and shinai swing wide the other way,
+//            nothing meets, a smug look
+// Shiai adds her attack and the beat of a point (core/irene/shiai.py):
+//   windup   her attack coming: shinai up over her men, cocked toward where she will
+//            cut, her eyes going red - and red brackets closing on that spot (men at the
+//            top, kote low right, do left, tsuki the middle), blinking fast as it
+//            lands. The brackets ARE the timing: block or step out before it closes.
+//   impact   the cut lands - "hit" (a white burst there, the screen's edge flashes,
+//            the target's name), "blocked" (his shinai across the top, a clash of
+//            sparks, she is annoyed) or "dodged" (it slices through empty air)
+//   ippon    (shiai) the flags, and the point called across the top: "MEN ARI"
+//   reset    both back to the start lines: the kaishi-sen on the floor, and what
+//            the next point is ("NIHONME", "SHOBU")
+//   hajime   "HAJIME" - and play resumes
 
-export type KeikoAction = "block" | "hit" | "strike" | "ippon";
+//   countdown before the bout (10 s) and after each point's reset (3 s): the seconds
+//            left, big, and what the point is - then hajime
+export type KeikoAction = "block" | "hit" | "strike" | "ippon" | "dodge" | "windup" | "impact" | "reset" | "hajime" | "countdown";
+export type KeikoTarget = "men" | "kote" | "dou" | "tsuki";
 
 export interface KeikoMoment {
   action: KeikoAction;
   /** When it began, on the stage clock (performance.now()). */
   at: number;
-  target?: "men" | "kote" | "dou";
+  target?: KeikoTarget;
   /** ippon: how many flags go up (2 or 3). */
   flags?: number;
+  /** ippon: the point called across the top ("MEN ARI"). */
+  call?: string;
+  /** ippon: whose point - his calls in amber, hers in pink. */
+  who?: "you" | "her";
+  /** impact: how her attack ended. */
+  result?: "hit" | "blocked" | "dodged";
+  /** windup: how long until it lands; reset: how long it holds. */
+  ms?: number;
+  /** reset: what the next point is ("NIHONME", "SHOBU"). */
+  label?: string;
 }
 
 let keikoMoment: KeikoMoment | null = null;
@@ -642,16 +673,153 @@ export function keikoReact(moment: KeikoMoment | null): void {
   keikoMoment = moment;
 }
 
-const KEIKO_MS: Record<KeikoAction, number> = { block: 900, hit: 1000, strike: 1150, ippon: 3000 };
+const KEIKO_MS: Record<KeikoAction, number> = {
+  block: 900, hit: 1000, strike: 1150, ippon: 3000, dodge: 900, windup: 1400, impact: 1300, reset: 2600, hajime: 1100, countdown: 10000,
+};
 // the camera off to her side, so the club banner hangs on the wall beside her, not hidden behind her
 const KEIKO_CAM = { x: 136, y: 66, s: 5 };
-const TARGET: Record<NonNullable<KeikoMoment["target"]>, Vec> = { men: { x: FRONT.x, y: FRONT.men.y - 6 }, kote: { x: FRONT.x - 6, y: 50 }, dou: { x: FRONT.x, y: FRONT.do.y + 2 } };
+const TARGET: Record<KeikoTarget, Vec> = {
+  men: { x: FRONT.x, y: FRONT.men.y - 6 }, kote: { x: FRONT.x - 6, y: 50 }, dou: { x: FRONT.x, y: FRONT.do.y + 2 },
+  tsuki: { x: FRONT.x, y: FRONT.men.y + FRONT.men.ry + 2 },
+};
+// where HER cut lands on him (the camera), as the screen shows it: each its own corner
+// of the picture, so the ring says where at a glance
+const AIM: Record<KeikoTarget, Vec> = { men: { x: 64, y: 9 }, kote: { x: 100, y: 58 }, dou: { x: 40, y: 58 }, tsuki: { x: 64, y: 40 } };
+// her shinai cocked toward the side she cuts - never straight up, where it would
+// read as the grille's middle bar
+const LEAN: Record<KeikoTarget, number> = { men: 0.7, kote: 1.1, dou: -1.1, tsuki: -0.5 };
 
 function current(now: number): { m: KeikoMoment; k: number } | null {
   const m = keikoMoment;
   if (!m || now < m.at) return null;
   const k = now - m.at;
-  return k < KEIKO_MS[m.action] ? { m, k } : null;
+  // a countdown holds its last second until hajime replaces it (she may still be talking)
+  const lasts = (m.ms ?? KEIKO_MS[m.action]) + (m.action === "countdown" ? 15000 : 0);
+  return k < lasts ? { m, k } : null;
+}
+
+/** Text centred on x, top at y, each lit cell `ink` - on a dark plate, so it reads
+ *  over her armour. */
+function words(frame: Frame, text: string, x: number, y: number, size: number, ink: Ink, alpha = 1): void {
+  let at = Math.round(x - textWidth(text, size) / 2);
+  if (alpha > 0.05) {
+    for (let py = y - 1; py <= y + 5 * size; py += 1) for (let px = at - 2; px <= at + textWidth(text, size) + 1; px += 1) frame.cover(px, py, 0, ink, FADE.fast);
+  }
+  for (const ch of text) {
+    for (const c of glyphCells(ch, at, y, size)) frame.cover(c.x, c.y, alpha, ink, FADE.fast);
+    at += textWidth(ch, size) + size;
+  }
+}
+
+/** Her arms up from the shoulders to her hands on the tsuka, drawn over her men. */
+function raisedArms(frame: Frame, hands: Vec): void {
+  const shoulders = [{ x: FRONT.x - 18, y: 37 }, { x: FRONT.x + 18, y: 37 }];
+  for (const shoulder of shoulders) {
+    const cuff = { x: lerp(shoulder.x, hands.x, 0.5), y: lerp(shoulder.y, hands.y, 0.5) };
+    drawSleeve(frame, shoulder, cuff, FADE.fast);
+    drawShape(frame, (x, y) => capsule(x, y, cuff, hands, 3.1), box(cuff, hands, 5), INK.accent, 1, FADE.fast, 1, 0.55);
+  }
+  drawShape(frame, (x, y) => roundBox(x, y, hands, 6, 3, 2), box(hands, hands, 9), INK.accent, 1, FADE.fast, 1, 0.75);
+}
+
+/** The shinai from her hands up and out of the picture, leaning `lean` to a side. */
+function raisedShinai(frame: Frame, hands: Vec, lean: number, alpha: number): void {
+  const len = 44;
+  const ang = Math.atan2(lean, 1);
+  const tip = { x: hands.x + Math.sin(ang) * len, y: hands.y - Math.cos(ang) * len };
+  drawShape(frame, (x, y) => capsule(x, y, hands, tip, 2.0), box(hands, tip, 4), INK.white, alpha, FADE.fast, 1, 0.75);
+  // the nakayui, so it reads as a shinai and not a stick
+  const band = { x: lerp(hands.x, tip.x, 0.55), y: lerp(hands.y, tip.y, 0.55) };
+  drawShape(frame, (x, y) => Math.hypot(x - band.x, y - band.y) - 2.2, box(band, band, 4), INK.amber, alpha, FADE.fast, 1, 0.9);
+}
+
+/** Her attack: the windup, then the cut landing - hit, blocked or dodged. */
+function herAttack(frame: Frame, on: { m: KeikoMoment; k: number }): void {
+  const { m, k } = on;
+  const target = m.target ?? "men";
+  const aim = AIM[target];
+  const lean = LEAN[target];
+  drawFrontDo(frame, 0);
+  drawFrontMen(frame, 0);
+  if (m.action === "windup") {
+    const ms = m.ms ?? KEIKO_MS.windup;
+    const p = clamp01(k / ms);
+    // up over her men in the first third, unmistakably: then it holds, cocked
+    const raise = ease(clamp01(k / (ms * 0.3)));
+    const hands = { x: FRONT.x + lean * 10 * raise, y: lerp(50, 10, raise) };
+    raisedArms(frame, hands);
+    raisedShinai(frame, hands, lean * raise, 1);
+    // brackets closing on where it will land (they read at the picture's edge too,
+    // where a ring would be cut off), blinking faster at the end
+    const blink = p > 0.7 ? (Math.floor(k / 80) % 2 === 0 ? 1 : 0.3) : 0.6 + 0.4 * Math.sin(k / 110);
+    const half = Math.round(lerp(24, 4, ease(p)));
+    for (const sx of [-1, 1]) {
+      for (const sy of [-1, 1]) {
+        const cx = aim.x + sx * half;
+        const cy = aim.y + sy * half;
+        // two cells thick, on a dark halo: it reads over the red do and the banner
+        for (let d = -1; d < 7; d += 1) {
+          for (let w = -1; w <= 2; w += 1) {
+            frame.cover(cx - sx * d, cy - sy * w, 0, INK.red, FADE.fast);
+            frame.cover(cx - sx * w, cy - sy * d, 0, INK.red, FADE.fast);
+          }
+        }
+        for (let d = 0; d < 6; d += 1) {
+          for (const w of [0, 1]) {
+            frame.cover(cx - sx * d, cy - sy * w, blink, INK.red, FADE.fast);
+            frame.cover(cx - sx * w, cy - sy * d, blink, INK.red, FADE.fast);
+          }
+        }
+      }
+    }
+    drawShape(frame, (x, y) => Math.hypot(x - aim.x, y - aim.y) - (3 + 2 * p), box(aim, aim, 7), INK.red, 0, FADE.fast, 1, 1);
+    drawShape(frame, (x, y) => Math.hypot(x - aim.x, y - aim.y) - (1.5 + 2 * p), box(aim, aim, 6), INK.red, blink, FADE.fast, 1, 1);
+    // the line of the cut, dotted in from her hands as it comes
+    for (let f = 0.1; f < p; f += 0.08) {
+      const d = { x: lerp(hands.x, aim.x, f), y: lerp(hands.y, aim.y, f) };
+      frame.cover(Math.round(d.x), Math.round(d.y), 0.5, INK.red, FADE.fast);
+    }
+    if (p > 0.55) words(frame, "!", aim.x + (aim.x > 64 ? -10 : 10), Math.max(1, aim.y - 4), 2, INK.red, blink);
+    return;
+  }
+  // impact: the cut comes down from overhead in 140 ms
+  const result = m.result ?? "hit";
+  const swing = ease(clamp01(k / 140));
+  const hands = { x: FRONT.x + lean * 10 * (1 - swing), y: lerp(10, 30, swing) };
+  raisedArms(frame, hands);
+  const miss = result === "dodged" ? { x: aim.x + (aim.x >= 64 ? 22 : -22), y: Math.min(71, aim.y + 18) } : aim;
+  const end = { x: lerp(hands.x, miss.x, swing), y: lerp(hands.y, miss.y, swing) };
+  drawShape(frame, (x, y) => capsule(x, y, hands, end, 1.6), box(hands, end, 4), INK.white, k < 700 ? 1 : 1 - (k - 700) / 600, FADE.fast, 1, 0.6);
+  const fade = k < 500 ? 1 : Math.max(0, 1 - (k - 500) / 700);
+  if (result === "hit") {
+    if (k > 100) impact(frame, aim, k - 100, 420, INK.white, 14);
+    if (k < 220) {
+      // the screen's own edge flashes: it hit HIM
+      for (let x = 0; x < 128; x += 1) for (const y of [0, 1, ROWS - 2, ROWS - 1]) frame.lighten(x, y, 1 - k / 220, INK.white, FADE.fast);
+      for (let y = 0; y < ROWS; y += 1) for (const x of [0, 1, 126, 127]) frame.lighten(x, y, 1 - k / 220, INK.white, FADE.fast);
+    }
+    words(frame, `${target === "dou" ? "DO" : target.toUpperCase()}!`, 64, 2, 2, INK.white, fade);
+  } else if (result === "blocked") {
+    // his shinai, across the top of his view, and the clash
+    for (let x = 34; x <= 94; x += 1) frame.cover(x, 13 + Math.round((x - 64) / 30), 0.9 * fade, INK.amber, FADE.fast);
+    if (k > 60) impact(frame, { x: 64, y: 13 }, k - 60, 360, INK.amber, 12);
+    words(frame, "BLOCKED", 64, 2, 1, INK.amber, fade);
+  } else {
+    // nothing there: streaks where it went through
+    for (let s = 1; s <= 3; s += 1) {
+      const a = { x: lerp(hands.x, miss.x, 0.3) + s * 3, y: lerp(hands.y, miss.y, 0.3) - s };
+      const b = { x: miss.x + s * 3, y: miss.y - s };
+      drawShape(frame, (x, y) => capsule(x, y, a, b, 0.4), box(a, b, 2), INK.white, 0.4 * fade, FADE.fast, 1, 0.5);
+    }
+    words(frame, "MISS", 64, 2, 1, INK.white, fade);
+  }
+}
+
+/** The beat between points: the start lines on the floor and what comes next. */
+function startLines(frame: Frame, alpha: number): void {
+  for (const [x0, x1, y] of [[50, 78, ROWS - 2], [44, 84, ROWS - 1]]) {
+    for (let x = x0; x <= x1; x += 1) frame.cover(x, y, alpha, INK.white, FADE.fast);
+  }
 }
 
 function impact(frame: Frame, c: Vec, k: number, len: number, ink: Ink, rays = 8): void {
@@ -683,6 +851,10 @@ function keiko(frame: Frame, t: number, now = 0): void {
     return;
   }
   const on = current(now);
+  if (on && (on.m.action === "windup" || on.m.action === "impact")) {
+    herAttack(frame, on);
+    return;
+  }
   const sway = Math.sin((t / 1000) * Math.PI * 0.9) * 0.6;
   let side = 0; // her shinai and hands swinging across (block)
   let lift = 1; // the shinai's tip: 1 = chudan at his throat
@@ -692,6 +864,10 @@ function keiko(frame: Frame, t: number, now = 0): void {
     side = k < 140 ? k / 140 : k < 520 ? 1 : 1 - (k - 520) / 380;
   } else if (on?.m.action === "hit") {
     rock = on.k < 120 ? on.k / 120 : Math.max(0, 1 - (on.k - 120) / 600);
+  } else if (on?.m.action === "dodge") {
+    // the other way from a block, and further: out of the line, not into it
+    const k = on.k;
+    side = -1.4 * (k < 160 ? k / 160 : k < 480 ? 1 : 1 - (k - 480) / 420);
   }
   drawFrontDo(frame, Math.round(rock * 2));
   if (on?.m.action === "strike") {
@@ -725,6 +901,25 @@ function keiko(frame: Frame, t: number, now = 0): void {
     const flags = on.m.flags ?? 3;
     const spots = [{ x: 8, y: 70, lean: 1 }, { x: 119, y: 70, lean: -1 }, { x: 100, y: 30, lean: 1 }].slice(0, flags);
     spots.forEach((s, i) => flag(frame, s.x, s.y, ease(clamp01((on.k - i * 140) / 220)), now, s.lean));
+    // the shinpan's call, across the top
+    if (on.m.call) words(frame, on.m.call, 64, 1, 2, on.m.who === "her" ? INK.pink : INK.amber, on.k < 150 ? on.k / 150 : 1);
+  }
+  if (on?.m.action === "reset") {
+    startLines(frame, 0.9);
+    if (on.m.label) words(frame, on.m.label, 64, 1, 2, INK.amber, 0.7 + 0.3 * Math.sin(on.k / 160));
+  }
+  if (on?.m.action === "countdown") {
+    // the seconds left, big over her men, ticking: each one lands bright and dims
+    const ms = on.m.ms ?? KEIKO_MS.countdown;
+    const left = Math.max(1, Math.ceil((ms - on.k) / 1000));
+    const tick = ((ms - on.k) % 1000) / 1000;
+    startLines(frame, 0.9);
+    words(frame, String(left), 64, 8, 4, left <= 3 ? INK.amber : INK.white, 0.85 + 0.15 * tick);
+    words(frame, on.m.label ?? "KAMAE", 64, 1, 1, INK.white, 0.8);
+  }
+  if (on?.m.action === "hajime") {
+    startLines(frame, Math.max(0, 1 - on.k / 600));
+    words(frame, "HAJIME", 64, 1, 2, INK.white, on.k < 700 ? 1 : 1 - (on.k - 700) / 400);
   }
 }
 
@@ -737,7 +932,23 @@ function keikoLook(t: number, now = 0): SceneLook {
     return { layout: "compact", emotion: "firedUp", mouth: "grin", eyeInk: flash ? INK.white : undefined };
   }
   if (on?.m.action === "block") return { layout: "compact", emotion: "focused", mouth: "flat" };
-  if (on?.m.action === "ippon") return { layout: "compact", emotion: "surprised", mouth: "o" };
+  if (on?.m.action === "dodge") return { layout: "compact", emotion: "smug", mouth: "smirk" };
+  if (on?.m.action === "ippon") {
+    return on.m.who === "her" ? { layout: "compact", emotion: "triumphant", mouth: "grin" } : { layout: "compact", emotion: "surprised", mouth: "o" };
+  }
+  if (on?.m.action === "windup") {
+    // the eyes go red and blink with the ring as it closes
+    const p = on.k / (on.m.ms ?? KEIKO_MS.windup);
+    const red = p > 0.3 && (p < 0.7 || Math.floor(on.k / 80) % 2 === 0);
+    return { layout: "compact", emotion: "firedUp", mouth: p > 0.7 ? "o" : "grin", eyeInk: red ? INK.red : undefined };
+  }
+  if (on?.m.action === "impact") {
+    if (on.m.result === "blocked") return { layout: "compact", emotion: "indignant", mouth: "flat" };
+    if (on.m.result === "dodged") return { layout: "compact", emotion: "surprised", mouth: "o" };
+    return { layout: "compact", emotion: "triumphant", mouth: "grin", eyeInk: on.k < 160 ? INK.white : undefined };
+  }
+  if (on?.m.action === "reset" || on?.m.action === "countdown") return { layout: "compact", emotion: "focused", mouth: "flat" };
+  if (on?.m.action === "hajime") return { layout: "compact", emotion: "firedUp", mouth: "grin", eyeInk: on.k < 160 ? INK.white : undefined };
   return { layout: "compact", emotion: "firedUp", mouth: "grin" };
 }
 
@@ -766,6 +977,8 @@ export const SCENES = {
   kendo: { loopMs: 6000, look: kendoLook, draw: kendo, idle: true },
   kamae: { loopMs: 6600, introMs: SUIT.ready, look: kamaeLook, draw: kamae, idle: true },
   keiko: { loopMs: 6600, introMs: SUIT.ready, look: keikoLook, draw: keiko, backdrop: keikoBackdrop },
+  // study mode (led/study.ts): head down over a book, the bar filling - and his hits
+  study: STUDY_SCENE,
   ...PROPS,
 } satisfies Record<string, Scene>;
 

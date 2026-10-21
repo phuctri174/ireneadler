@@ -10,6 +10,7 @@ import { FACE_CORNER, drawBoard, prepare } from "../.verify/board/board.js";
 import { TEMPLATES } from "../.verify/board/templates/index.js";
 import { FONT_CHARS, supported } from "../.verify/board/font.js";
 import { steps } from "../.verify/board/templates/sort.js";
+import { liveEcho } from "../.verify/board/templates/chessboard.js";
 
 let failures = 0;
 const check = (ok, label) => {
@@ -169,6 +170,30 @@ const textsAt = (drawing, t) => strokesOf(drawing, { t, now: new Date() }).filte
   const cmp = prepare({ template: "compare", left: "Python", right: "Rust", points: [{ side: "right", text: "Memory safe", at: 2000 }] });
   check(textsAt(cmp, 100).includes("PYTHON") && !textsAt(cmp, 100).includes("MEMORY SAFE") && textsAt(cmp, 2100).includes("MEMORY SAFE"), "a comparison point appears under its side as she says it");
   check(cornerLit(at(cmp, 5000)) === 0 && cornerLit(at(flow, 5000)) === 0, "flow and compare keep out of her face's corner");
+}
+
+// a live game with him: the move list is numbered from move one whatever its length
+// (live 2026-10-15, 17 plies sliced to 16 read "4. Ngf6 Nc3" - Black's move as White's),
+// and the HUD's echo is what it drew - pieces, turn, and where its list replays to
+{
+  const moves = ["e4", "e5", "Nf3", "d5", "exd5", "Nd7", "c4", "Ngf6", "Nc3", "Bb4", "a3", "Bc5", "b4", "Bd6", "c5", "e4", "Qe2"];
+  const g = new Chess();
+  for (const m of moves) g.move(m);
+  const spec = { template: "chessboard", live: true, fen: g.fen(), ply: moves.length, history: moves, last: ["d1", "e2"], status: "MY MOVE" };
+  const p = prepare(spec, quiet);
+  check(p !== null, "live 17-ply board draws");
+  if (p) {
+    const texts = TEMPLATES.chessboard.render(p.args, { t: 1e9, now: new Date() }).filter((s) => s.kind === "text").map((s) => s.text);
+    check(texts.includes("9.QE2"), `last line is "9.QE2" (got ${texts.join(" | ")})`);
+    check(!texts.some((t) => /NGF6 NC3/.test(t)), "no Black move shown as White's");
+    const echo = liveEcho(p.args);
+    const want = g.fen().split(" ").slice(0, 2).join(" ");
+    check(echo && echo.ply === 17 && echo.fen === want && echo.replayed === want && echo.moves === 17, `echo matches the game (${JSON.stringify(echo)})`);
+  }
+  // a move list that doesn't lead to the FEN is reported, not hidden
+  const off = prepare({ ...spec, history: moves.slice(1) }, quiet);
+  const echo = off && liveEcho(off.args);
+  check(echo && echo.replayed !== echo.fen, "a history that disagrees with the pieces shows in the echo");
 }
 
 if (failures > 0) {

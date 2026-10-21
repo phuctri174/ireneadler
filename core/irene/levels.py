@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """How loud she is: one place for every level (config/voice.yaml `output`).
 
 Measured before this existed: her speech sat at -26..-20 dBFS RMS (median -22.8,

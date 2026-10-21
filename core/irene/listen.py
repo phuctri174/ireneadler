@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Hearing him: the microphone, Silero VAD, and when he has finished speaking.
 
 The endpointer is the heart of it, and it is pure - frames and VAD probabilities

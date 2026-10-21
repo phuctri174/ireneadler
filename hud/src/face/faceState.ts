@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Face vocabulary for the main interface: what Irene is doing (state) and how she
 // carries it (emotion). State is authoritative - it is only ever set from a real
 // signal, never from an animation. Emotion is a presentation layer on top.
@@ -403,6 +405,128 @@ const EMOTION_ART = {
     "#.....#",
     "#.....#",
     ".#####.",
+  ],
+  // caughtOffGuard: "oh really?" - eyes blown round, the pupils pinned high and
+  // tiny, staring at him (led/theatre.ts shoots the brows up, adds the small "o"
+  // and the bead of sweat)
+  caughtOffGuard: [
+    ".+###+.",
+    "+#...#+",
+    "#..#..#",
+    "#.....#",
+    "#.....#",
+    "+#...#+",
+    ".+###+.",
+  ],
+  // arrogant: pleased with herself - lids drawn down flat, looking down her nose
+  // at him (led/theatre.ts adds the arched brows and the wide, closed smile)
+  arrogant: [
+    ".......",
+    ".......",
+    ".......",
+    "#######",
+    "#######",
+    "+#####+",
+    ".+###+.",
+  ],
+  // triumphant: she beat him - sharp, high crescents, squeezed up by the grin
+  // (led/theatre.ts adds the big open grin and the sparkles)
+  triumphant: [
+    ".......",
+    "..###..",
+    ".#####.",
+    "##+.+##",
+    "#.....#",
+    ".......",
+    ".......",
+  ],
+  // outplayed: he beat her - eyes squeezed shut > <, "how?!" (the pout and the
+  // sweat drop are led/theatre.ts)
+  outplayed: [
+    "#......",
+    "###....",
+    "..###..",
+    "....###",
+    "..###..",
+    "###....",
+    "#......",
+  ],
+  // standoff: a draw - level slits sizing him up
+  standoff: [
+    ".......",
+    ".......",
+    "+#####+",
+    "#######",
+    "+#####+",
+    ".......",
+    ".......",
+  ],
+  // oops: she didn't catch his throw - one eye wide, one squinting, as if that
+  // would help (led/theatre.ts adds the raised brow, the question mark and the wobble)
+  oops: {
+    left: [
+      ".+###+.",
+      "+#####+",
+      "#######",
+      "###.###",
+      "#######",
+      "+#####+",
+      ".+###+.",
+    ],
+    right: [
+      ".......",
+      ".......",
+      ".......",
+      "+#####+",
+      ".+###+.",
+      ".......",
+      ".......",
+    ],
+  },
+  // the study-mode hits (core/irene/study.py), comic throughout - never real distress:
+  // bonked: "ow!" - one eye winced shut, the other blown wide, its pupil knocked off
+  // centre (led/theatre.ts adds the bonk's burst and the stars circling her head)
+  bonked: {
+    left: [
+      ".......",
+      "..#.#..",
+      ".......",
+      "#######",
+      ".......",
+      ".......",
+      ".......",
+    ],
+    right: [
+      ".+###+.",
+      "+#...#+",
+      "#.....#",
+      "#....##",
+      "#.....#",
+      "+#...#+",
+      ".+###+.",
+    ],
+  },
+  // indignant: "I AM studying" - brows slammed into a V over glaring half-moons
+  // (the anger mark is led/theatre.ts)
+  indignant: [
+    "#......",
+    ".##....",
+    "...##..",
+    ".....##",
+    ".......",
+    "+#####+",
+    ".#####.",
+  ],
+  // surrender: "okay okay okay" - T_T, eyes shut, a tear running from each (the
+  // waterfall and the white flag are led/theatre.ts)
+  surrender: [
+    ".......",
+    "#######",
+    "#######",
+    "...#...",
+    "...#...",
+    "..###..",
+    "...#...",
   ],
 } satisfies Record<string, EyeArt | EyePair>;
 

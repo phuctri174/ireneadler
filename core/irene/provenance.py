@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Her memory, kept honest: what she says about him, his people or his past is
 said only when a memory she actually retrieved - or this conversation - says it.
 

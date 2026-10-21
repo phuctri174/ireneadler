@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // A graph: nodes round a circle, edges between them (arrows if directed, weights
 // at the midpoints), a path highlighted.
 //

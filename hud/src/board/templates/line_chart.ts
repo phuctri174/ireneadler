@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // A line chart: points joined in order, the axis range labelled, highest point marked.
 //
 //   { "template": "line_chart", "values": [3, 5, 4], "labels"?: [...], "title"?: "...", "unit"?: "" }

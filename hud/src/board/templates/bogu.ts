@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Bogu, the kendo armour, on a figure seen from the front, each part labelled:
 // men (the helmet: grille, and flaps over the shoulders), kote (the gauntlets),
 // dō (the chest protector) and tare (the waist protector, its flaps).

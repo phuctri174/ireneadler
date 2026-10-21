@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Screens-off mode: the monitors dark, the PC awake, Irene still listening.
 
 Real Windows sleep can't be woken by voice - the CPU is powered down and nothing

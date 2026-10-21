@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Short procedural sound effects: the summon entrances' foley and the little sounds
 under her reactions. Pure numpy, no sample files - each effect is a function of a
 seeded generator (and, for the stretchy ones, a duration), returning float32 at
@@ -743,15 +745,52 @@ def domain_win(rng: np.random.Generator, dur: float | None = None) -> np.ndarray
     return _norm(out)
 
 
+def bonk(rng: np.random.Generator, dur: float | None = None) -> np.ndarray:
+    """A cartoon whack on the head (study mode's hits): a hollow wooden knock that
+    drops in pitch, and a few tiny bells ringing round after it - the stars."""
+    out = np.zeros(int(0.7 * SR), np.float32)
+    t = _t(0.22)
+    knock = np.sin(_sweep(900, 260, 0.22, 0.35)) * np.exp(-t * 19)
+    knock += _band(rng.standard_normal(len(t)), 400, 2500) * np.exp(-t * 90) * 0.6
+    _place(out, np.tanh(knock * 1.6), 0)
+    for k, f in enumerate((2600, 3100, 2800)):
+        b = _t(0.18)
+        _place(out, np.sin(TAU * f * b) * np.exp(-b * 24) * 0.22, int((0.12 + 0.09 * k) * SR))
+    return _norm(out)
+
+
 EFFECTS: dict[str, Callable[..., np.ndarray]] = {
     fn.__name__: fn
     for fn in (
         click, swish, thwack, thwip, whoosh, thud, charge, beam, paper, dust, footsteps, skid, riffle, ding, sparkle,
         rattle, pop, glitch, beep, boing, chirp, giggle, gasp, sigh, tada, boop, wail,
         kiai, clock_tap, bark, meow, mash, game_over, fire, whimper, carriage_bell, boot, huff, flags,
-        bubble_snap, domain_win,
+        bubble_snap, domain_win, bonk,
     )
 }
+
+
+def shout(voice: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """Her spoken word turned into a kiai - "Hajime!" read flat becomes a sharp shout:
+    the silence trimmed, the low end thinned, driven hard (the strain of a shout), the
+    last syllable lifted and held, cut off short, with the kiai's open vowel under it."""
+    x = np.asarray(voice, np.float32)
+    loud = np.nonzero(np.abs(x) > 0.02 * (np.max(np.abs(x)) if len(x) else 1))[0]
+    if len(loud) == 0:
+        return kiai(rng)
+    x = x[max(0, loud[0] - int(0.01 * SR)): loud[-1] + int(0.02 * SR)]
+    x = highpass(x, 180, 2)
+    x = x / (np.max(np.abs(x)) + 1e-9)
+    p = np.linspace(0, 1, len(x))
+    # the end carries the shout: rising into the last syllable, then a hard stop
+    lift = 0.75 + 0.45 * np.clip((p - 0.45) / 0.4, 0, 1)
+    stop = np.minimum(1, (1 - p) / 0.06)
+    x = np.tanh(x * lift * 3.2) * stop
+    out = np.zeros(len(x) + int(0.05 * SR), np.float32)
+    _place(out, x, 0)
+    under = kiai(rng, 0.3) * 0.35
+    _place(out, under, max(0, len(x) - len(under)))
+    return _norm(out)
 
 
 def render(name: str, rng: np.random.Generator, dur: float | None = None) -> np.ndarray:

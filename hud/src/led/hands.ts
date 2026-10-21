@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Stylized LED hands. A hand is a rig - a rounded palm and a capsule per finger -
 // and a gesture is data: how far each finger is extended and where it points. The
 // rig is rasterised onto the matrix as a bright rim with a faint fill, part by part

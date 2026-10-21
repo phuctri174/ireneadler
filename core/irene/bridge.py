@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """WebSocket bridge to the HUD on 127.0.0.1. One JSON object per message.
 
 core -> HUD
@@ -28,6 +30,8 @@ import logging
 import time
 
 from fastapi import WebSocket, WebSocketDisconnect
+
+from . import modes
 
 log = logging.getLogger("irene.bridge")
 
@@ -106,6 +110,10 @@ class Bridge:
             log.info("hud disconnected (%d)", len(self._clients))
 
     async def send(self, message: dict) -> None:
+        # a turn run while a mode holds the display never repaints it (modes.py)
+        message = modes.gate(message)
+        if message is None:
+            return
         if message["type"] in self._sticky:
             self._sticky[message["type"]] = message
         if message["type"] == "state":

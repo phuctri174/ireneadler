@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Gauges: up to four dials, a half-ring each filled to its value.
 //
 //   { "template": "gauge", "items": [{ "label": "CPU", "value": 40, "max"?: 100, "detail"?: "8 cores" }] }

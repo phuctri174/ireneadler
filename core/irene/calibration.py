@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Gesture calibration capture: per-frame hand metrics, labelled by step.
 
 The HUD runs a capture profile from config/capture_profiles.json (summon,

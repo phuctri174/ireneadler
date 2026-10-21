@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // When he last did anything: typed, opened the bar, sent a command, showed a hand,
 // touched the panel. Idle life (face/idle.ts) waits for this to go quiet and stops
 // the moment it moves. Anything that sees him interact stamps it; nothing else

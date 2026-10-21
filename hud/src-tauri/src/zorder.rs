@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 //! Her z-order. Her windows (main interface and panel) are ordinary windows: he
 //! clicks or opens another app and it comes in front of her, and she keeps running
 //! behind it. A summon (voice, hand sign, hotkey) raises both to the top and gives

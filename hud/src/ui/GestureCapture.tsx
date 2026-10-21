@@ -1,10 +1,14 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { onFrame } from "../tracking/frameLoop";
 import type { GestureInput, GestureState } from "../tracking/gestures";
 import type { CoreSocket } from "../link/coreSocket";
+import { FramingCheck } from "../tracking/framing";
 import { flatten } from "../tracking/poseTracking";
 import type { PoseSample } from "../tracking/poseTracking";
+import type { CameraInfo, FrameTiming } from "../tracking/useHandTracking";
 import captureConfig from "../../../config/capture_profiles.json";
 import "./GestureCapture.css";
 
@@ -32,8 +36,12 @@ interface CaptureStep {
 
 interface CaptureProfile {
   hotkey: string;
+  /** "pose": the run reads the upper body, so the pose model is armed for it */
+  tracks?: "pose";
   steps: CaptureStep[];
   done: string;
+  /** a body run starts with his hands checked in frame, in kamae (src/tracking/framing.ts) */
+  framing?: { wristMaxY: number; prompt: string; spoken: string };
 }
 
 const CONFIG = captureConfig as unknown as {
@@ -42,7 +50,9 @@ const CONFIG = captureConfig as unknown as {
   profiles: Record<string, CaptureProfile>;
 };
 
-export const CAPTURE_PROFILES = Object.keys(CONFIG.profiles);
+// a profile core runs itself (rock-paper-scissors: captured as the game's own rounds)
+// is not one this component can run
+export const CAPTURE_PROFILES = Object.keys(CONFIG.profiles).filter((name) => !(CONFIG.profiles[name] as { driver?: string }).driver);
 
 /** Hand must be seen this long before the countdown starts. */
 const HAND_SETTLE_MS = 400;
@@ -50,6 +60,8 @@ const WAIT_HAND_MS = 20000;
 /** No new camera sample for this long means the feed is dead, not the hand missing. */
 const NO_CAMERA_MS = 2500;
 const MAX_TRIES = 3;
+/** Long enough to tilt the camera and sit back down; nothing is recorded meanwhile. */
+const FRAMING_WAIT_MS = 120000;
 
 export interface CaptureFrame {
   [key: string]: number | boolean | string | number[];
@@ -60,7 +72,20 @@ function round(value: number, places = 5): number {
   return Math.round(value * k) / k;
 }
 
-function snapshot(g: GestureState, input: GestureInput | null, t: number, body: PoseSample | null): CaptureFrame {
+/** A body capture's frame also says how the frame went: its timing (dropped frames,
+ *  inference cost) and the camera's exposure - the strike diagnosis needs both. */
+interface FrameNotes {
+  timing: FrameTiming | null;
+  camera: CameraInfo | null;
+}
+
+function snapshot(
+  g: GestureState,
+  input: GestureInput | null,
+  t: number,
+  body: PoseSample | null,
+  notes: FrameNotes | null,
+): CaptureFrame {
   const d = g.diag;
   const frame: CaptureFrame = {
     t: Math.round(t),
@@ -103,6 +128,19 @@ function snapshot(g: GestureState, input: GestureInput | null, t: number, body: 
   if (body) {
     frame.pose = flatten(body);
   }
+  if (notes?.timing) {
+    frame.dtMs = round(notes.timing.dtMs, 1);
+    frame.skipped = notes.timing.skipped;
+    frame.handMs = round(notes.timing.handMs, 1);
+    frame.poseMs = round(notes.timing.poseMs, 1);
+  }
+  if (notes?.camera) {
+    frame.exposureMode = notes.camera.exposureMode;
+    frame.exposureTime = notes.camera.exposureTime;
+    frame.camW = notes.camera.width;
+    frame.camH = notes.camera.height;
+    frame.camFps = notes.camera.frameRate;
+  }
   // the engine's exact input, for offline replay
   if (input) {
     frame.ts = round(input.timestamp, 3);
@@ -129,12 +167,14 @@ interface Props {
   input: RefObject<GestureInput | null>;
   /** The upper body, for keiko profiles; null unless the tracker is armed. */
   pose: RefObject<PoseSample | null>;
-  /** Loads the pose model for a keiko run and tears it down afterwards. */
+  /** Loads the pose model for a body run and tears it down afterwards. */
   armPose: (on: boolean) => void;
+  timing: RefObject<FrameTiming | null>;
+  camera: () => CameraInfo | null;
   core: CoreSocket;
 }
 
-type Phase = "waiting" | "countdown" | "recording" | "done" | "failed";
+type Phase = "framing" | "waiting" | "countdown" | "recording" | "done" | "failed";
 
 interface View {
   prompt: string;
@@ -144,7 +184,7 @@ interface View {
   hand: boolean;
 }
 
-export function GestureCapture({ run, gestures, input, pose, armPose, core }: Props) {
+export function GestureCapture({ run, gestures, input, pose, armPose, timing, camera, core }: Props) {
   const [view, setView] = useState<View | null>(null);
   const running = useRef(false);
 
@@ -156,9 +196,11 @@ export function GestureCapture({ run, gestures, input, pose, armPose, core }: Pr
       return;
     }
     running.current = true;
-    // keiko is read from the upper body; nothing else needs the pose model, so it
-    // is loaded for this run only and closed again on the way out
-    const needsBody = run.profile.startsWith("keiko");
+    // a "tracks": "pose" profile (keiko, hits) is read from the upper body; nothing
+    // else needs the pose model, so it is loaded for this run only and closed again
+    // on the way out. Keyed on the profile's field, never its name: a name check
+    // once ran the hits capture on the hand model and saved no strike at all.
+    const needsBody = profile.tracks === "pose";
     armPose(needsBody);
     const steps = profile.steps;
     const session = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
@@ -170,10 +212,13 @@ export function GestureCapture({ run, gestures, input, pose, armPose, core }: Pr
     let step = 0;
     let rep = 0;
     let tries = 0;
-    let phase: Phase = "waiting";
+    // a body run with a framing line checks his hands are in the picture first
+    const framing = needsBody && profile.framing ? new FramingCheck(profile.framing.wristMaxY) : null;
+    let phase: Phase = framing ? "framing" : "waiting";
     let phaseStart = performance.now();
     let handSince = 0;
     let frames: CaptureFrame[] = [];
+    let cameraNow: CameraInfo | null = null;
     let lastSample = gestures.current.samples;
     let lastSampleAt = performance.now();
     let warnedCamera = false;
@@ -198,9 +243,12 @@ export function GestureCapture({ run, gestures, input, pose, armPose, core }: Pr
       show({ prompt, phase: outcome, big: "", meta, hand: false });
       window.setTimeout(() => setView(null), outcome === "done" ? 2500 : 6000);
       stop();
+      // the run is over, done or failed: the body model goes with it, not at the
+      // next run (it kept running at 30 Hz after a failed hits run)
+      armPose(false);
     };
 
-    say(steps[0].spoken);
+    say(framing && profile.framing ? profile.framing.spoken : steps[0].spoken);
     console.log(`[irene] ${run.profile} capture ${session} started`);
 
     const stop = onFrame((now) => {
@@ -224,6 +272,30 @@ export function GestureCapture({ run, gestures, input, pose, armPose, core }: Pr
       if (cameraDead && !warnedCamera) {
         warnedCamera = true;
         say("I'm not getting any camera frames.");
+      }
+
+      if (phase === "framing" && framing && profile.framing) {
+        const framed = framing.update(pose.current?.landmarks, now);
+        const low = framing.lowest;
+        show({
+          prompt: profile.framing.prompt,
+          phase,
+          big: cameraDead ? "NO CAMERA" : low === null ? "STEP INTO VIEW" : framing.inside ? "IN FRAME" : "TILT DOWN",
+          meta: low === null
+            ? "head and both shoulders in frame, please"
+            : `lowest wrist at ${low.toFixed(2)} of frame height - ${profile.framing.wristMaxY} or less`,
+          hand: framing.inside,
+        });
+        if (framed) {
+          core.send({ type: "hud_trace", step: `capture ${run.profile} framing ok: lowest wrist ${low?.toFixed(2)} (line ${profile.framing.wristMaxY}) after ${(elapsed / 1000).toFixed(1)} s` });
+          say(steps[0].spoken);
+          enter("waiting", now);
+        } else if (elapsed > FRAMING_WAIT_MS) {
+          core.send({ type: "hud_trace", step: `capture ${run.profile} framing failed: lowest wrist ${low === null ? "none" : low.toFixed(2)} (line ${profile.framing.wristMaxY})` });
+          say("Your hands never came into the picture. Capture stopped - nothing was saved.");
+          end("failed", "HANDS OUT OF FRAME", "capture stopped - nothing saved");
+        }
+        return;
       }
 
       if (phase === "waiting") {
@@ -259,12 +331,18 @@ export function GestureCapture({ run, gestures, input, pose, armPose, core }: Pr
         if (elapsed >= countdownMs) {
           enter("recording", now);
           frames = [];
+          // once per take: getSettings() is not free, and exposure is fixed or
+          // auto for the whole take anyway
+          cameraNow = needsBody ? camera() : null;
         }
         return;
       }
 
       // recording: one record per camera sample, however fast the render loop runs
-      if (fresh) frames.push(snapshot(g, input.current, elapsed, pose.current));
+      if (fresh) {
+        const notes = needsBody ? { timing: timing.current, camera: cameraNow } : null;
+        frames.push(snapshot(g, input.current, elapsed, pose.current, notes));
+      }
       const withHand = frames.filter((f) => (needsBody ? Array.isArray(f.pose) : f.hand)).length;
       const count = Math.max(1, Math.ceil((recordMs - elapsed) / 1000));
       show({
@@ -324,7 +402,7 @@ export function GestureCapture({ run, gestures, input, pose, armPose, core }: Pr
       armPose(false);
       running.current = false;
     };
-  }, [run, gestures, input, pose, armPose, core]);
+  }, [run, gestures, input, pose, armPose, timing, camera, core]);
 
   if (!view) return null;
   return (

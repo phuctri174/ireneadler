@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Upper body, for keiko.
 //
 // The gesture engine reads a hand: 21 landmarks, one hand, every frame. Kamae and

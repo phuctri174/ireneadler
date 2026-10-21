@@ -25,7 +25,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
 from irene import chess_talk  # noqa: E402
-from irene.chess_game import ChessGame, command, parse, settings  # noqa: E402
+from irene.chess_game import ChessGame, colour_choice, command, parse, settings  # noqa: E402
 
 START = chess.STARTING_FEN
 OPEN = "r1bqkbnr/pppp1ppp/2n5/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R b KQkq - 0 3"
@@ -77,6 +77,21 @@ COMMANDS: list[tuple[str, bool, bool, str | None]] = [
     ("My friend is really good at chess.", False, False, None), ("I resign from my job tomorrow lol", False, False, None),
     ("take that back, you're not funny", False, False, None), ("new game on Steam is great", False, False, None),
     ("stop the music", True, False, "move"),
+    # after the game: the engine's review
+    ("Review the game", False, True, "review"), ("Can you analyse that game?", False, True, "review"),
+    ("How did I play?", False, True, "review"), ("Where did I go wrong?", False, True, "review"),
+    ("What was my worst move?", False, True, "review"), ("go over the game with me", False, True, "review"),
+    ("Review the game", False, False, None), ("how did I play football today", False, False, None),
+    ("review my essay", False, True, None),
+]
+
+# his answer to "white or black?" -> HIS colour, "random", or None (not an answer: the model)
+COLOURS: list[tuple[str, str | None]] = [
+    ("White.", "white"), ("white please", "white"), ("I'll take white", "white"), ("I'll be black", "black"),
+    ("Black.", "black"), ("you be white", "black"), ("you can have black", "white"), ("I'll go first", "white"),
+    ("you go first", "black"), ("You choose.", "random"), ("surprise me", "random"), ("I don't mind", "random"),
+    ("either is fine", "random"), ("flip a coin", "random"), ("up to you", "random"), ("doesn't matter", "random"),
+    ("hmm", None), ("are you any good?", None), ("what time is it", None), ("let me think", None),
 ]
 
 
@@ -89,6 +104,11 @@ def run_moves() -> tuple[int, int, list[str]]:
         if got != want:
             fails.append(f"move {said!r}: got {got}, want {want}")
     return len(MOVES) - len(fails), len(MOVES), fails
+
+
+def run_colours() -> tuple[int, int, list[str]]:
+    fails = [f"colour {said!r}: got {colour_choice(said)}, want {want}" for said, want in COLOURS if colour_choice(said) != want]
+    return len(COLOURS) - len(fails), len(COLOURS), fails
 
 
 def run_commands() -> tuple[int, int, list[str]]:
@@ -112,7 +132,7 @@ async def run_truth(games: int) -> tuple[int, int, list[str]]:
     try:
         for n in range(games):
             game = ChessGame()
-            await game.start("")
+            await game.start("I'll be white")
             skill = [0, 3, 8, 20][n % 4]
             plies = 0
             while game.active and plies < 120:
@@ -153,10 +173,12 @@ async def main() -> int:
     started = time.perf_counter()
     m_ok, m_n, m_f = run_moves()
     c_ok, c_n, c_f = run_commands()
+    k_ok, k_n, k_f = run_colours()
+    c_f += k_f
     t_ok, t_n, t_f = await run_truth(args.games) if Path(settings().engine).exists() else (0, 0, ["engine not installed"])
     for line in [*m_f, *c_f, *t_f]:
         print("FAIL", line)
-    print(json.dumps({"moves": f"{m_ok}/{m_n}", "commands": f"{c_ok}/{c_n}", "true_claims": f"{t_ok}/{t_n}",
+    print(json.dumps({"moves": f"{m_ok}/{m_n}", "commands": f"{c_ok}/{c_n}", "colours": f"{k_ok}/{k_n}", "true_claims": f"{t_ok}/{t_n}",
                       "games": args.games, "minutes": round((time.perf_counter() - started) / 60, 1)}))
     return 0 if not (m_f or c_f or t_f) else 1
 

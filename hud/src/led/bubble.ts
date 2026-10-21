@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // A manga speech bubble for her domain expansion's last word (a skit line's
 // "domain": {"bubble": "..."}, core/irene/skit.py): a classic comic balloon with a
 // tail, her words inside in heavy display type, cyan and ice-blue like the rest of

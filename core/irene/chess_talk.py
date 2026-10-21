@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """What Irene says while she plays chess - the lines, the faces, the openings.
 
 Every line is chosen by the game (chess_game.py) from what the ENGINE found, so it
@@ -14,17 +16,81 @@ import random
 import re
 
 LINES: dict[str, tuple[str, ...]] = {
-    "start_he_white": (
-        "Ooh, chess! You're white, sir - your move.",
-        "A game? Yes! White's yours. Go on, impress me.",
-        "Board's up. You go first - I'll try to be nice. Briefly.",
-        "Let's play! You're white. No pressure. Some pressure.",
-        "Chess! My favourite. Your move, Mister Tri.",
+    "ask_colour": (
+        "Chess! Yes! White or black - or shall I pick?",
+        "Ooh, a game. Which side do you want: white, black, or should I choose?",
+        "Board's up. White or black, sir? Or I can pick for you.",
     ),
-    "start_she_white": (
-        "I'm white? Then I'm starting. Watch this.",
-        "Ooh, I get first move. Lovely.",
-        "Fine, I'll go first. Brace yourself.",
+    "start_he_white": (
+        "You're white, sir - your move.",
+        "White it is. You're white, I'm black. Go on, impress me.",
+        "You've got white, so you go first. I'll try to be nice. Briefly.",
+        "You're white. No pressure. Some pressure.",
+    ),
+    "start_he_black": (
+        "You're black, so I'm white - and I'm starting.",
+        "Black for you, white for me. First move's mine. Watch this.",
+        "Okay: you're black, I'm white. Brace yourself.",
+    ),
+    "coin_he_white": (
+        "Let me pick... you're white! Your move.",
+        "Coin says... white for you. Off you go.",
+    ),
+    "coin_he_black": (
+        "Let me pick... you're black, so I'm white. I'll start.",
+        "Coin says... you're black! First move's mine.",
+    ),
+    "engine_down": (
+        "Hang on - my chess engine just froze. I've restarted it and put the board back, so say your move again?",
+        "Ugh, my engine stalled. Board's back where it was - say that move once more?",
+    ),
+    "owed": (
+        "Wait - I still owe you a move.",
+        "Hold on, it's my move first.",
+    ),
+    "review_intro": (
+        "Let me run the engine over that game - one moment.",
+        "Okay, review time. Give me a few seconds with the engine.",
+        "Let's see what really happened in that one...",
+    ),
+    "review_counts": (
+        "By the engine's count: {his} for you, {hers} for me.",
+        "Engine says {his} from you and {hers} from me.",
+        "The tally: you made {his}, I made {hers}.",
+    ),
+    "review_worst_his": (
+        "Your worst move was move {n}, {move} - {best} was the one.",
+        "The big one was move {n}: {move}. {best} was there instead.",
+    ),
+    "review_worst_his_plain": (
+        "Your worst move was move {n}, {move}.",
+    ),
+    "review_worst_hers": (
+        "My worst was move {n}, {move}. Ugh. {best} was right there.",
+        "And my worst: move {n}, {move}, when {best} was better. Don't remind me.",
+    ),
+    "review_worst_hers_plain": (
+        "My worst was move {n}, {move}. Ugh.",
+    ),
+    "review_turning": (
+        "The turning point was move {n}, when {who} played {move}.",
+        "It turned on move {n}: {move}.",
+    ),
+    "review_turning_same": (
+        "That was also the turning point.",
+        "And that's where the game turned.",
+    ),
+    "review_clean": (
+        "Neither of us gave anything away. Suspicious.",
+        "No real mistakes on either side. Very tidy.",
+    ),
+    "review_panel": (
+        "It's all on the panel - every move, the graph, the key positions.",
+        "Full breakdown's on the panel; say save it as a PDF if you want to keep it.",
+        "Everything's on the panel, move by move.",
+    ),
+    "review_failed": (
+        "My engine wouldn't cooperate for the review, sorry - no breakdown this time.",
     ),
     "stop": (
         "Okay, board's away. We'll call that one a draw. For your sake.",
@@ -36,11 +102,6 @@ LINES: dict[str, tuple[str, ...]] = {
         "Resigning? Well played anyway, sir. Rematch whenever you're ready.",
         "I'll take it! Good game, Mister Tri.",
         "A wise resignation. Painful, but wise.",
-    ),
-    "she_resigns": (
-        "Okay... I resign. That was really well played, sir.",
-        "I know when I'm beaten. I resign - good game.",
-        "Fine! I resign. Don't let it go to your head.",
     ),
     "takeback": (
         "Fine, take it back. Just this once.",
@@ -146,6 +207,7 @@ LINES: dict[str, tuple[str, ...]] = {
         "We're in the {name} now.",
         "That makes it a {name}. Classic.",
         "Hello, {name}.",
+        "The {name} - one of my favourites.",
     ),
     # --- the position after her move -----------------------------------------------
     "winning": (
@@ -168,9 +230,31 @@ LINES: dict[str, tuple[str, ...]] = {
         "Ooh. I see something. Do you?",
         "I think I have a mate coming. No pressure!",
     ),
+    # --- the unravelling: she never resigns, so the slide is heard, one step at a time
+    "crumbling": (
+        "Okay. Okay okay okay. That's... not ideal.",
+        "Hm. Hmm. I may have miscalculated something. Slightly.",
+        "This is fine. This is totally fine. It's not fine.",
+    ),
+    "collapsing": (
+        "Why is everything I own under attack?",
+        "No - wait. Where did my pieces go? I had pieces!",
+        "I'm not panicking. I'm strategically... panicking.",
+    ),
     "he_has_mate": (
         "...You have a mate, don't you. Don't tell me.",
         "Oh no. Oh no no. I see it.",
+        "Wait. Wait wait wait. Is that... is that mate coming?",
+    ),
+    "mate_close": (
+        "There has to be a way out. There's always a way out. Isn't there?",
+        "I'm looking. I'm looking! Every square is covered!",
+        "No no no no. My king has nowhere to go. Nowhere!",
+    ),
+    "mate_next": (
+        "...It's mate next move. I can see it. Please don't see it.",
+        "One move. You're one move away. I'm going to pretend I don't know that.",
+        "Go on then. Do it. I'll be right here. Dying.",
     ),
     # --- the end -----------------------------------------------------------------
     "she_mates": (
@@ -179,9 +263,12 @@ LINES: dict[str, tuple[str, ...]] = {
         "Checkmate! Rematch? You look like you want a rematch.",
     ),
     "he_mates": (
-        "Checkmate... you got me. Well played.",
-        "Noooo. Okay. That's mate. Rematch?",
-        "Checkmate. I demand a rematch.",
+        "Checkmate. ...I saw it coming three moves ago and I still walked right into it. Well played, sir. Rematch. Now.",
+        "...That's mate. My king is lying down. I'm lying down. Give me a moment.",
+        "Checkmate. Okay. Okay. I'm fine. I'm completely fine. Set them up again. Right now.",
+        "No. No no no. That's checkmate. You actually did it. ...I'm framing this game. Then I'm burning it.",
+        "Checkmate. I fought to the very last square and you still found it. Respect. Grudging, furious respect.",
+        "And... that's mate. Somewhere a grandmaster just felt a disturbance. Well played, Mister Tri.",
     ),
     "draw": (
         "That's a draw! Nobody wins. Very diplomatic of us.",
@@ -193,9 +280,17 @@ LINES: dict[str, tuple[str, ...]] = {
 # the faces for each moment, best first (config/cues.json names)
 CUES: dict[str, tuple[str, ...]] = {
     "start": ("firedUp", "excited", "happy"),
+    "ask_colour": ("headTilt", "excited", "happy"),
+    "engine_down": ("sheepish", "dizzy"),
+    "review_intro": ("thinking", "focused"),
+    "review": ("studyBoard", "thinking", "focused"),
     "stop": ("shrug", "wave"),
     "he_resigns": ("bow", "proud", "smug"),
-    "she_resigns": ("bow", "sad", "sheepish"),
+    "crumbling": ("concerned", "oops", "peeking"),
+    "he_has_mate": ("shocked", "concerned"),
+    "collapsing": ("nailBite", "shocked", "dizzy"),
+    "mate_close": ("nailBite", "shocked", "sobbing"),
+    "mate_next": ("sobbing", "surrender", "sad"),
     "takeback": ("fingerWag", "wink", "innocent"),
     "which": ("headTilt", "confused"),
     "illegal": ("fingerWag", "headTilt"),
@@ -214,7 +309,7 @@ CUES: dict[str, tuple[str, ...]] = {
     "losing": ("concerned", "dizzy", "peeking"),
     "even_again": ("phew", "focused"),
     "she_mates": ("excitedBounce", "proud", "cool"),
-    "he_mates": ("sobbing", "sad", "bow"),
+    "he_mates": ("outplayed", "sobbing", "bow"),
     "draw": ("shrug", "phew"),
 }
 
@@ -295,7 +390,8 @@ class Lines:
         self._last[kind] = line
         text = line.format(**fill) if fill else line
         # a filled-in move or reason that starts a sentence: capitalised
-        return re.sub(r"(^|[.!?]\s+)([a-z])", lambda m: m.group(1) + m.group(2).upper(), text)
+        # (an ellipsis is a pause, not a sentence's end: "And... that's mate")
+        return re.sub(r"(^|(?<!\.\.)[.!?]\s+)([a-z])", lambda m: m.group(1) + m.group(2).upper(), text)
 
     def cue(self, kind: str | None) -> str | None:
         family = CUES.get(kind or "", ())

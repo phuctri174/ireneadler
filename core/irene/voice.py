@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Irene's voice engines, behind one interface: text in, 24 kHz float32 audio out.
 
   turbo   Chatterbox-Turbo (Resemble AI, MIT), cloned from her af_bella reference

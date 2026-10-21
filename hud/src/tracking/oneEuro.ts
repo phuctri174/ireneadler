@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 export interface OneEuroConfig {
   minCutoff: number;
   beta: number;

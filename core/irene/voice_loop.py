@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Voice: the microphone to her conversation, and back.
 
   asleep      only a wake phrase counts ("Hey Irene", "Irene Adler")

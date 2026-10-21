@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 /**
  * Wire format for whatever the panel is asked to show. The backend composes an
  * arbitrary sequence of these; the panel renders them in order and knows nothing
@@ -121,7 +123,18 @@ export interface StoryBlock {
   original?: string;
 }
 
+/** A framed region of other blocks with its own label and look: a lecture note's
+ *  key points, homework, definitions - and what she researched online, which must
+ *  never look like what the lecturer said (core/irene/lecture_note.py). */
+export interface BoxBlock {
+  kind: "box";
+  tone: "points" | "homework" | "definitions" | "research" | string;
+  title: string;
+  blocks: ContentBlock[];
+}
+
 export type ContentBlock =
+  | BoxBlock
   | WeatherBlock
   | PriceBlock
   | StoryBlock

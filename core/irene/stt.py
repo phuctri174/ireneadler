@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Speech to text: faster-whisper large-v3-turbo on the GPU, loaded on first use.
 
 float16 only - int8 crashes on sm_120 (the RTX 5060 Ti), so any other compute

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // The shiai-jo, the match court, as the FIK Regulations of Kendo Shiai and Shinpan
 // set it out (Art. 2): a square (or rectangle) 9 to 11 m a side, lines included,
 // white lines 5-10 cm wide; a cross at the centre and two kaishi-sen (starting

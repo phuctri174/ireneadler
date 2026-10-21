@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """What he has told her this session, kept where she always sees it.
 
 The conversation history holds everything, but in a long session the thing that

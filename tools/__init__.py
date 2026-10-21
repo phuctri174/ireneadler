@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Irene's tool registry. Every tool declares whether it needs a yes from the user
 (confirm) and whether it only reads (readonly). See registry.py."""
 from .registry import REGISTRY, Prepared, Tool, ToolError, ToolResult, tool

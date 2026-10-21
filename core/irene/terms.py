@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """The key terms of a research answer, for the board while she says it.
 
 As each grounded sentence plays, its key terms appear on the board one at a time

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """His voice, kept for later training: every voice turn and every correction.
 
 core/voice_data/ (gitignored, never leaves the machine):

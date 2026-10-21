@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KAMAE_MODEL } from "./kamaeModel";
 import { note as perfNote } from "../perf";
@@ -9,6 +11,7 @@ import type { OneEuroConfig, Vec2 } from "./oneEuro";
 import { GestureEngine, neutralGestures } from "./gestures";
 import type { GestureInput, GestureState, HandSample, Handedness } from "./gestures";
 import { syntheticSample } from "./synthetic";
+import { GameMode } from "./gameMode";
 import { PoseTracker, flatten } from "./poseTracking";
 import type { PoseSample } from "./poseTracking";
 import { KamaeWatcher } from "./kamaeFeatures";
@@ -16,6 +19,10 @@ import type { KamaeEvent } from "./kamaeFeatures";
 import { StrikeWatcher } from "./strikeFeatures";
 import type { StrikeEvent } from "./strikeFeatures";
 import { STRIKE_MODEL } from "./strikeModel";
+import { MoveDetector, StrikeEventDetector } from "./strikeEvent";
+import type { Move, MoveTuning, StrikeHit, StrikeTuning } from "./strikeEvent";
+import { BlockDetector, BodyProbe, MenSequence } from "./strikeKind";
+import type { BlockHit, BlockTuning, MenTuning } from "./strikeKind";
 import hudConfig from "../../../config/hud.json";
 
 // Kamae as a TRIGGER is retired: it fired on everyday arm movements. Keiko starts by
@@ -54,6 +61,27 @@ export interface HandTrackingOptions {
   onKamae?: (event: KamaeEvent) => void;
   /** Keiko is on and he struck (the strike recogniser, strikeFeatures.ts). */
   onStrike?: (event: StrikeEvent) => void;
+  /** Strike events are on and he struck at her (strikeEvent.ts) - binary. */
+  onStrikeEvent?: (event: StrikeHit) => void;
+  /** Footwork is on (shiai) and he advanced, retreated or stepped aside. */
+  onMove?: (move: Move) => void;
+  /** Shiai: both hands up over his head, held - a block (strikeKind.ts). */
+  onBlock?: (hit: BlockHit) => void;
+  /** Dev probe: a second of body stats (BodyProbe), while a probe config is on. */
+  onProbe?: (stats: Record<string, number>) => void;
+}
+
+/** What core switches on (study mode, shiai, a calibration): null switches it all off. */
+export interface StrikeEventsConfig {
+  strikes: StrikeTuning;
+  moves?: MoveTuning | null;
+  /** The block pose (shiai). */
+  block?: BlockTuning | null;
+  /** Shiai: a strike is reported only as a whole men - raise, cut, zanshin
+   *  (strikeKind.ts MenSequence). Without it (study mode) the strike event as is. */
+  men?: MenTuning | null;
+  /** Dev probe: also report what the body did, once a second (onProbe). */
+  probe?: boolean;
 }
 
 export interface HandTracking {
@@ -68,8 +96,15 @@ export interface HandTracking {
   /** The upper body, for keiko only - null unless armPose(true) is in force. */
   poseRef: RefObject<PoseSample | null>;
   armPose: (on: boolean) => void;
+  /** How the last processed camera frame went - a body capture records it per frame. */
+  frameTiming: RefObject<FrameTiming | null>;
+  /** The camera's exposure as the browser reports it, read when asked. */
+  cameraInfo: () => CameraInfo | null;
   /** Keiko on/off: the body model runs every frame and his strikes are read. */
   setKeiko: (on: boolean) => void;
+  /** Strike events (and shiai's footwork) on with core's tuning, or off with null:
+   *  the body model runs every frame while they are on. */
+  setStrikeEvents: (config: StrikeEventsConfig | null) => void;
   gestures: GestureState;
   fps: number;
   detectMs: number;
@@ -80,6 +115,31 @@ export interface HandTracking {
   /** Screens-off mode: no detection at all - not even the hidden-window summon
    *  probe - until it is lifted. */
   setSuspended: (suspended: boolean) => void;
+  /** Game mode (gameMode.ts): every normal gesture suspended, his hand buffered for
+   *  the game. Core switches it; it ends by itself if core goes quiet. */
+  game: GameMode;
+}
+
+export interface FrameTiming {
+  /** ms since the previous processed frame */
+  dtMs: number;
+  /** camera frames the browser presented that this loop never saw (dropped) */
+  skipped: number;
+  handMs: number;
+  /** 0 when the body model did not run on this frame */
+  poseMs: number;
+}
+
+export interface CameraInfo {
+  /** "continuous" (auto) or "manual"; "" when the browser does not say */
+  exposureMode: string;
+  /** in 100 µs units, per the Media Capture spec; -1 when not reported */
+  exposureTime: number;
+  exposureTimeMin: number;
+  exposureTimeMax: number;
+  width: number;
+  height: number;
+  frameRate: number;
 }
 
 function sameFlags(a: GestureState, b: GestureState): boolean {
@@ -108,11 +168,31 @@ export function useHandTracking(options: HandTrackingOptions = {}): HandTracking
     minTrackingConfidence = 0.5,
     onKamae,
     onStrike,
+    onStrikeEvent,
+    onMove,
+    onBlock,
+    onProbe,
   } = options;
   const onKamaeRef = useRef(onKamae);
   onKamaeRef.current = onKamae;
   const onStrikeRef = useRef(onStrike);
   onStrikeRef.current = onStrike;
+  const onStrikeEventRef = useRef(onStrikeEvent);
+  onStrikeEventRef.current = onStrikeEvent;
+  const onMoveRef = useRef(onMove);
+  onMoveRef.current = onMove;
+  const onBlockRef = useRef(onBlock);
+  onBlockRef.current = onBlock;
+  const onProbeRef = useRef(onProbe);
+  onProbeRef.current = onProbe;
+  const probe = useRef<BodyProbe | null>(null);
+  // strike events (strikeEvent.ts): that he struck, nothing more - a threshold core
+  // tunes; and shiai's footwork
+  const strikeEvents = useRef<StrikeEventDetector | null>(null);
+  const moves = useRef<MoveDetector | null>(null);
+  // shiai's block (strikeKind.ts)
+  const blocks = useRef<BlockDetector | null>(null);
+  const menSequence = useRef<MenSequence | null>(null);
   // keiko: his strikes read from the upper body (no model shipped yet: none are)
   const keikoOn = useRef(false);
   const strikeWatch = useRef<StrikeWatcher | null>(null);
@@ -121,10 +201,31 @@ export function useHandTracking(options: HandTrackingOptions = {}): HandTracking
   const cursor = useRef<Vec2>({ x: 0.5, y: 0.5 });
   const landmarks = useRef<NormalizedLandmark[][] | null>(null);
   const handSource = useRef<"camera" | "synthetic" | null>(null);
+  const gameRef = useRef<GameMode | null>(null);
+  if (gameRef.current === null) gameRef.current = new GameMode();
+  const game = gameRef.current;
   const gestureRef = useRef<GestureState>(neutralGestures());
   // the exact input of the last full engine update - gesture capture logs it so a
   // take can be replayed through the engine offline
   const inputRef = useRef<GestureInput | null>(null);
+  const frameTiming = useRef<FrameTiming | null>(null);
+  const cameraTrack = useRef<MediaStreamTrack | null>(null);
+  const cameraInfo = useCallback((): CameraInfo | null => {
+    const track = cameraTrack.current;
+    if (!track) return null;
+    // exposure* are Image Capture extensions, not in lib.dom's types
+    const s = track.getSettings() as MediaTrackSettings & { exposureMode?: string; exposureTime?: number };
+    const c = (track.getCapabilities?.() ?? {}) as { exposureTime?: { min?: number; max?: number } };
+    return {
+      exposureMode: s.exposureMode ?? "",
+      exposureTime: s.exposureTime ?? -1,
+      exposureTimeMin: c.exposureTime?.min ?? -1,
+      exposureTimeMax: c.exposureTime?.max ?? -1,
+      width: s.width ?? 0,
+      height: s.height ?? 0,
+      frameRate: s.frameRate ?? 0,
+    };
+  }, []);
   // keiko: the upper body, and the switch that decides whether to look for it.
   // Off by default, so the pose model is never even loaded during normal use.
   const poseRef = useRef<PoseSample | null>(null);
@@ -133,11 +234,16 @@ export function useHandTracking(options: HandTrackingOptions = {}): HandTracking
   if (poseTracker.current === null) poseTracker.current = new PoseTracker();
   const pose = poseTracker.current;
 
-  /** Turn the upper-body tracker on for a keiko capture, and off again after. */
-  const armPose = useCallback(
-    (on: boolean): void => {
-      poseArmed.current = on;
-      if (on) {
+  // who needs the upper body: a capture, keiko, strike events - armed while any does
+  const poseUsers = useRef(new Set<string>());
+  const needPose = useCallback(
+    (who: string, on: boolean): void => {
+      if (on) poseUsers.current.add(who);
+      else poseUsers.current.delete(who);
+      const armed = poseUsers.current.size > 0;
+      if (armed === poseArmed.current) return;
+      poseArmed.current = armed;
+      if (armed) {
         void pose.arm();
       } else {
         poseRef.current = null;
@@ -147,13 +253,26 @@ export function useHandTracking(options: HandTrackingOptions = {}): HandTracking
     },
     [pose],
   );
+  /** Turn the upper-body tracker on for a keiko capture, and off again after. */
+  const armPose = useCallback((on: boolean): void => needPose("capture", on), [needPose]);
   const setKeiko = useCallback(
     (on: boolean): void => {
       keikoOn.current = on;
       strikeWatch.current = on && STRIKE_MODEL ? new StrikeWatcher(STRIKE_MODEL) : null;
-      armPose(on);
+      needPose("keiko", on);
     },
-    [armPose],
+    [needPose],
+  );
+  const setStrikeEvents = useCallback(
+    (config: StrikeEventsConfig | null): void => {
+      strikeEvents.current = config ? new StrikeEventDetector(config.strikes) : null;
+      moves.current = config?.moves ? new MoveDetector(config.moves) : null;
+      blocks.current = config?.block ? new BlockDetector(config.block) : null;
+      menSequence.current = config?.men ? new MenSequence(config.men) : null;
+      probe.current = config?.probe ? new BodyProbe() : null;
+      needPose("strikeEvents", config !== null);
+    },
+    [needPose],
   );
   const active = useRef(true);
   const idleControl = useRef<{ start: () => void; stop: () => void } | null>(null);
@@ -196,6 +315,8 @@ export function useHandTracking(options: HandTrackingOptions = {}): HandTracking
     if (KAMAE_ON) void pose.arm();
 
     let lastTimestamp = 0;
+    let lastFrameAt = 0;
+    let lastPresented = -1;
     let lastHandAt = 0;
     let handVisible = false;
     let frameCount = 0;
@@ -226,10 +347,12 @@ export function useHandTracking(options: HandTrackingOptions = {}): HandTracking
       }
     };
 
-    const onFrame = (now: number): void => {
+    const onFrame = (now: number, meta?: VideoFrameCallbackMetadata): void => {
       if (disposed || !landmarker || !element) return;
 
       if (!active.current) {
+        lastFrameAt = 0;
+        lastPresented = -1;
         if (handVisible) publishTracking(false);
         frameCount = 0;
         fpsWindowStart = 0;
@@ -244,8 +367,9 @@ export function useHandTracking(options: HandTrackingOptions = {}): HandTracking
 
       const detectStart = performance.now();
       const result = landmarker.detectForVideo(element, timestamp);
-      detectTotal += performance.now() - detectStart;
-      perfNote("hand", performance.now() - detectStart);
+      const handMs = performance.now() - detectStart;
+      detectTotal += handMs;
+      perfNote("hand", handMs);
 
       if (fpsWindowStart === 0) fpsWindowStart = now;
       frameCount += 1;
@@ -285,8 +409,11 @@ export function useHandTracking(options: HandTrackingOptions = {}): HandTracking
         timestamp,
         tracking: handVisible,
       };
-      const state = engine.update(input);
+      // game mode: the engine isn't run - no pointer, wheel, zoom or summon - and his
+      // (camera) hand goes to the game's buffer instead
+      const state = game.step(engine, input, now);
       inputRef.current = input;
+      game.record(now, camera ? camera.landmarks : null, camera ? camera.handedness : "Right");
 
       // keiko only: the upper body, kept beside the hand rather than inside it, so
       // nothing in the gesture engine can see it or be changed by it
@@ -296,11 +423,36 @@ export function useHandTracking(options: HandTrackingOptions = {}): HandTracking
       const lookForKamae = KAMAE_ON && poseFrame % every === 0;
       const poseStart = performance.now();
       const body = poseArmed.current || lookForKamae ? pose.detect(element, timestamp) : null;
-      if (poseArmed.current || lookForKamae) perfNote("pose", performance.now() - poseStart);
+      const poseMs = poseArmed.current || lookForKamae ? performance.now() - poseStart : 0;
+      if (poseMs) perfNote("pose", poseMs);
       poseRef.current = poseArmed.current ? body : null;
+      const presented = meta?.presentedFrames ?? -1;
+      frameTiming.current = {
+        dtMs: lastFrameAt ? now - lastFrameAt : 0,
+        skipped: lastPresented >= 0 && presented > lastPresented ? presented - lastPresented - 1 : 0,
+        handMs,
+        poseMs,
+      };
+      lastFrameAt = now;
+      lastPresented = presented;
       if (keikoOn.current && strikeWatch.current) {
         const struck = strikeWatch.current.update(body ? flatten(body) : null, now);
         if (struck) onStrikeRef.current?.(struck);
+      }
+      if (strikeEvents.current || moves.current) {
+        const flat = body ? flatten(body) : null;
+        const swung = strikeEvents.current?.update(flat, now);
+        // its raise was furikaburi, never a block
+        if (swung) blocks.current?.cancel();
+        // shiai: only a whole men (raise, cut, zanshin) is a strike; elsewhere the event
+        const struck = menSequence.current ? menSequence.current.update(flat, now, swung ?? null) : swung;
+        if (struck) onStrikeEventRef.current?.(struck);
+        const moved = moves.current?.update(flat, now);
+        if (moved) onMoveRef.current?.(moved);
+        const block = blocks.current?.update(flat, now);
+        if (block) onBlockRef.current?.(block);
+        const second = probe.current?.update(flat, now);
+        if (second) onProbeRef.current?.(second);
       }
       if (lookForKamae) {
         const event = kamae.update(body ? flatten(body) : null, now);
@@ -315,7 +467,7 @@ export function useHandTracking(options: HandTrackingOptions = {}): HandTracking
         setGestures(published);
       }
 
-      if (source) {
+      if (source && !game.active(now)) {
         if (source.handedness !== cursorHand) {
           cursorHand = source.handedness;
           cursorFrozen = false;
@@ -350,6 +502,8 @@ export function useHandTracking(options: HandTrackingOptions = {}): HandTracking
       if (disposed || !landmarker || !element || active.current) return;
 
       const now = performance.now();
+      // no summon probe mid-game: the hand is a game piece
+      if (game.active(now)) return;
       idleProbeCount += 1;
 
       const timestamp = Math.max(now, lastTimestamp + 1);
@@ -420,6 +574,7 @@ export function useHandTracking(options: HandTrackingOptions = {}): HandTracking
         if (disposed) return;
 
         const track = stream.getVideoTracks()[0];
+        cameraTrack.current = track ?? null;
         if (track) setSourceFps(Math.round(track.getSettings().frameRate ?? 0));
 
         element.srcObject = stream;
@@ -460,6 +615,7 @@ export function useHandTracking(options: HandTrackingOptions = {}): HandTracking
       if (idleTimer !== 0) window.clearInterval(idleTimer);
       idleControl.current = null;
       if (stream) for (const track of stream.getTracks()) track.stop();
+      cameraTrack.current = null;
       landmarker?.close();
       landmarker = null;
       landmarks.current = null;
@@ -481,7 +637,10 @@ export function useHandTracking(options: HandTrackingOptions = {}): HandTracking
     inputRef,
     poseRef,
     armPose,
+    frameTiming,
+    cameraInfo,
     setKeiko,
+    setStrikeEvents,
     gestures,
     fps,
     detectMs,
@@ -490,5 +649,6 @@ export function useHandTracking(options: HandTrackingOptions = {}): HandTracking
     error,
     setActive,
     setSuspended,
+    game,
   };
 }

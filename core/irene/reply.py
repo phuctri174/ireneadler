@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Split a model reply into what is spoken, what is shown, and what she shows.
 
 Only <speak> content ever reaches TTS. <display> is screen-only. A <cue> (or the
@@ -80,7 +82,13 @@ class Reply:
 # an apology, or the "oh dear" that opens one
 APOLOGY = re.compile(
     r"\bapolog\w*|\bmy fault\b|\bsorry\b|\bmy bad\b|\bnot again\b|\bdid i forget\b|\brepeating myself\b"
-    r"|\bslipped up\b|\bi got (?:it|that) wrong\b|\bmix-?up\b|\bmy memory\b|^\W*(?:oh dear|oops|oh no|goodness|oh,? goodness)\W*$",
+    r"|\bslipped up\b|\bi got (?:it|that) wrong\b|\bmix-?up\b|\bmy memory\b|^\W*(?:oh dear|oops|oh no|goodness|oh,? goodness)\W*$"
+    # read a refused tool as him correcting her (evals 2026-10-19): "You're absolutely
+    # right, I got ahead of myself", "I jumped to the tool", "my search isn't working"
+    r"|\byou(?:'re|’re| are) (?:absolutely |quite |so |totally )?right\b|\bright you are\b|\bsilly me\b"
+    r"|\bgot (?:a (?:little|bit) |rather )?(?:ahead of myself|over-?eager|carried away)\b|\bjumped (?:the gun|ahead|to)\b"
+    r"|\bshould have just\b|\b(?:tried|trying|try) to (?:use|call|run) (?:a |the |my )?(?:tool|search)|\bmy (?:search|tool)s?\b.{0,30}\b(?:work|fail|error)"
+    r"|\bwires crossed\b|\bmy mistake\b|\bi should have known\b",
     re.I,
 )
 
@@ -227,3 +235,36 @@ def drop_promise(speak: str) -> str:
     be done - she says less rather than claiming something that never happened."""
     kept = [s for s in re.split(r"(?<=[.!?…])\s+", speak or "") if s.strip() and not promises_action(s)]
     return " ".join(kept).strip()
+
+
+# ---- the answer itself is spoken ---------------------------------------------------
+
+# a short direct answer - a song title, a name, a date - is what he asked for: it is
+# said out loud, never left on the board (live 2026-10-18: '"Blue" by Yung Kai.' shown,
+# "Oh, Mister Tri. You did remember." said). The board is for supporting detail.
+SHORT_ANSWER_WORDS = 14
+_LISTY = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s|\||```|\t| {3,}\S|https?://|www\.", re.M)
+_FILLER = {"the", "a", "an", "by", "of", "and", "in", "on", "to", "is", "it", "its", "it's", "from", "for", "with", "at", "or"}
+
+
+def _substance(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9']+", strip_tags(text).lower().replace("’", "'")) if w not in _FILLER and len(w) > 1}
+
+
+def unsaid_answer(speak: str, display: str) -> str | None:
+    """The display's short direct answer when her speech doesn't contain it, as a
+    sentence to say - or None (nothing shown, it was said, or it's a list or table
+    to read, which belongs on screen)."""
+    shown = drop_narration(display or "").strip()
+    if not shown or "\n" in shown.strip() or _LISTY.search(shown):
+        return None
+    if len(shown.split()) > SHORT_ANSWER_WORDS:
+        return None
+    want = _substance(shown)
+    if not want:
+        return None
+    have = _substance(speak or "")
+    if len(want & have) >= max(1, (len(want) + 1) // 2):
+        return None  # already said
+    said = shown.replace("*", "").strip()
+    return said if _SENTENCE_END.search(said[-1:] + " ") else said + "."

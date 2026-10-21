@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """The second screen's sources, and opening one of its items for him.
 
 News (RSS headlines), weather (Open-Meteo, his home from config/home.yaml), stock

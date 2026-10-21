@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 import { useEffect, useRef } from "react";
 import { note as perfNote } from "../perf";
 import { onFrame } from "../tracking/frameLoop";
@@ -20,6 +22,10 @@ import { MicroExpressions } from "./micro";
 import { IdleLife, glanceGaze } from "./idle";
 import { lastInteraction } from "./interaction";
 import { REACTION_MS } from "./reactions";
+import { onGameHand } from "./gameHandBus";
+import { currentScore } from "../led/score";
+import { gameHandDone, gameHandOn } from "../led/gameHand";
+import type { GameHand } from "../led/gameHand";
 import "./Face.css";
 
 const BREATHE_MS = 4200;
@@ -104,6 +110,12 @@ export function Face({ state, emotion, level, muted = false, summon = null, visi
 
     let reaction: ReactionEvent | null = null;
     let activity: ActivityEvent = currentActivity();
+    // her hand in a hand game (led/gameHand.ts): each of core's messages folded in at
+    // the instant it happened
+    let hand: GameHand | null = null;
+    const stopGameHand = onGameHand(({ event, at }) => {
+      hand = gameHandOn(hand, event, at);
+    });
     const stopReaction = onReaction((event) => {
       reaction = event;
     });
@@ -151,7 +163,7 @@ export function Face({ state, emotion, level, muted = false, summon = null, visi
         state: current,
         visible: shown,
         lastInteraction: lastInteraction(),
-        busy: ownReaction || ownActivity || !!arriving || !!drawing || !!times,
+        busy: ownReaction || ownActivity || !!arriving || !!drawing || !!times || !!hand,
       });
       if (beat.stopped?.kind === "scene" && activity.name === beat.stopped.scene) showActivity(null);
       if (beat.stopped?.kind === "stretch" && reaction?.name === "stretch") reaction = null;
@@ -191,7 +203,10 @@ export function Face({ state, emotion, level, muted = false, summon = null, visi
         board: drawing,
         humming: beat.beat?.kind === "hum" ? beat.beat.at : null,
         voice: hearing,
+        gameHand: hand,
+        score: currentScore(),
       });
+      if (hand && gameHandDone(hand, now)) hand = null;
 
       // every cell eases toward its target at the rate its layer asked for
       for (let i = 0; i < CELLS; i += 1) {
@@ -221,6 +236,7 @@ export function Face({ state, emotion, level, muted = false, summon = null, visi
     return () => {
       stop();
       stopReaction();
+      stopGameHand();
       stopActivity();
       observer.disconnect();
       window.clearInterval(remeasure);

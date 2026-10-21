@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """perform(sequence): a little show on her LED face - expressions, hand gestures and
 scenes one after another, each with its sound. "What can you do? Perform some for
 me" is answered by doing, not by listing. The cues come from config/cues.json;

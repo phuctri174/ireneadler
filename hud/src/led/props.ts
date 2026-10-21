@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Tool props: what Irene holds or looks at while a tool runs - a magnifier over
 // his screen, a folder of his files, a page she reads, a clock, headphones, a
 // globe for the browser. Core names the prop with the tool's status (tools/:

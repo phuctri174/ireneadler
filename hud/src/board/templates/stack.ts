@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // A stack: items bottom to top, the top marked, an optional push or pop shown.
 //
 //   { "template": "stack", "values": ["a", "b", "c"], "push"?: "d" | "pop"?: true }

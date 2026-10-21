@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Wake phrases, found in what Whisper heard.
 
 Stock openWakeWord has no model for "Irene", so until a custom one is trained

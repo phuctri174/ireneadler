@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Gesture reactions: Irene's LED hands make a gesture beside (or over) her face
 // while the face wears a matching expression, then hand back to whatever
 // state/emotion is current. A reaction never changes state - it is decoration on

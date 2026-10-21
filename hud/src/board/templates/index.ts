@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 /// <reference types="vite/client" />
 // Every module in this folder is a board template, found here automatically: a new
 // template is one module exporting `template` (plus its entry in config/board.json,

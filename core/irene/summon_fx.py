@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """The summon line as a produced piece of audio, not a plain TTS read.
 
 Kokoro has no emotion control, so the drama is made in the mix:

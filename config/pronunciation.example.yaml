@@ -18,3 +18,9 @@ Tri:
 lượng:
   phonemes: lˈʌŋ
   say: lung
+
+# her "FUGGING EASY" (core/irene/songwin.py): in capitals Turbo said "ding" - written
+# as he wrote it, said as a word
+FUGGING:
+  phonemes: fˈʌɡɪŋ
+  say: fugging

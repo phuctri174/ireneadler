@@ -418,3 +418,63 @@
 .cb-story-sub {
   font-size: 0.5em;
 }
+
+/* ---- a framed region: a lecture note's key points, homework, definitions ---------------- */
+
+.cb-box {
+  margin: 1.1em 0;
+  padding: 0.8em 1em 0.6em;
+  border: 1px solid rgba(34, 224, 255, 0.35);
+  background: rgba(34, 224, 255, 0.05);
+}
+
+.cb-box-title {
+  margin-bottom: 0.6em;
+  font-size: 0.82em;
+  font-weight: 700;
+  color: var(--cyan, #22e0ff);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.cb-box > .cb-quote:last-child,
+.cb-box > .cb-text:last-child {
+  margin-bottom: 0;
+}
+
+.cb-box.tone-points {
+  border-color: rgba(109, 255, 200, 0.45);
+  background: rgba(109, 255, 200, 0.05);
+}
+.cb-box.tone-points .cb-box-title { color: #6dffc8; }
+
+.cb-box.tone-homework {
+  border-color: rgba(255, 182, 72, 0.7);
+  background: rgba(255, 182, 72, 0.07);
+}
+.cb-box.tone-homework .cb-box-title { color: #ffb648; }
+
+.cb-box.tone-definitions {
+  border-color: rgba(184, 146, 255, 0.55);
+  background: rgba(184, 146, 255, 0.06);
+}
+.cb-box.tone-definitions .cb-box-title { color: #c9b0ff; }
+
+/* what she looked up online: its own colour, a dashed frame and a warning band - it
+   must never be mistaken for what the lecturer said */
+.cb-box.tone-research {
+  margin-top: 2em;
+  border: 2px dashed #ff9a3c;
+  background: repeating-linear-gradient(135deg, rgba(255, 154, 60, 0.05) 0 12px, rgba(255, 154, 60, 0.1) 12px 24px);
+  color: #ffe7cf;
+}
+.cb-box.tone-research .cb-box-title {
+  margin: -0.8em -1em 0.8em;
+  padding: 0.5em 1em;
+  background: #ff9a3c;
+  color: #1a0e02;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.cb-box.tone-research .cb-h3 { color: #ffcf9e; }
+.cb-box.tone-research .cb-link { color: #ffb36b; }

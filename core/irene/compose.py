@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Text for the board: her words fitted to the 128x72 matrix (4 px a character,
 5 px high, capitals), the board's title from his question, and the gist of a
 sentence (her keywords - the board's fallback when her drawing can't be drawn).
@@ -47,6 +49,27 @@ def caps(text: str, px: int) -> str:
         return text
     cut = text[:room].rsplit(" ", 1)[0] if " " in text[:room] else text[:room]
     return cut.rstrip(" ,.-:")
+
+
+# what a board title can lose and still say what it is ("Introduction to Algorithm
+# Analysis" -> "ALGORITHM ANALYSIS", never "INTRODUCTION TO")
+_TITLE_FILLER = re.compile(r"^(?:an? |the )?(?:(?:brief |short |quick )?(?:introduction|intro|overview|basics|fundamentals|summary|review|recap)\s+(?:to|of|on)\s+)", re.I)
+_SMALL_END = {"TO", "OF", "AND", "OR", "THE", "A", "AN", "IN", "ON", "FOR", "WITH", "&", "VS", "VS."}
+
+
+def fit_title(text: str, px: int) -> str:
+    """A board title within `px`, whole: filler first ("Introduction to"), then a
+    trailing "and ..." clause, and never ending on a small word."""
+    whole = caps(text, 10_000)
+    if caps(text, px) == whole:
+        return whole
+    for candidate in (_TITLE_FILLER.sub("", text), re.split(r"\s+(?:and|&)\s+", _TITLE_FILLER.sub("", text))[0]):
+        if candidate.strip() and caps(candidate, px) == caps(candidate, 10_000):
+            return caps(candidate, px)
+    cut = caps(_TITLE_FILLER.sub("", text) or text, px).split()
+    while cut and cut[-1] in _SMALL_END:
+        cut.pop()
+    return " ".join(cut)
 
 
 _TITLE_LEAD = re.compile(

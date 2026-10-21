@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Ollama client. Local only: 127.0.0.1:11434.
 
 keep_alive=-1 on every request pins the model in VRAM. Ollama's default unloads it

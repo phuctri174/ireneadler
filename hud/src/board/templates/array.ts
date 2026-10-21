@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // An array: a row of cells with their indices, some highlighted, named pointers
 // (i, j, lo, hi, mid...) as arrows under their cells.
 //

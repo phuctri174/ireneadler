@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // A day's schedule as a strip: an hour ruler, each item a block on its own row,
 // and a "now" marker when today falls inside it.
 //

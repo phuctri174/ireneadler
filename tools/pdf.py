@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """save_panel_pdf(name, location): what's on the panel, as a PDF on his Desktop or in
 Downloads - text, images, screenshots and clickable links, in the panel's own look,
 printed by Chrome (Irene's browser, print-to-PDF).
@@ -56,6 +58,21 @@ a { color: #22e0ff; text-decoration: underline; text-decoration-color: rgba(34, 
          background: rgba(2, 7, 11, 0.6); break-inside: avoid; text-decoration: none; color: inherit; }
 .video img, .video .thumb { width: 38mm; aspect-ratio: 16 / 9; object-fit: cover; background: rgba(34, 224, 255, 0.08); }
 ol { margin: 0; padding-left: 6mm; }
+.box { margin: 5mm 0; padding: 4mm 5mm 3mm; border: 1px solid rgba(34, 224, 255, 0.35); background: rgba(34, 224, 255, 0.05); break-inside: avoid; }
+.box-title { margin: 0 0 3mm; font-family: "Cascadia Mono", Consolas, monospace; font-size: 8.5pt; letter-spacing: 0.18em; text-transform: uppercase; color: #22e0ff; }
+.box.tone-homework { border-color: rgba(255, 182, 72, 0.7); background: rgba(255, 182, 72, 0.07); }
+.box.tone-homework .box-title { color: #ffb648; }
+.box.tone-definitions { border-color: rgba(184, 146, 255, 0.55); background: rgba(184, 146, 255, 0.06); }
+.box.tone-definitions .box-title { color: #c9b0ff; }
+.box.tone-points .box-title { color: #6dffc8; }
+.box.tone-points { border-color: rgba(109, 255, 200, 0.45); background: rgba(109, 255, 200, 0.05); }
+/* what she looked up online: never mistaken for the lecture - its own colour, a dashed
+   frame, a warning band, its own page */
+.box.tone-research { break-inside: auto; break-before: page; border: 2px dashed #ff9a3c; background: repeating-linear-gradient(135deg, rgba(255, 154, 60, 0.05) 0 10px, rgba(255, 154, 60, 0.09) 10px 20px); color: #ffe7cf; }
+.box.tone-research .box-title { padding: 2mm 3mm; background: #ff9a3c; color: #1a0e02; letter-spacing: 0.12em; }
+.box.tone-research a { color: #ffb36b; text-decoration-color: rgba(255, 179, 107, 0.6); }
+.box.tone-research h3 { color: #ffcf9e; }
+.note-meta { display: flex; gap: 6mm; margin-top: 3mm; }
 .foot { margin-top: 8mm; padding-top: 3mm; border-top: 1px solid rgba(34, 224, 255, 0.16); display: flex; justify-content: space-between; }
 """
 
@@ -96,6 +113,10 @@ def block_html(b: dict) -> str:
         thumb = f"<img src='{_src(b['thumbnail'])}' alt=''>" if _src(b.get("thumbnail")) else "<span class='thumb'></span>"
         return (f"<a class='video' href='{_href(b.get('url'))}'>{thumb}<span><span>{_e(b.get('title'))}</span><br>"
                 f"<span class='readout'>{_e(b.get('channel'))} · {_e(b.get('duration'))}</span></span></a>")
+    if kind == "box":
+        inner = "\n".join(block_html(x) for x in b.get("blocks", []) if isinstance(x, dict))
+        tone = re.sub(r"[^a-z]", "", str(b.get("tone") or ""))
+        return f"<section class='box tone-{tone}'><div class='box-title'>{_e(b.get('title'))}</div>{inner}</section>"
     if kind == "sourceList":
         items = "".join(f"<li>{_e(s.get('title'))} <span class='readout'>{_e(s.get('publisher'))} · {_e(s.get('year'))}</span></li>" for s in b.get("sources", []))
         return f"<h3>{_e(b.get('label') or 'Sources')}</h3><ol>{items}</ol>"
@@ -107,7 +128,7 @@ def render_html(content: dict, saved_at: str = "") -> str:
     sub = f"<div class='sub readout'>{_e(content.get('subtitle'))}</div>" if content.get("subtitle") else ""
     return (
         f"<!doctype html><html><head><meta charset='utf-8'><title>{_e(content.get('title'))}</title><style>{CSS}</style></head>"
-        f"<body><div class='card'><div class='head'><div class='readout'>Irene · result · saved {_e(saved_at)}</div>"
+        f"<body><div class='card'><div class='head'><div class='readout'>Irene · {'lecture note' if content.get('note') else 'result'} · saved {_e(saved_at)}</div>"
         f"<div class='title'>{_e(content.get('title'))}</div>{sub}</div><div class='body'>{blocks}</div>"
         f"<div class='foot readout'><span>Local · no net</span><span>Links open in your browser</span></div></div></body></html>"
     )
@@ -132,6 +153,7 @@ def free_path(root: str, name: str) -> Path:
 
 
 async def render_pdf(content: dict, saved_at: str) -> bytes:
+    """The content printed by her browser, in the panel's look."""
     page = await (await BROWSER.page()).context.new_page()
     try:
         await page.set_content(render_html(content, saved_at), wait_until="load")

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Checking what the model drew before anything is drawn. Every template's parse()
 // goes through these: a wrong type, a missing field or a value out of range throws
 // BoardError, and the board then draws nothing - it never guesses and never

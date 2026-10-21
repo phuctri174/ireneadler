@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // A sorting algorithm animated step by step on bars: the two being compared light
 // up amber, a swap or a write flashes cyan, sorted positions settle into the accent.
 // Every step is computed here from the real algorithm, so what plays is exactly

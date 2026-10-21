@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // A linked list: nodes with a value and a next pointer, arrows between, NULL at the
 // end; doubly linked adds the back arrows. HEAD marks the first node.
 //

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Equalizer bars dancing while music plays, with what's playing underneath.
 //
 //   { "template": "equalizer", "title"?: "Lo-fi beats", "bars"?: 16 }

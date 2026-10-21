@@ -1,12 +1,23 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Her long-term memory: what she keeps across restarts, and what she recalls for a
 message.
 
 Kept (each as it happens, never by re-reading old files):
   turn      an exchange: his words and what she said back
   fact      something he told her about himself or what should hold ("my brother
-            Trác...", "I prefer short answers") - his sentence, verbatim (memory.py)
+            Trác...", "I prefer short answers"), or something about the world he
+            taught her ("that song is Blue by yung kai, the one that goes...") -
+            his sentence, verbatim, as Whisper heard it (memory.py, teaches())
   research  a question she looked up, and her answer
   lecture   a lecture she listened to: its title and summary
+
+Every item carries its SOURCE: "him" (a fact he stated), "her" (a turn or research:
+her words are in it), "lecture" (the lecturer's). A question about the world - naming
+a song from its lyrics, a film, a book, a person - may be answered only by what HE
+stated (told_him()), never by her own earlier answers: live 2026-10-18/19 recalled
+replies of hers became the answers to the same question, inventions included, until
+she said only "Oh, Mister Tri.".
 
 Recalled per message, inside the per-message context (Conversation.context) - never
 stored in the history, so it costs prefill on that message only and never grows the
@@ -53,6 +64,8 @@ LOGS = ROOT / "core" / "logs"
 VOICE_TURNS = ROOT / "core" / "voice_data" / "turns"
 
 KINDS = ("turn", "fact", "research", "lecture")
+# who an item's words come from, by kind (a turn holds her reply)
+SOURCES = {"fact": "him", "turn": "her", "research": "her", "lecture": "lecture"}
 # bge's instruction for a search query (passages are embedded as they are)
 QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 CHARS_PER_TOKEN = 3.5  # gemma, her prose (brain._tokens)
@@ -169,6 +182,8 @@ class Item:
     text: str
     session: str = ""
     score: float = 0.0
+    # "him" | "her" | "lecture" (SOURCES)
+    source: str = ""
 
     def tokens(self) -> int:
         return math.ceil((len(self.about) + len(self.text) + 24) / CHARS_PER_TOKEN)
@@ -191,6 +206,8 @@ class Store:
         self.items: list[Item] = []
         self.vectors = np.zeros((0, 384), np.float32)
         self.index: dict[str, set[int]] = {}
+        # the quoted part of each of his statements (quoted()), embedded once: told()
+        self._quoted: dict[int, np.ndarray] = {}
 
     def _open(self) -> sqlite3.Connection:
         if self._db is None:
@@ -202,13 +219,19 @@ class Store:
             db.execute("CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY, kind TEXT NOT NULL, at REAL NOT NULL, "
                        "about TEXT NOT NULL, text TEXT NOT NULL, session TEXT NOT NULL, vec BLOB NOT NULL)")
             db.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
+            if "source" not in {r[1] for r in db.execute("PRAGMA table_info(items)")}:
+                # provenance, added 2026-10-19: every existing row tagged by its kind
+                db.execute("ALTER TABLE items ADD COLUMN source TEXT NOT NULL DEFAULT ''")
+                for kind, source in SOURCES.items():
+                    db.execute("UPDATE items SET source = ? WHERE kind = ?", (source, kind))
+                log.info("memory: %s - every item tagged with its source", self.path.name)
             self._db = db
             self._load()
         return self._db
 
     def _load(self) -> None:
-        rows = self._db.execute("SELECT id, kind, at, about, text, session, vec FROM items ORDER BY id").fetchall()
-        self.items = [Item(r[0], r[1], r[2], r[3], r[4], r[5]) for r in rows]
+        rows = self._db.execute("SELECT id, kind, at, about, text, session, vec, source FROM items ORDER BY id").fetchall()
+        self.items = [Item(r[0], r[1], r[2], r[3], r[4], r[5], source=r[7] or SOURCES.get(r[1], "")) for r in rows]
         self.vectors = np.stack([np.frombuffer(r[6], np.float32) for r in rows]) if rows else np.zeros((0, 384), np.float32)
         self._reindex()
 
@@ -244,9 +267,10 @@ class Store:
             same = [i for i in self.items if i.kind == kind and fold(i.text) == fold(text) and fold(i.about) == fold(about)]
             if same:
                 self._delete([i.id for i in same])
-            cur = db.execute("INSERT INTO items (kind, at, about, text, session, vec) VALUES (?, ?, ?, ?, ?, ?)",
-                             (kind, at, about, text, session, vec.tobytes()))
-            item = Item(cur.lastrowid, kind, at, about, text, session)
+            source = SOURCES[kind]
+            cur = db.execute("INSERT INTO items (kind, at, about, text, session, vec, source) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                             (kind, at, about, text, session, vec.tobytes(), source))
+            item = Item(cur.lastrowid, kind, at, about, text, session, source=source)
             self.items.append(item)
             self.vectors = np.vstack([self.vectors, vec[None, :]])
             for w in set(words(f"{about} {text}")):
@@ -262,6 +286,8 @@ class Store:
         keep = [k for k, item in enumerate(self.items) if item.id not in gone]
         self.items = [self.items[k] for k in keep]
         self.vectors = self.vectors[keep] if keep else np.zeros((0, 384), np.float32)
+        for i in gone:
+            self._quoted.pop(i, None)
         self._reindex()
         return len(gone)
 
@@ -319,8 +345,44 @@ class Store:
             out = []
             for n in ranked:
                 item = self.items[n]
-                out.append(Item(item.id, item.kind, item.at, item.about, item.text, item.session, round(sim_of[n], 3)))
+                out.append(Item(item.id, item.kind, item.at, item.about, item.text, item.session, round(sim_of[n], 3), item.source))
             return out
+
+    def told(self, said: str, minimum: float, k: int = 3) -> list[Item]:
+        """His own statements (source "him") whose quoted words - lyrics, a description -
+        mean what `said` quotes: the two quoted parts compared by meaning, so Whisper's
+        mangling of a sung line ("a suit" for "us, you") still lands. Never her words."""
+        quote = quoted(said)
+        if len(quote.split()) < 4:
+            return []  # "do you know the song with the lyrics?" quotes nothing yet
+        with self._lock:
+            self._open()
+            # only what he TAUGHT her about the world - never his own life ("Trác is my
+            # brother" answers questions about Trác by the usual path, with the guard)
+            facts = [i for i in self.items if taught_fact(i)]
+            if not facts or not self.embedder.ready:
+                return []
+            new = [i for i in facts if i.id not in self._quoted]
+            if new:
+                ways = [list(dict.fromkeys(w for q in taught_quotes(i.text) for w in _windows(q))) for i in new]
+                vecs = iter(self.embedder.encode([w for each in ways for w in each]))
+                for item, each in zip(new, ways):
+                    self._quoted[item.id] = np.stack([next(vecs) for _ in each])
+            q = self.embedder.encode([quote])[0]
+            scored = sorted(((float((self._quoted[i.id] @ q).max()), i) for i in facts), key=lambda x: -x[0])
+            return [replace(i, score=round(sim, 3)) for sim, i in scored[:k] if sim >= minimum]
+
+    def asked(self, item_id: int) -> int:
+        """How many answers before this one his taught fact `item_id` gave (told())."""
+        with self._lock:
+            row = self._open().execute("SELECT value FROM meta WHERE key = ?", (f"asked:{item_id}",)).fetchone()
+        return int(row[0]) if row else 0
+
+    def note_asked(self, item_id: int) -> None:
+        with self._lock:
+            db = self._open()
+            db.execute("INSERT INTO meta (key, value) VALUES (?, '1') ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1",
+                       (f"asked:{item_id}",))
 
     def between(self, start: float, end: float, kinds: tuple[str, ...] = KINDS, exclude_session: str = "") -> list[Item]:
         with self._lock:
@@ -401,7 +463,61 @@ def remember_turn(said: str, answer: str, session: str, store: Store | None = No
 
 
 def remember_fact(said: str, session: str, store: Store | None = None):
-    return _write(store or current(), "fact", said[:300], session=session)
+    # (teaching runs long: the lyrics he sings, then what he says about it - 300 cut that off)
+    return _write(store or current(), "fact", said[: 800 if teaches(said) else 300], session=session)
+
+
+def taught_fact(item: Item) -> bool:
+    """One of his statements about a work (a song he taught her): filed as one
+    (about "taught: ..."), or worded as one before that existed."""
+    return item.source == "him" and item.kind == "fact" and (item.about.startswith("taught: ") or teaches(item.text))
+
+
+@dataclass
+class Filed:
+    ok: bool
+    # "his" or "dev" (a command that was not his: tools/sandbox.py)
+    store: str
+    item_id: int | None = None
+    # what it replaced: his earlier entries for the same lyrics or title
+    replaced: list[str] = field(default_factory=list)
+
+
+def file_taught(teach, session: str, store: Store | None = None) -> Filed:
+    """File what he taught her NOW, on the turn, so she can say it is filed only once it
+    is (taught.Teach). A correction replaces his earlier entries for the same lyrics or
+    the same title - never two answers to one song."""
+    store = store or current()
+    name = "his" if store is HIS else "dev"
+    if not POLICY.enabled:
+        log.warning("memory is off - %r NOT filed", teach.said[:60])
+        return Filed(False, name)
+    try:
+        from . import taught
+
+        gone: list[Item] = []
+        if teach.lyrics:
+            gone += store.told(teach.lyrics if len(teach.lyrics.split()) >= 4 else "", TOLD_MIN, k=10)
+        with store._lock:
+            store._open()
+            same = [i for i in store.items if taught_fact(i) and (n := taught.named_item(i)) is not None
+                    and taught.fold(n.title) == taught.fold(teach.title)]
+            gone += [i for i in same if i.id not in {g.id for g in gone}]
+            if gone:
+                store._delete([i.id for i in gone])
+            item = store.add("fact", teach.text[:800], teach.about, session=session)
+        log.info("memory (%s): FILED taught fact #%s %r (%s)%s", name, item.id if item else "?", teach.text[:90], teach.about,
+                 f" - replacing #{', #'.join(str(i.id) for i in gone)}" if gone else "")
+        return Filed(item is not None, name, item.id if item else None, [i.text[:80] for i in gone])
+    except Exception:  # noqa: BLE001 - she says it was not filed
+        log.exception("memory: taught fact NOT filed: %r", teach.said[:60])
+        return Filed(False, name)
+
+
+def asked_again(item_id: int, store: Store | None = None):
+    """His taught fact answered him once more (off the turn, like every write)."""
+    store = store or current()
+    return _WRITER.submit(store.note_asked, item_id)
 
 
 def remember_research(question: str, answer: str, session: str, store: Store | None = None):
@@ -549,33 +665,198 @@ _NOW = re.compile(r"\btoday'?s date\b|\bwhat (?:day|time|date|year|month) (?:is 
 _PAST_VERB = re.compile(r"\b(?:did|was|were|had|said|told|talked|spoke|chatted|discussed|asked|mentioned|went|happened|looked|found|heard|learned|watched|read)\b", re.I)
 
 
+# ---- world knowledge: never her memory ---------------------------------------------
+
+# naming a song, a film, a book or a person from a description is knowledge about the
+# world, not about him. His memory never touches it: live 2026-10-18/19 a lyrics question
+# recalled her earlier answers to the same question ("Oh, you remembered that one!"),
+# and every turn after copied the last one until the title was gone ("Oh, Mister Tri.")
+_WORKS = (r"songs?|tracks?|tunes?|lyrics?|albums?|bands?|singers?|artists?|rappers?|films?|movies?|shows?|series|episodes?|anime"
+          r"|cartoons?|books?|novels?|poems?|plays?|paintings?|pictures?|games?|video ?games?|characters?|actors?|actress(?:es)?"
+          r"|authors?|writers?|directors?|painters?|scientists?|inventors?|philosophers?|composers?|poets?|person|people|guy|woman|man")
+_IDENTIFY = re.compile(
+    rf"\b(?:the |a )?(?:name|title) of (?:the |that |this |a |an )(?:\w+ )?(?:{_WORKS})\b"
+    rf"|\b(?:what|which|who)(?:'s| is| was| are)? (?:the |that |this |a )?(?:\w+ )?(?:{_WORKS})\b.{{0,40}}\b(?:goes|go|with|where|that|about|in which|who|whose|when|has|had|says|sings)\b"
+    rf"|\bname (?:the|that|this) (?:{_WORKS})\b|\b(?:know|recogni[sz]e|guess|identify) (?:the |that |this |which |what )(?:{_WORKS})\b"
+    r"|\bwho (?:sang|sings|wrote|writes|directed|painted|composed|invented|discovered|played|starred in|stars in)\b"
+    r"|\b(?:with|has) the lyrics?\b|\bthe lyrics? (?:go|goes|are|is)\b|\bthe (?:song|one) that goes\b",
+    re.I,
+)
+# his own things are his memory's: "the name of the song I sent you", "who sang my favourite song"
+_HIS_OWN = re.compile(r"\b(?:my|our)\b|\b(?:i|we) (?:sent|showed|played|told|mentioned|shared|liked|loved|said|recommended|asked|wrote|made|heard|found|listened to|watched|read)\b"
+                      r"|\byou (?:recommended|suggested|told me|played|mentioned|said|found|sent)\b", re.I)
+
+
+# him teaching her something about the world, as a statement: "that song is Blue by
+# yung kai, the one that goes...", "the song that goes ... is called Blue"
+_TEACH = re.compile(
+    rf"\b(?:{_WORKS})\b.{{0,80}}?\b(?:is|'s|was)\b.{{0,60}}?\b(?:by|called|named|titled)\b"
+    rf"|\b(?:it'?s|that'?s|this is|it is) (?:called|named|titled)\b|\bis (?:a |the )?(?:{_WORKS}) by\b",
+    re.I,
+)
+# what a message quotes: everything after its frame ("...with the lyrics?", "the one that goes")
+# ("Name that song: hello from the other side..." quotes too - eval 2026-10-19)
+_FRAME = re.compile(r"^.*?(?:\b(?:lyrics?|goes|that says)\b\??|\bsong\s*[:?])[\s:,.-]*(?:that\b\??)?\s*", re.I)
+# his statement's quoted words must mean the same as the question's (bge, the question's
+# quoted part against windows of his: he teaches three lines and asks with one - whole to
+# whole, "picture a suit with the waves" scored 0.73-0.75 and was missed live). On his
+# own Whisper transcripts 2026-10-19: the same chorus 0.81-0.99 (14), other songs at
+# most 0.67; a made-up line with the same imagery ("the moon over the ocean waves")
+# 0.80-0.84 - it matched whole-to-whole too (0.76)
+TOLD_MIN = 0.80
+# window sizes (words) over his quoted lyrics, every second word
+_WINDOWS = (8, 12, 16)
+
+
+def _windows(quote: str) -> list[str]:
+    words = quote.split()
+    out = [quote]
+    for n in _WINDOWS:
+        out += [" ".join(words[k : k + n]) for k in range(0, max(1, len(words) - n + 1), 2)]
+    return [w for w in dict.fromkeys(out) if len(w.split()) >= 4]
+
+
+def teaches(text: str) -> bool:
+    """He is telling her something about the world to keep - not asking."""
+    return bool(_TEACH.search(text or "")) and not asks(text)
+
+
+def quoted(text: str) -> str:
+    """The words a message quotes: after "...the lyrics?" / "the one that goes", or all
+    of it (lyrics said bare)."""
+    text = (text or "").strip()
+    m = _FRAME.search(text)
+    return (text[m.end():] if m else text).strip(" ?.!\"'“”")
+
+
+# where the title / artist starts in a statement with no "goes" frame
+_NAMED = re.compile(r"\b(?:by|called|named|titled)\b", re.I)
+
+
+def taught_quotes(text: str) -> list[str]:
+    """The ways his teaching statement may quote the work: quoted(), and - when he sang
+    straight on with no "the one that goes" ("that song is Blue by yung kai I'll imagine
+    we fell in love...") - the words after "by" with the name's 1-5 words dropped, since
+    where a name ends can't be read from text. told() keeps the best: the whole sentence
+    scored 0.70-0.73 against his own questions (2026-10-19), the lyrics alone 0.83."""
+    out = [quoted(text)]
+    if _FRAME.search(text or "") is None:
+        for m in _NAMED.finditer(text or ""):
+            rest = text[m.end():].split()
+            out += [" ".join(rest[k:]).strip(" ?.!\"'“”,") for k in range(1, 6) if len(rest) - k >= 4]
+    return list(dict.fromkeys(w for w in out if w))
+
+
+def world_knowledge(text: str) -> bool:
+    """Naming a song (from its lyrics), a film, a book or a person from a description:
+    the world's knowledge, never a fact about him - her own memory is not consulted."""
+    text = text or ""
+    if teaches(text):
+        return False
+    found = _IDENTIFY.search(text)
+    if found is None or asks_past(text):
+        return False
+    # "my"/"we sent" counts only in his own words around the question, not inside the
+    # lyrics he quotes after it ("...I'll picture us...")
+    head = text[: found.end() + 25]
+    return not _HIS_OWN.search(head)
+
+
+def lyrics_after(text: str, before: str) -> bool:
+    """Just lyrics, sung or said right after a song question - no question or command of
+    its own (live 2026-10-19 12:56: "You can ask the flowers I sing for hours..." after
+    "do you know the name of the song with the lyrics?" went to memory, and came back as
+    '"Blue" by Yung Kai! You remembered!'). The same as the question: no memory."""
+    text = text or ""
+    return world_knowledge(before) and len(text.split()) >= 6 and not asks(text) and not asks_past(text)
+
+
 @dataclass
 class Recalled:
     section: str = ""
     items: list[Item] = field(default_factory=list)
     ms: float = 0.0
     past: bool = False
+    # why his memory was not consulted at all ("world knowledge"), or ""
+    skipped: str = ""
+    # a question about the world nothing he taught matched: what he did teach (never the answer)
+    others: list[Item] = field(default_factory=list)
+    # naming a song from its lyrics that nothing he taught matched: she doesn't know it
+    lyrics: bool = False
 
 
 LAST = Recalled()
 
 
-def recall(text: str, session: str = "", store: Store | None = None, now: float | None = None) -> Recalled:
+def recall(text: str, session: str = "", store: Store | None = None, now: float | None = None, before: str = "") -> Recalled:
     """What she remembers that bears on `text`, as a context section within the token
     budget: by date when he names one, else by relevance. Nothing from this session
     (it is in the history already). The last one is kept in LAST (its time, for the
     turn log)."""
     global LAST
-    LAST = _recall(text, session, store, now)
+    LAST = _recall(text, session, store, now, before)
     return LAST
 
 
-def _recall(text: str, session: str, store: Store | None, now: float | None) -> Recalled:
+def _recall(text: str, session: str, store: Store | None, now: float | None, before: str = "") -> Recalled:
     if not POLICY.enabled:
         return Recalled()
     started = time.perf_counter()
     store = store or current()
     now = now or time.time()
+    world = world_knowledge(text) or lyrics_after(text, before)
+    # naming a song FROM ITS LYRICS: what she'd say of one he never taught her is a guess
+    # (live 2026-10-19: "Pretty Little Baby by Durand Jones & The Indications")
+    lyrics = world and ((_FRAME.search(text) is not None and len(quoted(text).split()) >= 4) or lyrics_after(text, before))
+    try:
+        # what HE taught her that this quotes: asked, sung, or just said
+        told = [] if asks_past(text) else store.told(text, TOLD_MIN)
+    except Exception:  # noqa: BLE001 - a broken memory is no memory, never a broken turn
+        log.exception("memory: told() failed")
+        told = []
+    if world or told:
+        ms = (time.perf_counter() - started) * 1000
+        log.info("memory: a question about the world - only what he stated: %s",
+                 ", ".join(f"#{i.id} ({i.score})" for i in told) or "nothing he taught matches")
+        section = ""
+        others: list[Item] = []
+        if told:
+            asked = store.asked(told[0].id)
+            again = f", and that he keeps coming back to it (he has asked you to name it {asked} time{'s' if asked != 1 else ''} before)" if asked else ""
+            section = "\n".join([
+                "## What he has told you (stated by him - this answers him)",
+                *(i.line(now) for i in told),
+                "This is the answer. Your reply now: three short spoken sentences, in this order - never stop after the title:",
+                "1. the title and who it is by, exactly as he gave them (he is right about it: never correct or change them);",
+                "2. anything else he told you about it above - or, if he told you nothing more, what its words picture for you "
+                "(they are the song's words, not his about you);",
+                f"3. how it feels to you: its mood{again}.",
+                "That is ALL you know about it. Never add a year, an album, a label, a chart, sales, a genre, where the "
+                "artist is from, or any other song or artist - not even as a guess: such a sentence is never spoken. "
+                "The board shows its card by itself: no <draw> for it.",
+            ])
+        else:
+            # what he did teach her is not this: live, with nothing of his matching, she
+            # answered an untaught song with his last one ("Blue by yung kai. Again.")
+            try:
+                with store._lock:
+                    store._open()
+                    others = [i for i in store.items if taught_fact(i)]
+            except Exception:  # noqa: BLE001
+                others = []
+            from . import taught
+
+            titles = [f"“{n.title}”" for n in map(taught.named_item, others) if n is not None]
+            lines = []
+            if lyrics:
+                lines.append("## A song he hasn't taught you\nNothing he taught you matches these lyrics, so you don't know "
+                             "it: say so, in a sentence of your own, and that he can teach you. Never guess a title or an "
+                             "artist - a guess is never spoken.")
+            if titles:
+                lines.append(("" if lyrics else "## Not one he taught you\n") + "Nothing he taught you matches what he "
+                             "quoted: it is NOT " + ", nor ".join(titles) + " - never answer with one of his.")
+            section = "\n".join(lines)
+        return Recalled(section, told, ms, False, skipped="world knowledge", others=others, lyrics=bool(lyrics and not told))
     past = asks_past(text)
     budget = POLICY.recall_budget_tokens if past else POLICY.budget_tokens
     try:

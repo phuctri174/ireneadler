@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // A folder tree from a list of paths: folders first, indented, files under them.
 //
 //   { "template": "folder_tree", "root"?: "Downloads", "paths": ["pdf/tax.pdf", "img/cat.png"] }

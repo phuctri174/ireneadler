@@ -1,8 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // One target frame per animation frame, from everything that is going on. Layers,
-// back to front: face -> activity scene -> summon entrance -> gesture pose ->
+// back to front: face -> activity scene -> summon entrance -> gesture pose -> game hand ->
 // summon sequence -> status glyphs. Who owns the face's expression, strongest
 // first: summon, pose, entrance, scene, then the plain state/emotion.
 
+import { drawReadout } from "./readout";
 import type { Activity } from "../face/activity";
 import type { AssistantState, Emotion } from "../face/faceState";
 import type { Reaction } from "../face/reactions";
@@ -29,6 +32,10 @@ import { drawEntrance, entranceActive, entranceLook } from "./entrances";
 import type { EntranceName } from "./entrances";
 import { REVEAL_MS, drawDomainHair, drawSummon, drawSummonBurst, domainShift, summonActive, summonLook } from "./summon";
 import { drawBubble } from "./bubble";
+import { drawGameHand } from "./gameHand";
+import { drawScore } from "./score";
+import type { ShiaiScore } from "./score";
+import type { GameHand } from "./gameHand";
 import type { SummonTimes } from "./summon";
 
 export interface Stage {
@@ -55,6 +62,10 @@ export interface Stage {
   humming?: number | null;
   /** Voice input (led/listening.ts): listening, hearing, the end-of-speech countdown. */
   voice?: VoiceStage | null;
+  /** Her hand in a hand game (led/gameHand.ts): the count, her throw, the shrug. */
+  gameHand?: GameHand | null;
+  /** Shiai's running score (led/score.ts), on the left of the dojo. */
+  score?: ShiaiScore | null;
 }
 
 /**
@@ -174,6 +185,8 @@ export function compose(frame: Frame, given: Stage): void {
   if (stage.activity) drawScene(frame, stage.activity.name, now - stage.activity.at, now);
   if (entrance) drawEntrance(frame, entrance.name, now - entrance.at);
   if (reaction && poseWeight > 0) drawPose(frame, reaction.name, now - reaction.at, poseWeight);
+  if (!entrance && !summon) drawGameHand(frame, stage.gameHand ?? null, now);
+  if (stage.score && stage.activity?.name === "keiko" && !entrance && !summon) drawScore(frame, stage.score, now);
   if (summon) {
     drawSummon(frame, summon, now);
     // the domain: her whole face (visor, sign, eye, the black hole behind) moves down
@@ -185,6 +198,7 @@ export function compose(frame: Frame, given: Stage): void {
   }
   if (voiceShown(stage.voice) && !entrance && !summon) drawListening(frame, stage.voice, now);
   if (stage.muted) drawMuted(frame);
+  drawReadout(frame, now);
 }
 
 /** Everything drawn so far moved down by `rows` (the bottom rows drop off). */

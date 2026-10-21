@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // A flowchart: start/end as rounded caps, processes as boxes, decisions as
 // diamonds; laid out in layers top to bottom from the links, arrows between with
 // their labels (yes/no).

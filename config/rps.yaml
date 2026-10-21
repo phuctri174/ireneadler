@@ -1,0 +1,11 @@
+# Rock-paper-scissors (core/irene/rps.py). Read at the start of every game.
+
+# How sure the classifier must be before she calls his throw; below it she asks for
+# a redo instead. null = the trained model's own bar (rps_model.json min_confidence,
+# the 5th percentile of its correct cross-validated reads - 0.60 for the shipped one).
+min_confidence: null
+
+# The bar when a game has stakes on it (rps_stakes.py): a wrong call on a bet costs far
+# more than a redo, so she asks for one rather than call a throw she is unsure of.
+# The higher of this and the model's own bar applies.
+min_confidence_staked: 0.85

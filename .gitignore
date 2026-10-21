@@ -50,6 +50,7 @@ hud/tests/zoom.golden.json
 hud/tests/zoom.engine.json
 hud/tests/kamae.golden.json
 hud/tests/strike.golden.json
+hud/tests/strikeEvent.golden.json
 # reference images that aren't ours to publish (third-party fan art, the club's mark)
 assets/domain-expansion.png
 assets/dalat-kendo-logo.png
@@ -83,3 +84,11 @@ hud/.verify/
 *.pem
 *.key
 hud/.verify-replay/
+# OAuth / API credentials, if a tool ever needs one (none does today)
+client_secret*.json
+credentials.json
+token.json
+*.token
+# screen captures dropped anywhere in the tree (research screenshots live in core/data/)
+Screenshot*.png
+screenshots/

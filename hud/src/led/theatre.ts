@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Theatrical expressions: emoji-level faces, for when she is filmed (a skit -
 // core/irene/skit.py - watched on a phone). The everyday expressions are a pair of
 // 7x7 eyes; these are the whole face, drawn big enough to read at a glance on a
@@ -10,6 +12,18 @@
 //   innocent  😇  serene closed arcs, a tiny smile, blush, a glowing halo, a slow bob
 //   peeking   🫣  both hands up over her face, fingers spread, one eye through the gap
 //   smug      😏  one brow high, one flat, a one-sided smirk, dead still
+//
+// and the game results (rock-paper-scissors, core/irene/rps.py CUES):
+//   triumphant 😆  she won: crescent eyes, a huge open grin, sparkles
+//   outplayed  😣  he won: eyes squeezed > <, brows up, a wobbly pout, sweat
+//   standoff   😑  a draw: level slits, flat brows and mouth, an "=" overhead
+//   oops       🤨  a misread: head cocked, one eye wide and one squinting, a "?"
+//
+// and the study-mode hits (core/irene/study.py) - comic, never real distress; the
+// overlays are led/study.ts's, drawn big here:
+//   bonked     😵  "ow!": one eye winced shut, one wide, a burst, stars circling
+//   indignant  😤  "I AM studying": brows in a V, the anger mark throbbing, a pout
+//   surrender  😭🏳  "okay okay okay": T_T, waterfall tears, a white flag waving
 
 import type { Emotion } from "../face/faceState";
 import { EYE_H, EYE_W, EYE_Y, LEFT_EYE_X, MOUTH_X, MOUTH_Y, RIGHT_EYE_X } from "./face";
@@ -18,6 +32,7 @@ import { FADE, INK, blit, capsule, clamp01, drawShape, easeOutBack, sprite } fro
 import type { Frame, Ink, Vec } from "./grid";
 import { HANDS, drawHand } from "./hands";
 import type { HandPose } from "./hands";
+import { drawBurst, drawFlag, drawOrbit, drawTears, drawVein } from "./study";
 
 export interface Theatre {
   /** Changes to the face before it is drawn (its mouth is the theatre's own). */
@@ -318,7 +333,273 @@ const shocked: Theatre = {
   },
 };
 
-export const THEATRE: Partial<Record<Emotion, Theatre>> = { sobbing, innocent, peeking, smug, fuming, shocked };
+// ---- game results: she won, he won, a draw, and the redo ------------------------------
+
+// a four-point twinkle, and its small in-between frame
+const SPARKLE = sprite(["..#..", "..#..", "##+##", "..#..", "..#.."]);
+const SPARKLE_SMALL = sprite([".#.", "#+#", ".#."]);
+// a sweat drop: a point on top, round at the bottom
+const SWEAT = sprite(["..#..", ".#+#.", "#+++#", "#+++#", ".###."]);
+
+function sparkle(frame: Frame, x: number, y: number, t: number): void {
+  // pops on, twinkles big-small, gone, back - each on its own phase
+  const phase = (t / 1000) * 1.6 % 1;
+  if (phase > 0.8) return;
+  const big = phase < 0.45;
+  blit(frame, big ? SPARKLE : SPARKLE_SMALL, x - (big ? 2 : 1), y - (big ? 2 : 1), { ink: INK.amber, scale: 1, cover: false, fade: FADE.fast });
+}
+
+// 😆 triumphant: crescent eyes over a huge open grin, sparkles popping round her head
+const triumphant: Theatre = {
+  look: (look) => {
+    look.mouth = "hidden";
+    look.blinking = false;
+    look.gazeX = 0;
+    look.gazeY = 0;
+  },
+  draw: (frame, look, t) => {
+    const { sx, sy } = at(look);
+    const open = easeOutBack(t / 260);
+    const talk = clamp01(look.level * 1.4);
+    // the grin: a flat top lip, a deep round bottom - a D on its back, opening wider
+    // with her voice; a row of top teeth
+    const cx = FACE_CX + sx;
+    const top = MOUTH_Y + 2 + sy;
+    const rx = 15 * (0.6 + 0.4 * open);
+    const ry = 5 + 4 * open + 2 * talk;
+    const grin = (x: number, y: number) => Math.max(top - y, (Math.hypot((x - cx) / rx, (y - top) / ry) - 1) * Math.min(rx, ry));
+    drawShape(frame, grin, { x0: cx - rx - 2, y0: top - 2, x1: cx + rx + 2, y1: top + ry + 2 }, INK.accent, 1, FADE.fast, 1, 0.2);
+    stroke(frame, [{ x: cx - rx * 0.7, y: top + 2 }, { x: cx + rx * 0.7, y: top + 2 }], 0.9, INK.white, open);
+    // sparkles: off both outer eye corners and one above, each twinkling on its own beat
+    sparkle(frame, LEFT_EYE_X - 7 + sx, EYE_Y + 2 + sy, t);
+    sparkle(frame, RIGHT_EYE_X + EYE_W + 7 + sx, EYE_Y + 2 + sy, t + 330);
+    sparkle(frame, FACE_CX + 20 + sx, 3 + sy, t + 610);
+  },
+};
+
+// 😳 caughtOffGuard: "oh really?" - brows shot up, a small round "o", a bead of
+// sweat on her temple; frozen there, the whole face holding (the pause is the joke)
+const caughtOffGuard: Theatre = {
+  look: (look) => {
+    look.mouth = "hidden";
+    look.blinking = false;
+    look.gazeX = 0;
+    look.gazeY = 0;
+  },
+  draw: (frame, look, t) => {
+    const { sx, sy, tilt } = at(look);
+    const up = easeOutBack(t / 180);
+    // both brows flung high and level, a little apart from the eyes
+    for (const [x0, y0] of [[LEFT_EYE_X, EYE_Y + sy + tilt], [RIGHT_EYE_X, EYE_Y + sy - tilt]] as const) {
+      // (high, but under the matrix's top edge - higher clipped them flat)
+      const y = y0 - 1 - up * 3;
+      stroke(frame, curve((u) => ({ x: x0 - 1 + sx + u * (EYE_W + 2), y: y - Math.sin(u * Math.PI) * 2 })), 1.2, INK.accent);
+    }
+    // the small "o": round, a touch wider when she talks
+    const open = clamp01(look.level * 1.4);
+    const cx = FACE_CX + sx;
+    const cy = MOUTH_Y + 7 + sy;
+    const r = 3.2 + 1.6 * open;
+    drawShape(frame, (x, y) => Math.abs(Math.hypot(x - cx, (y - cy) * 0.9) - r) - 1.1, { x0: cx - r - 3, y0: cy - r - 3, x1: cx + r + 3, y1: cy + r + 3 }, INK.accent, 1, FADE.fast, 1, 1);
+    // a bead of sweat, appearing on her temple and staying put
+    blit(frame, SWEAT, LEFT_EYE_X - 8 + sx, EYE_Y - 2 + sy, { ink: INK.iceCore, alpha: clamp01((t - 150) / 200), cover: false, fade: FADE.fast });
+  },
+};
+
+// 😌 arrogant: chin up, lids low, brows arched, a wide closed smile curling up at both
+// corners - "FUGGING EASY", insufferably pleased with herself
+const arrogant: Theatre = {
+  look: (look) => {
+    look.mouth = "hidden";
+    look.blinking = false;
+    look.gazeX = 0;
+    look.gazeY = 0;
+  },
+  draw: (frame, look, t) => {
+    const { sx, sy, tilt } = at(look);
+    const arch = easeOutBack(t / 340);
+    // brows: both arched over the lowered lids, the viewer's left a little higher
+    const ly = EYE_Y + sy + tilt;
+    const ry = EYE_Y + sy - tilt;
+    stroke(frame, curve((u) => ({ x: LEFT_EYE_X - 2 + sx + u * (EYE_W + 3), y: ly - 1 - arch * (2 + 3 * Math.sin(u * Math.PI)) })), 1.2, INK.accent);
+    stroke(frame, curve((u) => ({ x: RIGHT_EYE_X - 1 + sx + u * (EYE_W + 3), y: ry - arch * (1 + 2 * Math.sin(u * Math.PI)) })), 1.2, INK.accent);
+    // the smile: wide and closed, both corners curling up, parting a little as she talks
+    const my = MOUTH_Y + 6 + sy;
+    const talk = look.state === "speaking" ? clamp01(look.level * 1.3) : 0;
+    const mx = FACE_CX + sx;
+    const half = 15 * (0.7 + 0.3 * arch);
+    const lip = (u: number) => ({ x: mx - half + u * 2 * half, y: my + 4 * Math.sin(u * Math.PI) - (u < 0.12 ? (0.12 - u) * 20 : u > 0.88 ? (u - 0.88) * 20 : 0) });
+    stroke(frame, curve(lip, 14), 1.3, INK.accent);
+    if (talk > 0.05) stroke(frame, curve((u) => ({ x: mx - half * 0.7 + u * 1.4 * half, y: my + 1 + 2 * talk * Math.sin(u * Math.PI) })), 1.0, INK.accent, 0.7);
+    // dimples at both corners
+    stroke(frame, [{ x: mx - half - 2, y: my - 4 }, { x: mx - half - 1, y: my - 1 }], 0.7, INK.accent, 0.8);
+    stroke(frame, [{ x: mx + half + 2, y: my - 4 }, { x: mx + half + 1, y: my - 1 }], 0.7, INK.accent, 0.8);
+    // one twinkle off the corner of the smile as it lands
+    if (t > 250 && t < 900) sparkle(frame, mx + half + 6, my - 6, t - 250);
+  },
+};
+
+// 😣 outplayed: eyes squeezed > <, a wobbly pout, a bead of sweat sliding down
+const outplayed: Theatre = {
+  look: (look) => {
+    look.mouth = "hidden";
+    look.blinking = false;
+    look.gazeX = 0;
+    look.gazeY = 0;
+  },
+  draw: (frame, look, t) => {
+    const { sx, sy, tilt } = at(look);
+    // the pout: a small frown that wobbles - quicker while she protests out loud
+    const talking = look.state === "speaking" && look.level > 0.25;
+    const hz = talking ? 7 : 3;
+    const my = MOUTH_Y + 9 + sy;
+    stroke(
+      frame,
+      curve((u) => ({ x: FACE_CX - 9 + sx - tilt + u * 18, y: my - Math.sin(u * Math.PI) * 4 + Math.sin(u * 3 * Math.PI + (t / 1000) * hz * TAU) * 0.9 })),
+      1.2,
+      INK.accent,
+    );
+    // brows up in the middle - "how?!"
+    const ly = EYE_Y + sy + tilt;
+    const ry = EYE_Y + sy - tilt;
+    stroke(frame, [{ x: LEFT_EYE_X + 1 + sx, y: ly - 4 }, { x: LEFT_EYE_X + EYE_W - 1 + sx, y: ly - 8 }], 1.1, INK.accent);
+    stroke(frame, [{ x: RIGHT_EYE_X + EYE_W - 1 + sx, y: ry - 4 }, { x: RIGHT_EYE_X + 1 + sx, y: ry - 8 }], 1.1, INK.accent);
+    // a bead of sweat from her temple, sliding down and fading, again and again
+    const slide = ((t - 250) / 1400) % 1;
+    if (t > 250) {
+      const a = slide < 0.15 ? slide / 0.15 : 1 - Math.max(0, slide - 0.6) / 0.4;
+      blit(frame, SWEAT, RIGHT_EYE_X + EYE_W + 4 + sx, EYE_Y - 4 + sy + slide * 14, { ink: INK.iceCore, alpha: a, cover: false, fade: FADE.fast });
+    }
+  },
+};
+
+// 😑 standoff: level slits locked on him, a flat line of a mouth, an "=" between you
+const EQUALS = sprite(["#####", ".....", "#####"]);
+const standoff: Theatre = {
+  look: (look) => {
+    look.mouth = "hidden";
+    look.blinking = false;
+    look.gazeY = 0;
+    // eyes slide to one side and back - sizing him up
+  },
+  draw: (frame, look, t) => {
+    const { sx, sy, tilt } = at(look);
+    const ly = EYE_Y + sy + tilt;
+    const ry = EYE_Y + sy - tilt;
+    // flat, low brows, pressed down on the slits
+    stroke(frame, [{ x: LEFT_EYE_X - 1 + sx, y: ly + 3 }, { x: LEFT_EYE_X + EYE_W + 1 + sx, y: ly + 4 }], 1.1, INK.accent);
+    stroke(frame, [{ x: RIGHT_EYE_X - 1 + sx, y: ry + 4 }, { x: RIGHT_EYE_X + EYE_W + 1 + sx, y: ry + 3 }], 1.1, INK.accent);
+    // the mouth: dead flat, one corner twitching now and then
+    const my = MOUTH_Y + 7 + sy;
+    const twitch = Math.floor(t / 900) % 3 === 1 ? -1.5 : 0;
+    stroke(frame, [{ x: FACE_CX - 10 + sx - tilt, y: my }, { x: FACE_CX + 8 + sx - tilt, y: my }, { x: FACE_CX + 11 + sx - tilt, y: my + twitch }], 1.1, INK.accent);
+    // "=": pops in above her head on the draw, then holds and pulses
+    const pop = easeOutBack((t - 150) / 280);
+    if (t > 150) {
+      const glow = 0.7 + 0.3 * Math.sin((t / 1000) * 1.4 * TAU);
+      blit(frame, EQUALS, FACE_CX - 5 + sx, 1 + sy + Math.round((1 - pop) * -4), { ink: INK.white, scale: 2, alpha: clamp01(pop) * glow, cover: false, fade: FADE.fast });
+    }
+  },
+};
+
+// 🤨 oops: the misread - head cocked (motion.ts), one eye wide and one squinting
+// under a raised brow, a wavering little mouth, a big "?" bobbing over her head and
+// a bead of sweat: "...again?"
+const QUESTION = sprite([".###.", "#...#", "....#", "...#.", "..#..", ".....", "..#.."]);
+const oops: Theatre = {
+  look: (look) => {
+    look.mouth = "hidden";
+    look.blinking = false;
+    look.gazeY = 0;
+    look.gazeX = 0;
+  },
+  draw: (frame, look, t) => {
+    const { sx, sy, tilt } = at(look);
+    const ly = EYE_Y + sy + tilt;
+    const ry = EYE_Y + sy - tilt;
+    // the brow over the wide eye shoots up; the other comes down on the squint
+    const raise = easeOutBack(t / 300);
+    stroke(frame, curve((u) => ({ x: LEFT_EYE_X - 1 + sx + u * (EYE_W + 2), y: ly - 2 - raise * (2 + 3 * Math.sin(u * Math.PI)) })), 1.1, INK.accent);
+    // (the squint's brow sits well clear of it, angled down to the nose)
+    stroke(frame, [{ x: RIGHT_EYE_X - 1 + sx, y: ry + 3 }, { x: RIGHT_EYE_X + EYE_W + 1 + sx, y: ry + 1 }], 1.1, INK.accent);
+    // the mouth: a little sideways squiggle, wavering - a bigger wave as she asks
+    const talking = look.state === "speaking" && look.level > 0.25;
+    const amp = talking ? 1.8 : 1.1;
+    const my = MOUTH_Y + 8 + sy;
+    stroke(frame, curve((u) => ({ x: FACE_CX - 11 + sx - tilt + u * 22, y: my + u * 3 + Math.sin(u * 2 * TAU + (t / 1000) * 2.5 * TAU) * amp }), 16), 1.1, INK.accent);
+    // the question mark: pops up over the squinting side with a bounce, then bobs
+    const pop = easeOutBack((t - 120) / 320);
+    if (t > 120) {
+      const bob = Math.sin((t / 1000) * 1.3 * TAU) * 1.2;
+      blit(frame, QUESTION, RIGHT_EYE_X + EYE_W - 2 + sx, 1 + sy + bob + (1 - pop) * 8, { ink: INK.white, scale: 2, alpha: clamp01(pop), cover: false, fade: FADE.fast });
+    }
+    // and a bead of sweat at the temple of the wide eye, sliding slowly
+    if (t > 500) {
+      const slide = clamp01((t - 500) / 1800);
+      blit(frame, SWEAT, LEFT_EYE_X - 8 + sx, EYE_Y + 2 + sy + slide * 10, { ink: INK.iceCore, alpha: 1 - Math.max(0, slide - 0.7) / 0.3, cover: false, fade: FADE.fast });
+    }
+  },
+};
+
+// ---- the study-mode hits: ow, I AM studying, okay okay okay --------------------------
+
+// 😵 bonked: a burst where it landed, stars circling her head, a little "o" of a mouth
+const bonked: Theatre = {
+  look: (look, t) => {
+    look.mouth = t < 900 || look.state !== "speaking" ? "o" : undefined;
+    look.blinking = false;
+    look.gazeX = 0;
+    look.gazeY = 0;
+  },
+  draw: (frame, look, t) => {
+    const { sx, sy } = at(look);
+    drawBurst(frame, { x: FACE_CX + 16 + sx, y: 3 + sy }, t, 380, 1.4);
+    if (t > 180) drawOrbit(frame, FACE_CX + sx, 4 + sy, 34, 4, t, 4, true);
+  },
+};
+
+// 😤 indignant: the anger mark throbbing by her brow, a tight little pout, a huff
+const indignant: Theatre = {
+  look: (look) => {
+    look.mouth = "hidden";
+    look.blinking = false;
+    look.gazeX = 0;
+    look.gazeY = 0;
+  },
+  draw: (frame, look, t) => {
+    const { sx, sy, tilt } = at(look);
+    drawVein(frame, RIGHT_EYE_X + EYE_W + 4 + sx, 3 + sy, t, 2);
+    // the pout: a short pushed-out curve, quivering with her voice
+    const talking = look.state === "speaking" && look.level > 0.25;
+    const my = MOUTH_Y + 8 + sy;
+    stroke(frame, curve((u) => ({ x: FACE_CX - 6 + sx - tilt + u * 12, y: my + Math.sin(u * Math.PI) * -2.5 + (talking ? Math.sin(u * 3 * Math.PI + (t / 1000) * 8 * TAU) * 0.8 : 0) })), 1.2, INK.accent);
+    // a huff puffing out of the side of her mouth, every so often
+    const huff = (t % 2200) / 2200;
+    if (huff < 0.3) {
+      const k = huff / 0.3;
+      for (let i = 0; i < 3; i += 1) frame.lighten(Math.round(FACE_CX + 12 + sx + k * 10 + i * 2), Math.round(my - 1 - i + Math.sin(k * 6) * 1), 1 - k, INK.white, FADE.fast);
+    }
+  },
+};
+
+// 😭🏳 surrender: waterfall tears off both eyes, a wailing wobble of a mouth, the flag
+const surrender: Theatre = {
+  look: (look) => {
+    look.mouth = "wavy";
+    look.blinking = false;
+    look.gazeX = 0;
+    look.gazeY = 0;
+  },
+  draw: (frame, look, t) => {
+    const { sx, sy } = at(look);
+    drawTears(frame, EYE_CX_L - 1 + sx, EYE_Y + EYE_H + sy, 71, t, 3);
+    drawTears(frame, EYE_CX_R - 1 + sx, EYE_Y + EYE_H + sy, 71, t, 3);
+    const up = clamp01((t - 150) / 300);
+    drawFlag(frame, { x: 112, y: 71 }, { x: 108, y: 71 - 40 * up }, t, 1.4, up);
+  },
+};
+
+export const THEATRE: Partial<Record<Emotion, Theatre>> = { sobbing, innocent, peeking, smug, fuming, shocked, caughtOffGuard, arrogant, triumphant, outplayed, standoff, oops, bonked, indignant, surrender };
 
 export function theatreFor(emotion: Emotion): Theatre | undefined {
   return THEATRE[emotion];

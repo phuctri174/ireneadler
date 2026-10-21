@@ -179,3 +179,48 @@ def test_the_series_itself_is_charted_when_her_chart_cannot_be():
     assert spec.layout == "line" and spec.unit == "$" and spec.points == [("Jan 1", 189.11), ("May 7", 225.83), ("Sep 25", 225.07)]
     in_bounds(compile(spec).shapes())
     assert drawing.series_chart("no rows here") is None
+
+
+# ---- readable boards (2026-10-14: a lecture's boards had "EX- EC-", "PERFORMA-",
+# "PROGRAMMI" and "INTRODUCTION TO") -------------------------------------------------------
+
+
+def _labels_of(drawn):
+    return [s.get("text", "") for s in drawn.shapes() if s.get("type") == "label"]
+
+
+def test_a_title_keeps_its_meaning_when_cut():
+    from irene.compose import fit_title
+
+    assert fit_title("Introduction to Algorithm Analysis", 96) == "ALGORITHM ANALYSIS"
+    assert fit_title("Course Structure and Activities", 96) == "COURSE STRUCTURE"
+    assert fit_title("Water cycle", 96) == "WATER CYCLE"
+    assert not fit_title("An overview of the history of the very long things of the world", 96).endswith(("OF", "THE", "TO", "AND"))
+
+
+def test_six_steps_wrap_into_rows_with_whole_words():
+    from irene import drawing
+
+    labels = ["Execution Time", "Empirical Approach", "Implement Algorithm", "Measure Performance", "Theoretical Approach", "CPU Operations"]
+    drawn = drawing.compile(drawing.read({"title": "Algorithms", "layout": "flow", "items": labels}))
+    text = " ".join(_labels_of(drawn))
+    assert "-" not in text.replace("CPU", "")  # no word broken across lines
+    assert "PERFORMANCE" in text and "THEORETICAL" in text
+
+
+def test_a_radial_keeps_two_word_labels_whole():
+    from irene import drawing
+
+    drawn = drawing.compile(drawing.read({"title": "Course", "layout": "radial",
+                                          "items": ["Programming", "Python", "Variables", "C++", "Control Flow", "Software Engineering", "Functions"]}))
+    text = " ".join(_labels_of(drawn))
+    assert "PROGRAMMING" in text and "ENGINEERING" in text and "FLOW" in text
+
+
+def test_a_graph_too_wide_for_its_words_goes_top_down():
+    from irene import drawing
+
+    spec = {"title": "Photosynthesis", "layout": "flow", "items": ["Sunlight", "CO2", "H2O", "Chloroplast", "Glucose", "O2"],
+            "links": [["Sunlight", "Chloroplast"], ["CO2", "Chloroplast"], ["H2O", "Chloroplast"], ["Chloroplast", "Glucose"], ["Chloroplast", "O2"]]}
+    drawn = drawing.compile(drawing.read(spec))
+    assert "CHLOROPLAST" in _labels_of(drawn)

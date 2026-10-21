@@ -241,3 +241,40 @@ def test_a_pose_frame_survives_the_write(tmp_path):
     # the step label is "pose" too: it must not be overwritten by the landmarks
     assert line["pose"] == "kamae"
     assert len(line["body"]) == 132 and line["body"][0] == 0.5
+
+
+def test_the_hits_capture_is_one_style_seated_and_read_from_the_body():
+    """Chisai men at the desk only - with this little data one consistent style beats
+    coverage - and every other step is a confuser. It must arm the pose model: a name
+    check once ran it on the hand model and it saved no strike at all."""
+    from irene.calibration import PROFILES, labels
+    import json as _json
+
+    hits = _json.loads(PROFILES.read_text(encoding="utf-8"))["profiles"]["hits"]
+    assert hits["tracks"] == "pose"
+    strikes = [s for s in hits["steps"] if s["label"] == "men"]
+    assert len(strikes) == 1 and strikes[0]["pace"] == "natural"
+    assert "chisai" in strikes[0]["spoken"].lower()
+    # enough strikes that one miss doesn't decide the verdict: 8 takes x 3 = 24, the
+    # cost being the take cycle, not the strike - and three per take is the
+    # refractory window's real case
+    assert strikes[0]["reps"] * strikes[0]["strikes"] >= 24 and strikes[0]["strikes"] == 3
+    confuser_takes = sum(s.get("reps", 1) for s in hits["steps"] if s["label"] != "men")
+    assert confuser_takes >= 20
+    # no other strike style is in here, under any name
+    others = {"men_fast", "men_small", "men_step", "chop_one_hand", "kote", "gyaku_dou", "dou_right", "tsuki"}
+    assert not others & set(labels()["hits"])
+    assert all(s["seconds"] >= 4 for s in hits["steps"] if s["kind"] == "motion")
+    assert _minutes(hits["steps"]) <= 4
+
+
+def test_a_body_frame_keeps_its_timing_and_exposure(tmp_path):
+    # what GestureCapture adds to every body frame, for the blur / drop / light diagnosis
+    frame = {"t": 0, "pose": [0.5] * 132, "hand": False, "dtMs": 33.4, "skipped": 1, "handMs": 7.2,
+             "poseMs": 9.1, "exposureMode": "continuous", "exposureTime": 312.0, "camW": 1280, "camH": 720,
+             "camFps": 30}
+    path, n = write({"profile": "hits", "session": SESSION, "pose": "men", "frames": [frame]}, tmp_path)
+    assert n == 1
+    line = json.loads(path.read_text(encoding="utf-8"))
+    assert line["skipped"] == 1 and line["dtMs"] == 33.4 and line["poseMs"] == 9.1
+    assert line["exposureMode"] == "continuous" and line["exposureTime"] == 312.0

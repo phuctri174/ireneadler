@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Idle life: while he leaves her alone, every 20-60 s she does something small on
 // her own - looks around, stretches, hums a little tune, or plays a short scene.
 // The moment he interacts (types, speaks to her, shows a hand, touches the panel)

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Pronunciation map from config/pronunciation.yaml, applied to text just before TTS.
 
 For Kokoro, entries with `phonemes` become its inline override `[word](/ipa/)` and

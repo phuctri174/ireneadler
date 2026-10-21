@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """daily_briefing(): "what's new today" - the few things actually worth his ear.
 
 Five sources, all real, all read-only fetches of public data (nothing he says

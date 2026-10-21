@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Built-in tools that touch nothing on disk."""
 from __future__ import annotations
 

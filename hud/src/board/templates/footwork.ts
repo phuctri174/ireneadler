@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Kendo footwork (ashi-sabaki) as footprints and numbered arrows, seen from above,
 // forward = up. Start positions dim, end positions bright; right foot ahead as in
 // chudan, left heel raised.

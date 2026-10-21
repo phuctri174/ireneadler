@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // A queue: items front to back, left to right; dequeue from the front, enqueue at the back.
 //
 //   { "template": "queue", "values": ["a", "b", "c"], "enqueue"?: "d", "dequeue"?: true }

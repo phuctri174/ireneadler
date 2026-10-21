@@ -6,7 +6,7 @@
 //
 // spec.json: [{ "file": "kendo_1.png", "stage": { ...Stage fields, times relative to
 // "now": 0 }, "cols": 1 }] - or a "sheet": [[stage, label], ...] rendered as one
-// contact sheet. Times in a stage (entrance.at, reaction.at, summon.start/part2) are
+// contact sheet. Times in a stage (entrance.at, reaction.at, summon.start/part2, gameHand's) are
 // ms before the moment drawn when negative.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -25,6 +25,10 @@ function at(stage) {
   if (s.activity) s.activity = { ...s.activity, at: NOW + s.activity.at };
   if (s.summon) s.summon = { ...s.summon, start: NOW + s.summon.start, part2: s.summon.part2 == null ? null : NOW + s.summon.part2 };
   if (s.emotionAt != null) s.emotionAt = NOW + s.emotionAt;
+  if (s.gameHand) {
+    const g = s.gameHand;
+    s.gameHand = { ...g, at: NOW + g.at, shownAt: NOW + g.shownAt, beatAt: g.beatAt == null ? null : NOW + g.beatAt, hiddenAt: g.hiddenAt == null ? null : NOW + g.hiddenAt };
+  }
   const f = new Frame();
   compose(f, s);
   return f;

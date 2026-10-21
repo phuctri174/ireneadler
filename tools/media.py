@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Media transport and system volume.
 
 media_play_pause / media_next / media_previous act on the song or video in

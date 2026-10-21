@@ -471,4 +471,5 @@ console.log("11. pinch is an instant click - once per pinch, never at rest");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail === 0 ? 0 : 1);
+// keeps a failure the earlier verify files set on process.exitCode - exiting 0 here hid them
+process.exit(fail === 0 ? (process.exitCode ?? 0) : 1);

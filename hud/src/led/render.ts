@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Draws the eased matrix onto a canvas. Every cell is the same fixture as the old
 // DOM face - a rounded LED with a soft glow over a faint unlit dot - rendered as
 // one pre-baked sprite per ink, stamped additively where lit, so overlapping

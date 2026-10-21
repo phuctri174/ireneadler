@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // A process, step by step as she explains it - core only (core/irene/illustrate.py):
 // each step joins the chain the moment the sentence that names it is heard; the
 // HUD stamps it with the board's own clock ("at", ms since the board went up).

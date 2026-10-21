@@ -115,7 +115,7 @@ def test_a_game_with_the_real_engine():
     async def go():
         game = ChessGame()
         try:
-            beats = await game.start("let's play chess")
+            beats = await game.start("let's play chess, I'll be white")
             assert game.active and game.her == chess.BLACK and beats[0].board["status"] == "YOUR MOVE"
             beats = await game.his_move("e4")
             # her answer is a legal move the engine made, announced and shown
@@ -139,7 +139,7 @@ def test_hanging_is_only_said_when_true():
     async def go():
         game = ChessGame()
         try:
-            await game.start("")
+            await game.start("I'll play white")
             # 1. e4 d5 2. Qg4?? - the bishop on c8 takes the queen
             game.board = chess.Board("rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2")
             beats = await game.play(chess.Move.from_uci("d1g4"))
@@ -153,3 +153,74 @@ def test_hanging_is_only_said_when_true():
             await game.close()
 
     asyncio.run(go())
+
+
+@pytest.mark.skipif(not ENGINE, reason="Stockfish not installed (core/scripts/setup_stockfish.ps1)")
+def test_she_never_resigns_unravels_on_the_way_and_the_mate_lands():
+    """A lost ending played to the end with his best moves: she plays on to mate (no
+    resignation, ever), says each step of the slide once and only as it gets worse,
+    and checkmate gets one of the lines written for it."""
+    from irene.chess_game import RATTLE
+
+    async def go():
+        game = ChessGame()
+        try:
+            await game.start("I'll play white")
+            game.board = chess.Board("7k/8/8/8/8/8/5PPP/3Q2K1 w - - 0 30")
+            said: list = []
+            for _ in range(30):
+                if not game.active:
+                    break
+                best = (await game._look(game.board))["pv"][0]
+                beats = await game.play(best)
+                said += beats
+            outcome = game.board.outcome()
+            assert outcome is not None and outcome.termination == chess.Termination.CHECKMATE and outcome.winner == chess.WHITE
+            assert all(b.board is None or b.board.get("status") != "I RESIGN" for b in said)
+            assert said[-1].text in chess_talk.LINES["he_mates"] and said[-1].board["status"] == "MATE - YOU WIN"
+            order = [k for b in said for k in RATTLE.values() if b.text in chess_talk.LINES[k]]
+            levels = [list(RATTLE.values()).index(k) for k in order]
+            assert levels and levels == sorted(set(levels)), order  # each step once, only worse
+        finally:
+            await game.close()
+
+    asyncio.run(go())
+
+
+@pytest.mark.skipif(not ENGINE, reason="Stockfish not installed (core/scripts/setup_stockfish.ps1)")
+def test_behind_she_never_repeats_a_position():
+    from irene.chess_game import fresh_moves
+
+    async def go():
+        game = ChessGame()
+        try:
+            await game.start("I'll play white")
+            board = chess.Board()
+            for uci in ("g1f3", "g8f6", "f3g1", "f6g8", "g1f3", "g8f6", "f3g1"):
+                board.push_uci(uci)
+            game.board = board
+            game.book.move = lambda b, c: None
+            repeats = {m for m in board.legal_moves if m not in fresh_moves(board)}
+            assert chess.Move.from_uci("f6g8") in repeats
+            game.her_eval = -300  # behind
+            for _ in range(3):
+                assert await game._her_move() not in repeats
+        finally:
+            await game.close()
+
+    asyncio.run(go())
+
+
+def test_a_draw_is_never_claimed():
+    """Threefold repetition is a claim, and nothing claims it: only the board's own
+    automatic endings (mate, stalemate, material, fivefold, 75 moves) end a game."""
+    import inspect
+
+    from irene import chess_game
+
+    board = chess.Board()
+    for uci in ("g1f3", "g8f6", "f3g1", "f6g8") * 2:
+        board.push_uci(uci)
+    assert board.can_claim_threefold_repetition() and not board.is_game_over()
+    assert "claim_draw=True" not in inspect.getsource(chess_game)
+    assert "she_resigns" not in chess_talk.LINES and "Irene resigned\")" not in inspect.getsource(chess_game.ChessGame._reply)

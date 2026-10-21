@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 import { useEffect, useRef, useState } from "react";
 
 /* Her boot-up: a title sequence, ~11.5 s, drawn on one canvas over her whole

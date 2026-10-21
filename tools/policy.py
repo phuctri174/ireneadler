@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """The file whitelist: config/policy.yaml, enforced here.
 
 Tools never take a raw path. The model names a root ("desktop", "downloads") and a

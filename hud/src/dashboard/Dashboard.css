@@ -56,7 +56,12 @@ html.is-dashboard #root {
 .dk-frame {
   position: relative;
   display: grid;
-  grid-template-rows: auto 46px 300px minmax(0, 1fr) 420px auto;
+  /* every child has a named area, so an optional one (the lecture badge) can never
+     shift the rest down a row - live, it did: the ticker took the top cards' 300px, the
+     top cards took the stage's 1fr (~870px of empty cards) and the stage was left a
+     420px strip. The small cards size to their content; the stage takes the rest. */
+  grid-template-areas: "top" "ticker" "rail" "stage" "rail2" "foot";
+  grid-template-rows: auto 46px auto minmax(0, 1fr) auto auto;
   gap: 16px;
   height: 100%;
   padding: 20px 24px 14px;
@@ -77,6 +82,19 @@ html.is-dashboard #root {
     transform: translateY(24px) scale(0.985);
   }
 }
+
+.dk-frame.has-lecture {
+  grid-template-areas: "top" "badge" "ticker" "rail" "stage" "rail2" "foot";
+  grid-template-rows: auto auto 46px auto minmax(0, 1fr) auto auto;
+}
+
+.dk-frame > .dk-top { grid-area: top; }
+.dk-frame > .lecture-badge { grid-area: badge; }
+.dk-frame > .dk-ticker { grid-area: ticker; }
+.dk-frame > .dk-rail { grid-area: rail; }
+.dk-frame > .dk-stage { grid-area: stage; }
+.dk-frame > .dk-rail.is-two { grid-area: rail2; }
+.dk-frame > .dk-foot { grid-area: foot; }
 
 .dk-br {
   position: absolute;
@@ -1824,3 +1842,13 @@ html.is-dashboard #root {
 .dk.is-booting .dk-badge {
   animation: boot-fly 1000ms cubic-bezier(0.2, 0.8, 0.2, 1) 10300ms both;
 }
+
+/* a lecture note in the research list (core/irene/lecture_note.py) */
+.dk-tag-lecture {
+  color: var(--warm);
+  letter-spacing: 0.16em;
+}
+
+/* the mode she thinks she is in, always under her name (core's mode guard) */
+.dk-mode { letter-spacing: 0.12em; }
+.dk-mode.is-on { color: #ffc861; text-shadow: 0 0 8px rgba(255, 200, 97, 0.55); }

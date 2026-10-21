@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // Two options side by side, as she compares them - core only
 // (core/irene/illustrate.py): each point goes under the option the sentence is
 // about, the moment that sentence is heard ("at", ms since the board went up).

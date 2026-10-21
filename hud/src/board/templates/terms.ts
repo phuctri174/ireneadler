@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 phuctri174
 // The key terms of a research answer, appearing one at a time as she says them -
 // core only (never offered to the model): core/irene/terms.py picks each term from
 // a grounded sentence and the fetched text behind it, and sends it the moment that

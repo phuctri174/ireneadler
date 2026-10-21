@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Lecture capture, run by core: start/stop (voice, tool or hotkey), the language
 model parked out of VRAM while it listens, the PC kept awake, the indicator, the
 summary and its follow-ups. The capture itself is lecture.py; the summary
@@ -22,7 +24,7 @@ from tools import lecture as lecture_tool
 from tools import power as power_tool
 from tools.registry import ToolError
 
-from . import lecture, lecture_summary, recall
+from . import lecture, lecture_board, lecture_note, lecture_research, lecture_summary, recall
 from .lecture import LectureCapture, clock
 
 if TYPE_CHECKING:
@@ -41,6 +43,11 @@ class Lectures:
         self._tapped = False
         # the summary just given (follow-ups: "more on the second topic")
         self.last: tuple[Path, lecture_summary.Summary] | None = None
+        # its note (lecture_note.py), and the PDF being printed for it
+        self.note: lecture_note.Note | None = None
+        # the summary's board, for the reply that speaks it (brain: canned_board)
+        self.board: lecture_board.TopicBoards | None = None
+        self._pdf_task: asyncio.Future | None = None
         self.last_turn_at = time.monotonic()
         lecture_tool.LECTURES = self
 
@@ -206,10 +213,83 @@ class Lectures:
         # kept in her long-term memory too ("what was in Monday's lecture?" next week)
         recall.remember_lecture(recall.lecture_title(s.to_json(), meta), recall.lecture_text(s.to_json()), at=(meta or {}).get("started"))
         self.last = (path, s)
-        self.spoken = lecture_summary.speech(s)
-        await ctx.show_panel(lecture_summary.panel_content(s, lines))
+        plan = lecture_summary.speech_plan(s)
+        self.spoken = [sentence for sentence, _ in plan]
+        # the summary as a document he keeps (lecture_note.py): on the panel now, in the
+        # research list, and as a PDF next to the lecture - printed off the turn
+        note = lecture_note.build(s, lines, {**(meta or {}), "id": (meta or {}).get("id") or path.name})
+        # her board for each topic (lecture_board.py), drawn as she reaches it - and the
+        # same drawings, rendered by the HUD, under their topics in the note
+        self.board = None
+        try:
+            await self._boards(note, lines, plan)
+        except Exception:  # noqa: BLE001 - a summary without drawings is still a summary
+            log.exception("lecture board: the drawings failed - the note goes without them")
+        await asyncio.to_thread(lecture_note.save, note)
+        self.note = note
+        await ctx.show_panel(lecture_note.content(note))
+        self._pdf_soon(note)
         note = "\n(It is still listening - this summary is of the lecture so far.)" if still else ""
         return lecture_summary.result_text(s) + note
+
+    async def _boards(self, note, lines: list[dict], plan) -> None:
+        plans = await lecture_board.compose(note.sections, lines, self._chat)
+        topics = [lecture_board.drawn_for(sec, p) for sec, p in zip(note.sections, plans)]
+        bridge = self.core.bridge
+        for sec, p, drawn in zip(note.sections, plans, topics):
+            sec["board"] = {"layout": p.get("layout") or "outline", "dropped": p.get("dropped", [])}
+            image = await lecture_board.RENDERS.render(bridge, drawn)
+            if image:
+                sec["image"] = image
+        drawn_n = sum(1 for sec in note.sections if sec.get("image"))
+        log.info("lecture board: %d of %d topic drawing(s) rendered for the note", drawn_n, len(note.sections))
+        self.board = lecture_board.TopicBoards(lecture_board.overview(note.sections, note.title), topics, plan)
+
+    async def research(self, ctx, topic: str = "") -> str:
+        """Further reading on a topic of the last lecture note, on his word only
+        (lecture_research.py): kept in the note's own researched section."""
+        from tools import research as research_tool
+
+        note = self.note or next(iter(lecture_note.saved()), None)
+        if note is None:
+            raise ToolError("there's no lecture note yet - summarise a lecture first")
+        ks = lecture_research.which(note, topic)
+        if not ks:
+            raise ToolError(f"the note has {len(note.sections)} topics - which one? (a number or its title)")
+
+        async def chat(messages: list[dict]) -> str:
+            self.core._progress_at = time.monotonic()
+            out = await self.core.llm.chat(messages, temperature=0.3)
+            self.core._progress_at = time.monotonic()
+            return out
+
+        added = []
+        for k in ks:
+            found = await lecture_research.research_topic(note, k, topic, chat, research_tool.run_research)
+            self.core._progress_at = time.monotonic()
+            if found is None:
+                continue
+            note.research = [r for r in note.research if not (r.get("section") == k and r.get("concept") == found["concept"])] + [found]
+            added.append(found)
+        if not added:
+            return f"researched {', '.join(note.sections[k - 1]['title'] for k in ks)} - but nothing the pages said could be kept with a source; nothing added to the note"
+        await asyncio.to_thread(lecture_note.save, note)
+        self.note = note
+        await ctx.show_panel(lecture_note.content(note))
+        self._pdf_soon(note)
+        lines = [f"- {r['concept']}: " + " ".join(i["text"] for i in r["items"][:2]) + f" (from {', '.join(sorted({i['site'] for i in r['items']}))})" for r in added]
+        return "added to the lecture note, in its own section marked as researched online (not from the lecture):\n" + "\n".join(lines)
+
+    def _pdf_soon(self, note) -> None:
+        """Print the note's PDF in the background (her browser takes a few seconds)."""
+
+        async def run() -> None:
+            try:
+                await lecture_note.write_pdf(note)
+            except Exception:  # noqa: BLE001 - a PDF that failed is logged, the note stands
+                log.exception("lecture note: the PDF couldn't be written")
+
+        self._pdf_task = asyncio.ensure_future(run())
 
     async def ask(self, question: str) -> str:
         path = self.last[0] if self.last else self._latest()

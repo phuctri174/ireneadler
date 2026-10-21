@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """How he said it, not what he asked for.
 
 The model is good at answering and careless about feelings: told to fetch a fact

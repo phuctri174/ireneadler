@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """The system prompt: config/persona.md plus facts only code knows.
 
 The cue names are appended from the registry (config/cues.json via react.py)

@@ -4,7 +4,8 @@ r"""Publish: HEAD of this repository to the public one, never anything personal.
      an ignored file) into a temporary folder
   2. scan the export against config/publish.yaml (gitignored - the patterns are
      his name and his home): every file's text, every file name, and the commit
-     message about to be written. One match and nothing is published.
+     message about to be written, plus the blocked file types and folders. One
+     match and nothing is published.
   3. only then: the public clone's files are replaced by the export, committed as
      one commit ("Irene as of <sha>", with the local subjects since the last
      publish), and pushed
@@ -46,6 +47,8 @@ class Rules:
     names: list[str] = field(default_factory=list)
     text: list[str] = field(default_factory=list)
     extensions: list[str] = field(default_factory=list)
+    # folders whose contents are never published, wherever they sit in the tree
+    paths: list[str] = field(default_factory=list)
 
 
 def load(path: Path = CONFIG) -> Rules:
@@ -58,6 +61,7 @@ def load(path: Path = CONFIG) -> Rules:
         [str(n) for n in raw.get("names") or []],
         [str(t) for t in raw.get("text") or []],
         [str(e).lower() for e in raw.get("extensions") or []],
+        [str(p).strip("/\\").lower() for p in raw.get("paths") or [] if str(p).strip("/\\")],
     )
     if not rules.names and not rules.text:
         sys.exit(f"{path.name} has no patterns: refusing to publish unscanned")
@@ -106,6 +110,10 @@ class Scanner:
             rel = path.relative_to(root).as_posix()
             if path.suffix.lower() in self.rules.extensions:
                 hits.append(Hit(rel, f"a {path.suffix} file"))
+            # a folder rule matches whole folder names: "voice_data/" is the folder,
+            # never the module voice_data.py
+            folders = "/" + rel.lower().rsplit("/", 1)[0] + "/" if "/" in rel else ""
+            hits += [Hit(rel, f"under {p}/") for p in self.rules.paths if f"/{p}/" in folders]
             hits += [Hit(rel, h.what, "(file name)") for h in self.scan_text(rel, rel)]
             data = path.read_bytes()
             if b"\0" in data[:8192]:
@@ -188,7 +196,7 @@ def main() -> int:
                 print(f"  {h.where}: {h.what!r}  {h.line}")
             return 1
         print(f"scan: {files} files and the commit message, {len(scanner.names)} name and {len(scanner.text)} text patterns, "
-              f"{len(rules.extensions)} file types - clean")
+              f"{len(rules.extensions)} file types, {len(rules.paths)} folders - clean")
         if args.dry_run:
             # what would change: copied into the (clean, checked above) public clone,
             # listed, and put back exactly as it was

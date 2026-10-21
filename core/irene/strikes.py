@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 phuctri174
 """Men, kote, gyaku-dou - from his upper body, during keiko.
 
 A strike is a MOVEMENT, not a pose: the hands go up and come down on her men, or

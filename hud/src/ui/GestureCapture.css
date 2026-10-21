@@ -48,13 +48,15 @@
   opacity: 0.7;
 }
 
-.capture.is-waiting .capture-count {
+.capture.is-waiting .capture-count,
+.capture.is-framing .capture-count {
   font-size: 40px;
   color: var(--amber);
   text-shadow: 0 0 20px var(--amber);
 }
 
-.capture.is-waiting.has-hand .capture-count {
+.capture.is-waiting.has-hand .capture-count,
+.capture.is-framing.has-hand .capture-count {
   color: var(--mint);
   text-shadow: 0 0 20px var(--mint);
 }
